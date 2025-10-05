@@ -52,20 +52,17 @@ def carregar_catalogo():
         if not data:
             return pd.DataFrame()
         df = pd.DataFrame(data)
-        # Conversão de preço robusta (aceita '.' e ',')
         df['PRECO'] = pd.to_numeric(df['PRECO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
         df['ID'] = pd.to_numeric(df['ID'], errors='coerce').astype('Int64')
         df_disponivel = df[df['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
         return df_disponivel.set_index('ID')
     except Exception as e:
         st.error(f"Erro ao carregar o catálogo: {e}")
-        st.info(f"Dica: Verifique se o nome da aba da planilha é '{SHEET_NAME_CATALOGO}' e se as colunas estão corretas.")
+        st.info(f"Dica: Verifique se o nome da aba da planilha é '{SHEET_NAME_CATALOGO}'.")
         return pd.DataFrame()
 
 # --- Funções de Lógica do App ---
-
 def salvar_pedido(nome: str, contato: str, total: float, itens_json: str):
-    """Salva um novo pedido na planilha."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_PEDIDOS)
@@ -88,7 +85,6 @@ def remover_do_carrinho(prod_id):
         st.toast(f"❌ {nome} removido.", icon="🗑️")
 
 def render_product_image(link):
-    """Mostra a imagem do produto ou um placeholder."""
     placeholder_html = """<div style='background-color:#f0f2f6;height:200px;display:flex;align-items:center;justify-content:center;border-radius:8px;'><span style='color:#adb5bd;font-weight:bold;'>Sem Imagem</span></div>"""
     if link and isinstance(link, str) and link.strip():
         st.image(link, use_column_width="always")
