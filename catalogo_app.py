@@ -94,12 +94,11 @@ def adicionar_ao_carrinho(produto_id, produto_nome, produto_preco, link_imagem):
     if produto_id in st.session_state.carrinho:
         st.session_state.carrinho[produto_id]['quantidade'] += 1
     else:
-        # --- ALTERAÇÃO AQUI: Salva também o link da imagem ---
         st.session_state.carrinho[produto_id] = {
             'nome': produto_nome,
             'preco': produto_preco,
             'quantidade': 1,
-            'imagem': link_imagem # Adicionado o campo imagem
+            'imagem': link_imagem
         }
     st.toast(f"✅ {produto_nome} adicionado!", icon="🛍️")
     time.sleep(0.1)
@@ -143,8 +142,11 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 </style>
 """, unsafe_allow_html=True)
 
+
 # --- CABEÇALHO ---
-st.title("💖 Catálogo de Pedidos Doce&Bella")
+col_logo, col_titulo = st.columns([0.1, 5])
+with col_logo: st.markdown("<h3>💖</h3>", unsafe_allow_html=True)
+with col_titulo: st.title("Catálogo de Pedidos Doce&Bella")
 
 # --- BARRA ROSA (PESQUISA E CARRINHO) ---
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
@@ -176,7 +178,6 @@ with col_carrinho:
                 st.subheader("Finalizar Pedido"); nome = st.text_input("Seu Nome Completo:"); contato = st.text_input("Seu Contato (WhatsApp/E-mail):")
                 if st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True):
                     if nome and contato:
-                        # --- ALTERAÇÃO AQUI: Passa todos os dados do carrinho, incluindo a imagem ---
                         detalhes = {"total": total_acumulado, "itens": [
                             {"id": int(k), **v} for k, v in st.session_state.carrinho.items()
                         ]}
@@ -198,7 +199,6 @@ def render_product_card(prod_id, row, key_prefix):
         col_preco, col_botao = st.columns([2, 2])
         col_preco.markdown(f"<h4 style='color: #880E4F; margin:0; line-height:2.5;'>R$ {row['PRECO']:.2f}</h4>", unsafe_allow_html=True)
         if col_botao.button("➕ Adicionar", key=f'{key_prefix}_{prod_id}', use_container_width=True):
-            # --- ALTERAÇÃO AQUI: Passa o link da imagem ao adicionar ao carrinho ---
             adicionar_ao_carrinho(prod_id, row['NOME'], row['PRECO'], row.get('LINKIMAGEM'))
             st.rerun()
 
@@ -215,3 +215,4 @@ else:
     cols = st.columns(4)
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
         with cols[i % 4]: render_product_card(prod_id, row, key_prefix='prod')
+
