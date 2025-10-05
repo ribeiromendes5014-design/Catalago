@@ -182,8 +182,6 @@ def load_data():
         df = df[df['DISPONIVEL'] == True].copy()
         df['PRECO'] = pd.to_numeric(df['PRECO'], errors='coerce').fillna(0) # Converte para número, erro vira 0
         df['ID'] = df['ID'].astype(str)
-        
-        # A LINHA PROBLEMÁTICA FOI REMOVIDA DAQUI
 
         for optional in ['LINKIMAGEM', 'DESCRICAOCURTA', 'DESCRICAOLONGA']:
             if optional not in df.columns:
@@ -192,7 +190,7 @@ def load_data():
         return df, client
 
     except Exception as e:
-        st.error(f"Erro Crítico de Conexão. ❌ Verifique se o e-mail da Service Account está como 'Editor' na Planilha e se o secrets.toml está correto. Detalhe: {e}")
+        st.error(f"Erro Crítico de Conexão. ❌ Verifique se o e-mail da Service Account está como 'Editor' na Planilha e se a aba se chama 'produtos'. Detalhe: {e}")
         return pd.DataFrame(), None
 
 # Carrega os dados e o objeto cliente (que será usado para salvar pedidos)
@@ -263,15 +261,22 @@ elif not df_produtos.empty:
     st.title("💖 Nossos Produtos")
     st.markdown("---")
     
-    cols = st.columns(3)
+    # Define o número de colunas que você quer no catálogo
+    num_colunas = 4
+    cols = st.columns(num_colunas)
+    
+    # Itera sobre os produtos e os distribui nas colunas
     for index, row in df_produtos.iterrows():
-        col = cols[index % 3]
+        col = cols[index % num_colunas]
+        
         with col:
             img = row.get('LINKIMAGEM', '')
+            
             if img:
-                st.image(img, use_container_width=True)
+                # CORREÇÃO: Usamos 'width' para forçar um tamanho fixo na imagem
+                st.image(img, width=200) 
             else:
-                st.image("https://placehold.co/400x300/F0F0F0/AAAAAA?text=Sem+imagem", use_container_width=True)
+                st.image("https://placehold.co/400x300/F0F0F0/AAAAAA?text=Sem+imagem", width=200)
 
             st.markdown(f"**{row.get('NOME', '')}**")
             st.markdown(f"R$ {row.get('PRECO', 0.0):.2f}")
