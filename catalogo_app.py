@@ -6,11 +6,58 @@ import unicodedata
 from oauth2client.service_account import ServiceAccountCredentials # Para autenticação
 from datetime import datetime # Para registrar a data do pedido (função salvar)
 
+# --- FUNÇÃO PARA INJETAR CSS (NOVO) ---
+def local_css(css_code):
+    st.markdown(f'<style>{css_code}</style>', unsafe_allow_html=True)
+
+# CSS para o botão flutuante/popover 
+local_css("""
+    /* Oculta a barra lateral */
+    section[data-testid="stSidebar"] {
+        display: none;
+    }
+    
+    /* Tenta fixar o contêiner do Popover no canto inferior direito */
+    /* Este seletor (st-emotion-cache-1c5c10s:last-child) é um "truque" para pegar o 
+       último container Streamlit antes da lógica de finalização/catálogo. */
+    .st-emotion-cache-1c5c10s:last-child {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+        background-color: transparent; 
+        border-radius: 10px;
+    }
+    
+    /* Estiliza o botão dentro do popover para o formato flutuante */
+    div[data-testid="stPopover"] > button {
+        background-color: #F06292 !important; /* Cor Rosa/Primary Color (ajuste se necessário) */
+        color: white !important;
+        padding: 15px 10px !important;
+        border-radius: 10px !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        font-size: 1.1em !important;
+        font-weight: bold !important;
+        width: 250px; /* Largura do botão flutuante */
+        border: none !important;
+        transition: all 0.2s;
+        text-align: center;
+    }
+    
+    /* Garante que o conteúdo do popover apareça sobre tudo */
+    .st-emotion-cache-1ft049n {
+        z-index: 1001 !important;
+    }
+""")
+
+
 # --- 1. Configuração da Página e Inicialização do Carrinho ---
 st.set_page_config(
     page_title="Catálogo de Produtos | Doce&Bella",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    # Mude para "wide" ou "centered". "expanded" foi removido.
+    layout="wide", 
+    # Mantenha collapsed, pois estamos usando um carrinho flutuante
+    initial_sidebar_state="collapsed" 
 )
 
 # Inicializa o carrinho na memória (session_state) se ele ainda não existir
@@ -302,43 +349,48 @@ def salvar_pedido(nome_cliente, contato_cliente, pedido_df, total):
         st.error(f"Erro ao salvar o pedido. Verifique o secrets.toml (chave 'pedidos_url') e a permissão na Planilha de Pedidos. Detalhe: {e}")
         return False
 
-# --- 5. Sidebar (O Botão Flutuante de Pedido) ---
-with st.sidebar:
-    st.image("https://placehold.co/200x50/F06292/ffffff?text=Doce&Bella", use_container_width=True) # Logo Placeholder
-    st.header("🛒 Seu Pedido")
-    st.markdown("---")
 
-    total_itens = sum(item['quantidade'] for item in st.session_state.carrinho)
-    total_valor = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho)
+# Calcular totais (mantido da lógica da sidebar)
+total_itens = sum(item['quantidade'] for item in st.session_state.carrinho)
+total_valor = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho)
 
-    # Exibe o resumo no sidebar
-    col1, col2 = st.columns(2)
-    col1.metric(label="Total de Produtos", value=total_itens)
-    col2.metric(label="Valor Total", value=f"R$ {total_valor:.2f}")
-    st.markdown("---")
 
-    if st.session_state.carrinho:
-        st.subheader("Detalhes:")
+# --- 5. Implementação do Carrinho Flutuante com Popover (NOVO) ---
 
-        carrinho_df = pd.DataFrame(st.session_state.carrinho)
-        carrinho_df['Subtotal'] = carrinho_df['preco'] * carrinho_df['quantidade']
-        carrinho_df.rename(columns={'nome': 'Produto', 'quantidade': 'Qtd', 'preco': 'Preço Un.'}, inplace=True)
+# O Popover só aparece se houver itens no carrinho E não estiver finalizando/enviado
+if total_itens > 0 and not st.session_state.finalizando and not st.session_state.pedido_enviado:
+    
+    # Este container será o alvo do CSS de 'position: fixed'
+    with st.container():
+        
+        # O Popover será o botão flutuante. O texto mostra o resumo.
+        with st.popover(
+            f"🛒 **{total_itens} Item(s)** | **R$ {total_valor:.2f}**", 
+            use_container_width=True,
+            key="floating_popover"
+        ):
+            st.subheader("Detalhes do Pedido:")
 
-        # Exibe os itens de forma simplificada na sidebar
-        st.dataframe(carrinho_df[['Produto', 'Qtd', 'Subtotal']].style.format({
-            'Subtotal': 'R$ {:.2f}'
-        }), use_container_width=True, hide_index=True)
+            carrinho_df = pd.DataFrame(st.session_state.carrinho)
+            carrinho_df['Subtotal'] = carrinho_df['preco'] * carrinho_df['quantidade']
+            carrinho_df.rename(columns={'nome': 'Produto', 'quantidade': 'Qtd', 'preco': 'Preço Un.'}, inplace=True)
 
-        # O botão de finalização
-        if st.button("✅ FINALIZAR PEDIDO", use_container_width=True, type="primary"):
-            st.session_state.finalizando = True # Define que a cliente está finalizando
-            st.experimental_rerun()
+            # Exibe os itens no popover
+            st.dataframe(carrinho_df[['Produto', 'Qtd', 'Subtotal']].style.format({
+                'Subtotal': 'R$ {:.2f}'
+            }), use_container_width=True, hide_index=True)
 
-        # Botão para limpar o carrinho
-        if st.button("Limpar Pedido", use_container_width=True):
-            limpar_carrinho()
-    else:
-        st.info("Seu pedido está vazio. Adicione produtos ao lado!")
+            st.markdown("---")
+            st.markdown(f"**Valor Total Final:** R$ {total_valor:.2f}")
+
+            # Botão que, quando clicado, vai para a finalização
+            if st.button("✅ FINALIZAR PEDIDO", use_container_width=True, type="primary"):
+                st.session_state.finalizando = True
+                st.experimental_rerun()
+
+            if st.button("Limpar Pedido", use_container_width=True):
+                limpar_carrinho()
+                
 
 # --- 6. Lógica de Finalização de Pedido ---
 if st.session_state.pedido_enviado:
@@ -388,6 +440,9 @@ elif st.session_state.finalizando:
 elif not df_produtos.empty:
     st.title("💖 Nossos Produtos")
     st.markdown("---")
+    
+    # Logo Placeholder
+    st.image("https://placehold.co/200x50/F06292/ffffff?text=Doce&Bella") 
 
     # Layout em colunas (3 produtos por linha)
     cols = st.columns(3)
@@ -432,4 +487,4 @@ elif not df_produtos.empty:
                     st.success(f"{quantidade}x {nome_prod} adicionado(s)!")
                     st.rerun() # Atualiza a sidebar para mostrar o carrinho
 
-
+# Fim do código.
