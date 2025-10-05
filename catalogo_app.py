@@ -29,6 +29,25 @@ st.markdown("""
             border-radius: 50%; display: flex; justify-content: center; align-items: center;
             font-size: 14px; font-weight: bold; border: 2px solid white;
         }
+        /* Centralização do cabeçalho */
+        .centered-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-top: -40px;
+        }
+        .centered-header img {
+            max-width: 180px;
+            height: auto;
+            margin-bottom: -10px;
+        }
+        .centered-header h1 {
+            font-size: 2.2rem;
+            color: #E91E63;
+            text-align: center;
+            font-weight: 700;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -61,7 +80,7 @@ def load_data():
         client = gspread.authorize(creds)
         worksheet = client.open_by_url(st.secrets["gsheets"]["sheets_url"]).worksheet("produtos")
         df = pd.DataFrame(worksheet.get_all_records())
-        if df.empty: return pd.DataFrame(), None
+        if df.empty: return pd.DataFrame()
         
         def _normalize(s): return unicodedata.normalize('NFKD', str(s)).encode('ASCII', 'ignore').decode('ASCII').upper().strip()
         df.columns = [_normalize(col) for col in df.columns]
@@ -91,32 +110,14 @@ def salvar_pedido(nome, contato, pedido_df, total):
 # 3. RENDERIZAÇÃO DA PÁGINA
 # =====================================================================================
 
-# --- Header Centralizado (Sua excelente sugestão) ---
+# --- Header Centralizado ---
 st.markdown("""
-    <style>
-        .centered-header {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        .centered-header img {
-            max-width: 220px;
-            height: auto;
-            margin-bottom: -10px;
-        }
-        .centered-header h1 {
-            font-size: 2.5rem;
-            color: #E91E63;
-            text-align: center;
-            font-weight: 700;
-        }
-    </style>
     <div class="centered-header">
         <img src="https://i.ibb.co/cdqJ92W/logo-docebella.png" alt="Logo Doce&Bella">
         <h1>💖 Nossos Produtos</h1>
     </div>
 """, unsafe_allow_html=True)
+
 st.divider()
 
 # --- Lógica de Exibição de Conteúdo ---
@@ -126,6 +127,7 @@ if st.session_state.pedido_enviado:
     if st.button("🛍️ Fazer Novo Pedido"): limpar_carrinho()
 
 elif st.session_state.finalizando:
+    # (O código de finalização de pedido permanece o mesmo)
     st.title("Finalizar Pedido")
     total = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho)
     pedido_df = pd.DataFrame(st.session_state.carrinho).rename(columns={'nome': 'Produto', 'quantidade': 'Qtd'})
@@ -142,10 +144,12 @@ elif st.session_state.finalizando:
     if st.button("⬅️ Voltar ao Catálogo"): st.session_state.finalizando = False; st.rerun()
 
 elif not df_produtos.empty:
+    # --- Grade de Produtos Estável ---
     num_colunas = 4
     cols = st.columns(num_colunas)
     for index, row in df_produtos.iterrows():
         with cols[index % num_colunas]:
+            # Usando container nativo com borda para criar o "Card"
             with st.container(border=True):
                 st.image(row.get('LINKIMAGEM') or "https://placehold.co/400x300/F0F0F0/AAAAAA?text=Sem+imagem", use_container_width=True)
                 st.markdown(f"**{row.get('NOME', '')}**")
