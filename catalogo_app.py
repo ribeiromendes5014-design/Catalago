@@ -30,11 +30,13 @@ def load_data():
             "client_x509_cert_url": st.secrets["gsheets"]["creds"]["client_x509_cert_url"],
         }
         
-        # O escopo define as permissões que a Service Account terá
+        # 2. CONEXÃO COM O GOOGLE
+        # O escopo (scope) define o que o aplicativo pode fazer (acessar planilhas)
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         
-        # 2. CONEXÃO COM O GOOGLE SHEETS
-        creds = ServiceAccountCredentials.from_json(creds_json, scope)
+        # Usamos from_service_account_info que é a função correta para dicionários
+        # E passamos as credenciais (creds_json) e o escopo (scope)
+        creds = ServiceAccountCredentials.from_service_account_info(creds_json, scope)
         client = gspread.authorize(creds)
         
         # 3. ABRIR A PLANILHA E LER OS DADOS
@@ -83,5 +85,6 @@ else:
 
 
     st.success(f"Catálogo Carregado com Sucesso! Total de {len(df_produtos)} produtos disponíveis.")
+
 
 
