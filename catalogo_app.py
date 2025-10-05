@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
-import gspread  # Biblioteca principal para interagir com o Google Sheets
+import gspread # Biblioteca principal para interagir com o Google Sheets
 import math
 import unicodedata
-from oauth2client.service_account import ServiceAccountCredentials  # Para autenticação
-from datetime import datetime  # Para registrar a data do pedido (função salvar)
+from oauth2client.service_account import ServiceAccountCredentials # Para autenticação
+from datetime import datetime # Para registrar a data do pedido (função salvar)
 
 # --- 1. Configuração da Página e Inicialização do Carrinho ---
 st.set_page_config(
@@ -115,12 +115,24 @@ def load_data():
                 else:
                     raise Exception("Nenhuma aba encontrada na planilha.")
 
-        # 4. CONVERTER PARA DATAFRAME
-        df = pd.DataFrame(worksheet.get_all_records())
+        # 4. CONVERTER PARA DATAFRAME (CORREÇÃO PARA EVITAR ERRO DE PLANILHA VAZIA)
+        # Tenta ler os dados usando get_all_values() em vez de get_all_records() 
+        # para lidar com cabeçalhos inconsistentes que causam df.empty.
+        data = worksheet.get_all_values()
+        
+        if not data:
+            st.error("A planilha foi acessada, mas está completamente vazia.")
+            return pd.DataFrame(), client
+            
+        # A primeira linha é o cabeçalho, o restante são os dados
+        header = data[0]
+        records = data[1:]
+        df = pd.DataFrame(records, columns=header)
+        # FIM DA CORREÇÃO
 
-        # Se dataframe vazio, retornar (mas informar)
+        # Se dataframe vazio (apenas cabeçalho ou erro de leitura dos dados)
         if df.empty:
-            st.error("A planilha foi acessada, mas não há registros na aba selecionada.")
+            st.error("A planilha foi acessada e o cabeçalho foi lido, mas não há registros de produtos.")
             return pd.DataFrame(), client
 
         # Normalizar e mapear cabeçalhos esperados
@@ -200,7 +212,7 @@ def load_data():
         rename_map = {}
         for key, original in expected.items():
             if original is not None:
-                rename_map[original] = key  # ex: 'Disponível' -> 'DISPONIVEL'
+                rename_map[original] = key # ex: 'Disponível' -> 'DISPONIVEL'
         df.rename(columns=rename_map, inplace=True)
 
         # Agora garantir que as colunas PRECO e ID e NOME existam antes de usá-las
@@ -228,7 +240,7 @@ def load_data():
                 df[optional] = ""
 
         # Retornar df e client
-        return df, client  # Retorna os produtos e o objeto cliente para futuras operações
+        return df, client # Retorna os produtos e o objeto cliente para futuras operações
 
     except Exception as e:
         st.error(f"Erro Crítico de Conexão. ❌ Verifique se o e-mail da Service Account está como 'Editor' na Planilha e se o secrets.toml está correto. Detalhe: {e}")
@@ -272,10 +284,10 @@ def salvar_pedido(nome_cliente, contato_cliente, pedido_df, total):
 
         # 3. Montar a linha de dados (deve coincidir com o cabeçalho da Planilha de Pedidos)
         linha_pedido = [
-            datetime.now().strftime("%d/%m/%Y %H:%M:%S"),  # Data/Hora
+            datetime.now().strftime("%d/%m/%Y %H:%M:%S"), # Data/Hora
             nome_cliente,
             contato_cliente,
-            f"{total:.2f}",  # Salva o total como número (sem R$)
+            f"{total:.2f}", # Salva o total como número (sem R$)
             relatorio.strip()
         ]
 
@@ -292,7 +304,7 @@ def salvar_pedido(nome_cliente, contato_cliente, pedido_df, total):
 
 # --- 5. Sidebar (O Botão Flutuante de Pedido) ---
 with st.sidebar:
-    st.image("https://placehold.co/200x50/F06292/ffffff?text=Doce&Bella", use_container_width=True)  # Logo Placeholder
+    st.image("https://placehold.co/200x50/F06292/ffffff?text=Doce&Bella", use_container_width=True) # Logo Placeholder
     st.header("🛒 Seu Pedido")
     st.markdown("---")
 
@@ -319,7 +331,7 @@ with st.sidebar:
 
         # O botão de finalização
         if st.button("✅ FINALIZAR PEDIDO", use_container_width=True, type="primary"):
-            st.session_state.finalizando = True  # Define que a cliente está finalizando
+            st.session_state.finalizando = True # Define que a cliente está finalizando
             st.experimental_rerun()
 
         # Botão para limpar o carrinho
@@ -418,5 +430,4 @@ elif not df_produtos.empty:
                 if st.button(f"➕ Adicionar {quantidade} ao Pedido", key=f"add_{produto_id}", type="primary"):
                     adicionar_ao_carrinho(produto_id, nome_prod, preco_prod, quantidade)
                     st.success(f"{quantidade}x {nome_prod} adicionado(s)!")
-                    st.experimental_rerun()  # Atualiza a sidebar para mostrar o carrinho
-
+                    st.experimental_rerun() # Atualiza a sidebar para mostrar o carrinho
