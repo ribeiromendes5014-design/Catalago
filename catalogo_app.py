@@ -164,14 +164,9 @@ def get_product_card_html(prod_id, row):
     else:
         price_html = f"<h4 class='price-normal'>R$ {preco_final:.2f}</h4>"
 
-    # Adicionamos um placeholder para o botão "Adicionar" (pois botões Streamlit não funcionam aqui)
-    button_html = f"""<button class='add-to-cart-placeholder' disabled>Ver Detalhes</button>"""
-    
-    # NOTE: Foi mantido o "container" do Streamlit com borda, mas o conteúdo é HTML puro.
-    # O expander de detalhes é perdido no HTML puro.
-    
+    # Corrigido: Usando tags HTML simples e garantindo que tudo está dentro da string.
     card_html = f"""
-    <div class="product-card-html">
+    <div class="carousel-item-html">
         {img_html}
         {promo_badge}
         <strong>{row['NOME']}</strong>
@@ -188,7 +183,7 @@ def get_product_card_html(prod_id, row):
 def render_product_card_with_streamlit_buttons(prod_id, row, key_prefix):
     """Renderiza o card com colunas e botões funcionais do Streamlit."""
     with st.container(border=True):
-        # A função render_product_image agora está definida para Markdown
+        # Renderiza a imagem do produto usando Markdown (compatível com a área Streamlit)
         placeholder_html = """<div class="product-image-container"><span class="placeholder-text">Sem Imagem</span></div>"""
         link_imagem = row.get('LINKIMAGEM')
         if link_imagem and str(link_imagem).strip().startswith('http'):
@@ -240,10 +235,10 @@ st.markdown(f"""
     .product-image-container img {{ max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }}
     
     /* Estilos para cards de produtos HTML (Carrossel) */
-    .product-image-container-html {{ height: 150px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.5rem; overflow: hidden; }}
+    .product-image-container-html {{ height: 150px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.5rem; overflow: hidden; background-color: #fff; border-radius: 8px; }}
     .product-image-container-html img {{ max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }}
-    .product-card-html {{ border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin: 5px; min-width: 200px; max-width: 200px; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }}
-    .product-short-desc {{ font-size: 0.8rem; color: #666; height: 30px; overflow: hidden; }}
+    .carousel-item-html {{ border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin: 5px 10px 5px 0; min-width: 200px; max-width: 200px; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }}
+    .product-short-desc {{ font-size: 0.8rem; color: #666; height: 30px; overflow: hidden; margin-bottom: 0.5rem; }}
     .card-footer {{ display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }}
     .add-to-cart-link {{ background-color: #C2185B; color: white; padding: 5px 10px; border-radius: 5px; text-decoration: none; font-size: 0.9rem; }}
 
