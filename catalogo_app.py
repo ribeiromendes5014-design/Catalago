@@ -336,7 +336,7 @@ if not df_destaque.empty:
                     st.markdown(f"<h4 style='color: #880E4F;'>R$ {row['PRECO']:.2f}</h4>", unsafe_allow_html=True)
                     st.caption(row['DESCRICAOCURTA'])
                     
-                    # Popover com o texto original do botão
+                    # RESTAURADO: Popover com a lógica de compra
                     with st.popover("Ver Detalhes/Adicionar ao Pedido", use_container_width=True):
                         st.markdown(f"### {row['NOME']}")
                         st.markdown(row['DESCRICAOLONGA'])
@@ -381,13 +381,13 @@ else:
                 # --- IMAGEM / PLACEHOLDER CORRIGIDO ---
                 render_product_image(row['LINKIMAGEM'])
                 # --- FIM DA CORREÇÃO ---
-
+                
                 st.markdown(f"**{row['NOME']}**", unsafe_allow_html=True)
                 st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>R$ {row['PRECO']:.2f}</h3>", unsafe_allow_html=True)
                 
                 st.caption(row['DESCRICAOCURTA'])
                 
-                # Popover com o texto original do botão
+                # RESTAURADO: Popover com a lógica de compra
                 with st.popover("Ver Detalhes/Adicionar ao Pedido", use_container_width=True):
                     st.markdown(f"### {row['NOME']}")
                     st.markdown(row['DESCRICAOLONGA'])
