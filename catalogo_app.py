@@ -72,7 +72,8 @@ def load_data():
         # 3. ABRIR A PLANILHA E LER OS DADOS
         spreadsheet = client.open_by_url(st.secrets["gsheets"]["sheets_url"])
         
-        # *** LINHA CRÍTICA: SUBSTITUA "Sheet1" PELO NOME EXATO DA SUA ABA DE PRODUTOS ***
+        # *** LINHA CRÍTICA (135): SUBSTITUA "Sheet1" PELO NOME EXATO DA SUA ABA DE PRODUTOS ***
+        # Se o erro persistir, o nome da aba AQUI deve ser a causa!
         worksheet = spreadsheet.worksheet("Sheet1") 
         
         # 4. CONVERTER PARA DATAFRAME
