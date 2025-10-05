@@ -364,7 +364,6 @@ if total_itens > 0 and not st.session_state.finalizando and not st.session_state
     with st.popover(
         f"🛒 **{total_itens} Item(s)** | **R$ {total_valor:.2f}**", 
         use_container_width=True,
-        key="floating_popover"
     ):
         st.subheader("Detalhes do Pedido:")
 
@@ -483,3 +482,4 @@ elif not df_produtos.empty:
                     adicionar_ao_carrinho(produto_id, nome_prod, preco_prod, quantidade)
                     st.success(f"{quantidade}x {nome_prod} adicionado(s)!")
                     st.rerun() # Atualiza a sidebar para mostrar o carrinho
+
