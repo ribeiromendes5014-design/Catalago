@@ -4,19 +4,51 @@ import gspread # Biblioteca principal para interagir com o Google Sheets
 import math
 from oauth2client.service_account import ServiceAccountCredentials # Para autenticação
 
-# --- Configuração da Página ---
+# --- 1. Configuração da Página e Inicialização do Carrinho ---
 st.set_page_config(
     page_title="Catálogo de Produtos | Doce&Bella",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- Função de Cache para Carregar os Dados ---
+# Inicializa o carrinho na memória (session_state) se ele ainda não existir
+if 'carrinho' not in st.session_state:
+    st.session_state.carrinho = []
+if 'finalizando' not in st.session_state:
+    st.session_state.finalizando = False
+if 'pedido_enviado' not in st.session_state:
+    st.session_state.pedido_enviado = False
+
+# --- 2. Funções de Carrinho ---
+def adicionar_ao_carrinho(produto_id, nome, preco, quantidade):
+    # Verifica se o produto já está no carrinho
+    for item in st.session_state.carrinho:
+        if item['id'] == produto_id:
+            # Se estiver, apenas soma a quantidade
+            item['quantidade'] += quantidade
+            break
+    else:
+        # Se não estiver, adiciona o novo item
+        st.session_state.carrinho.append({
+            'id': produto_id,
+            'nome': nome,
+            'preco': preco,
+            'quantidade': quantidade
+        })
+
+def limpar_carrinho():
+    st.session_state.carrinho = []
+    st.session_state.finalizando = False
+    st.session_state.pedido_enviado = False
+    st.experimental_rerun()
+
+
+# --- 3. Função de Cache para Carregar os Dados (CORREÇÃO DE CONEXÃO) ---
 @st.cache_data(ttl=600)
 def load_data():
     try:
         # 1. AUTENTICAÇÃO E PREPARAÇÃO DA CHAVE SECRETA
-        # Recriamos a estrutura do JSON a partir dos segredos guardados no secrets.toml
+        # Recriamos a estrutura do JSON a partir dos segredos (secrets.toml)
         creds_json = {
             "type": st.secrets["gsheets"]["creds"]["type"],
             "project_id": st.secrets["gsheets"]["creds"]["project_id"],
@@ -30,61 +62,169 @@ def load_data():
             "client_x509_cert_url": st.secrets["gsheets"]["creds"]["client_x509_cert_url"],
         }
         
-        # 2. CONEXÃO COM O GOOGLE
-        # O escopo (scope) define o que o aplicativo pode fazer (acessar planilhas)
+        # O escopo define as permissões que a Service Account terá
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         
-        # Usamos from_service_account_info que é a função correta para dicionários
-        # E passamos as credenciais (creds_json) e o escopo (scope)
-        creds = ServiceAccountCredentials.from_service_account_info(creds_json, scope)
+        # CORREÇÃO CRÍTICA: Usamos from_json_keyfile_dict que é a função universal
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
         client = gspread.authorize(creds)
         
         # 3. ABRIR A PLANILHA E LER OS DADOS
+        # ATENÇÃO: Verifique se o nome da aba é 'Sheet1' ou se você o renomeou!
         spreadsheet = client.open_by_url(st.secrets["gsheets"]["sheets_url"])
-        worksheet = spreadsheet.worksheet("Sheet1") # O nome da sua primeira aba de produtos
+        worksheet = spreadsheet.worksheet("Sheet1") 
         
         # 4. CONVERTER PARA DATAFRAME
         df = pd.DataFrame(worksheet.get_all_records())
                        
-        # (Lógica de limpeza e filtro permanece a mesma)
+        # (Lógica de limpeza e filtro)
         df = df[df['DISPONIVEL'].astype(str).str.lower() == 'sim'].copy()
         df['PRECO'] = pd.to_numeric(df['PRECO'], errors='coerce')
         df['ID'] = df['ID'].astype(str) 
         
-        return df
+        return df, client # Retorna os produtos e o objeto cliente para futuras operações
+        
     except Exception as e:
         # Mensagem de erro mais clara em caso de falha de autenticação/conexão
         st.error(f"Erro Crítico de Conexão. ❌ Verifique se o e-mail da Service Account está como 'Editor' na Planilha e se o secrets.toml está correto. Detalhe: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(), None # Retorna DataFrame vazio e cliente None
+        
+# Carrega os dados e o objeto cliente (que será usado para salvar pedidos)
+df_produtos, gsheets_client = load_data()
 
-# Carrega os dados
-df_produtos = load_data()
 
-# --- Exibir Mensagem de Erro se o Catálogo estiver vazio ---
-if df_produtos.empty:
-    st.error("⚠️ O catálogo está vazio ou houve um erro de conexão. Por favor, verifique a planilha e o painel Admin.")
-else:
-    # --- Continuação no Próximo Passo: Montar o Layout ---
-    st.title("💖 Nossas Novidades")
+# --- 4. Função para Salvar o Pedido (Próximo Passo) ---
+def salvar_pedido(nome_cliente, contato_cliente, pedido_df, total):
+    # Esta função será implementada no próximo passo (admin_app.py)
+    # Por enquanto, apenas simula o sucesso
+    
+    # 1. Montar a string do relatório
+    relatorio = f"PEDIDO DE: {nome_cliente}\nCONTATO: {contato_cliente}\n\nITENS:\n"
+    
+    for index, row in pedido_df.iterrows():
+        relatorio += f"- {row['Qtd']}x {row['Produto']} (R$ {row['Subtotal']:.2f})\n"
+    
+    relatorio += f"\nVALOR TOTAL: R$ {total:.2f}"
+    
+    # 2. Aqui a lógica real de SALVAR NA PLANILHA DE PEDIDOS ou ENVIAR E-MAIL viria.
+    
+    # 3. Define o status como enviado
+    st.session_state.pedido_enviado = True
+    return relatorio
 
+
+# --- 5. Sidebar (O Botão Flutuante de Pedido) ---
+with st.sidebar:
+    st.image("https://placehold.co/200x50/F06292/ffffff?text=Doce&Bella", use_column_width=True) # Logo Placeholder
+    st.header("🛒 Seu Pedido")
+    st.markdown("---")
+    
+    total_itens = sum(item['quantidade'] for item in st.session_state.carrinho)
+    total_valor = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho)
+    
+    # Exibe o resumo no sidebar
+    col1, col2 = st.columns(2)
+    col1.metric(label="Total de Produtos", value=total_itens)
+    col2.metric(label="Valor Total", value=f"R$ {total_valor:.2f}")
+    st.markdown("---")
+
+    if st.session_state.carrinho:
+        st.subheader("Detalhes:")
+        
+        carrinho_df = pd.DataFrame(st.session_state.carrinho)
+        carrinho_df['Subtotal'] = carrinho_df['preco'] * carrinho_df['quantidade']
+        carrinho_df.rename(columns={'nome': 'Produto', 'quantidade': 'Qtd', 'preco': 'Preço Un.'}, inplace=True)
+        
+        # Exibe os itens de forma simplificada na sidebar
+        st.dataframe(carrinho_df[['Produto', 'Qtd', 'Subtotal']].style.format({
+            'Subtotal': 'R$ {:.2f}'
+        }), use_container_width=True, hide_index=True)
+        
+        # O botão de finalização
+        if st.button("✅ FINALIZAR PEDIDO", use_container_width=True, type="primary"):
+            st.session_state.finalizando = True # Define que a cliente está finalizando
+            st.experimental_rerun()
+        
+        # Botão para limpar o carrinho
+        if st.button("Limpar Pedido", use_container_width=True):
+            limpar_carrinho()
+    else:
+        st.info("Seu pedido está vazio. Adicione produtos ao lado!")
+
+
+# --- 6. Lógica de Finalização de Pedido ---
+if st.session_state.pedido_enviado:
+    st.balloons()
+    st.success("🎉 Pedido Enviado com Sucesso! Um resumo foi enviado para você (admin) e entraremos em contato com o cliente.")
+    st.info("Obrigado por usar o catálogo! Você pode fazer um novo pedido.")
+    if st.button("Fazer Novo Pedido"):
+        limpar_carrinho()
+        
+elif st.session_state.finalizando:
+    st.title("Finalizar Pedido")
+    st.markdown("## 1. Confirme seus dados para envio:")
+    
+    # Formata o resumo para exibição
+    pedido_final_df = pd.DataFrame(st.session_state.carrinho)
+    pedido_final_df['Subtotal'] = pedido_final_df['preco'] * pedido_final_df['quantidade']
+    pedido_final_df.rename(columns={'nome': 'Produto', 'quantidade': 'Qtd', 'preco': 'Preço Un.'}, inplace=True)
+    
+    st.markdown(f"### Valor Final: R$ {total_valor:.2f}")
+    
+    with st.form("Formulario_Finalizacao"):
+        nome_cliente = st.text_input("Seu Nome Completo:", placeholder="Ex: Maria da Silva")
+        contato_cliente = st.text_input("Seu WhatsApp ou E-mail:", placeholder="(XX) XXXXX-XXXX ou email@exemplo.com")
+        
+        st.markdown("---")
+        st.subheader("Resumo do Pedido:")
+        st.dataframe(pedido_final_df[['Produto', 'Qtd', 'Preço Un.', 'Subtotal']].style.format({
+            'Preço Un.': 'R$ {:.2f}',
+            'Subtotal': 'R$ {:.2f}'
+        }), use_container_width=True, hide_index=True)
+
+        enviado = st.form_submit_button("✅ ENVIAR PEDIDO", type="primary", use_container_width=True)
+        
+        if enviado:
+            if nome_cliente and contato_cliente:
+                # Chama a função para salvar/enviar o relatório
+                salvar_pedido(nome_cliente, contato_cliente, pedido_final_df, total_valor)
+                st.experimental_rerun()
+            else:
+                st.error("Por favor, preencha seu nome e contato para finalizar.")
+
+    if st.button("Voltar ao Catálogo"):
+        st.session_state.finalizando = False
+        st.experimental_rerun()
+        
+# --- 7. Exibição do Catálogo (Home) ---
+elif not df_produtos.empty:
+    st.title("💖 Nossos Produtos")
+    st.markdown("---")
+    
     # Layout em colunas (3 produtos por linha)
     cols = st.columns(3)
-
-    # Itera sobre os produtos e exibe no layout
+    
     for index, row in df_produtos.iterrows():
-        col = cols[index % 3] # Distribui o produto na coluna 0, 1 ou 2
+        col = cols[index % 3] 
         
         with col:
+            # 7.1. Exibição do Card
             st.image(row['LINKIMAGEM'], use_column_width=True)
             st.markdown(f"**{row['NOME']}**")
             st.markdown(f"R$ {row['PRECO']:.2f}")
+            st.caption(row['DESCRICAOCURTA'])
             
-            # Placeholder para a funcionalidade de adicionar/detalhes
-            col.button(f"Ver Detalhes/Comprar", key=f"btn_{row['ID']}")
-            st.divider()
-
-
-    st.success(f"Catálogo Carregado com Sucesso! Total de {len(df_produtos)} produtos disponíveis.")
-
-
-
+            # 7.2. Detalhe e Adição ao Carrinho usando st.popover (Zoom)
+            with st.popover("Ver Detalhes/Adicionar ao Pedido", use_container_width=True):
+                st.subheader(row['NOME'])
+                st.markdown(f"**Preço:** R$ {row['PRECO']:.2f}")
+                st.write("---")
+                st.markdown(f"**Descrição Completa:** {row['DESCRICAOLONGA']}")
+                
+                # Campo de quantidade
+                quantidade = st.number_input("Quantidade:", min_value=1, value=1, step=1, key=f"qty_{row['ID']}")
+                
+                if st.button(f"➕ Adicionar {quantidade} ao Pedido", key=f"add_{row['ID']}", type="primary"):
+                    adicionar_ao_carrinho(row['ID'], row['NOME'], row['PRECO'], quantidade)
+                    st.success(f"{quantidade}x {row['NOME']} adicionado(s)!")
+                    st.experimental_rerun() # Atualiza a sidebar para mostrar o carrinho
