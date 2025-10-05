@@ -211,7 +211,7 @@ def render_product_card_with_streamlit_buttons(prod_id, row, key_prefix):
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
 # --- CSS PRINCIPAL E CARROSSEL CSS (TUDO JUNTO) ---
-# O erro NameError foi corrigido garantindo que todo o bloco CSS seja uma única string.
+# A estrutura de aspas triplas e a tag <style> garante que o Python ignore o CSS.
 CSS_GERAL = f"""
 <style>
     /* Estilos Streamlit e Globais */
