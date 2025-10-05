@@ -47,7 +47,6 @@ def carregar_dados(sheet_name):
         return pd.DataFrame()
 
 def atualizar_status_pedido(id_pedido, novo_status):
-    """Atualiza o status de um pedido para qualquer valor (ex: "Finalizado", "")."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_PEDIDOS)
@@ -62,9 +61,7 @@ def atualizar_status_pedido(id_pedido, novo_status):
     except Exception:
         return False
 
-# --- NOVA FUNÇÃO PARA EXCLUIR PEDIDO ---
 def excluir_pedido(id_pedido):
-    """Encontra um pedido pelo ID e exclui a linha inteira."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_PEDIDOS)
@@ -78,19 +75,44 @@ def excluir_pedido(id_pedido):
         st.error(f"Erro ao excluir o pedido: {e}")
         return False
 
-# --- Funções de Produto (Sem alterações) ---
+# --- FUNÇÃO ADICIONAR_PRODUTO (CORRIGIDA) ---
 def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponivel):
+    """Adiciona um novo produto na próxima linha vazia e nas colunas corretas."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_CATALOGO)
-        all_data = worksheet.get_all_records()
-        novo_id = max([int(row['ID']) for row in all_data if str(row.get('ID')).isdigit()]) + 1 if all_data else 1
-        nova_linha = [novo_id, nome, str(preco).replace('.', ','), desc_curta, desc_longa, link_imagem, disponivel]
+        
+        # Pega todos os valores para encontrar o último ID de forma segura
+        all_values = worksheet.get_all_values()
+        
+        # Pula o cabeçalho para ler apenas os IDs dos produtos existentes
+        # Assume que o ID está na segunda coluna (índice 1)
+        ids_existentes = [int(row[1]) for row in all_values[1:] if len(row) > 1 and row[1].isdigit()]
+        
+        # Gera o novo ID
+        novo_id = max(ids_existentes) + 1 if ids_existentes else 1
+        
+        # Monta a nova linha para ser inserida na planilha
+        # O "" no início é para pular a Coluna A, alinhando com sua planilha
+        nova_linha = [
+            "",  # Coluna A (em branco)
+            novo_id, # Coluna B (ID)
+            nome, # Coluna C (NOME)
+            str(preco).replace('.', ','), # Coluna D (PRECO)
+            desc_curta, # Coluna E (DESCRICAOCURTA)
+            desc_longa, # Coluna F (DESCRICAOLONGA)
+            link_imagem, # Coluna G (LINKIMAGEM)
+            disponivel # Coluna H (DISPONIVEL)
+        ]
+        
+        # Adiciona a nova linha na primeira tabela vazia que encontrar
         worksheet.append_row(nova_linha, value_input_option='USER_ENTERED')
+        
         st.cache_data.clear()
         return True
     except Exception as e:
         st.error(f"Ocorreu um erro ao adicionar o produto: {e}")
+        st.error("Dica: Verifique se os nomes das colunas na sua planilha 'produtos' estão corretos e na ordem esperada.")
         return False
 
 # --- Layout do Aplicativo Admin ---
@@ -99,6 +121,7 @@ st.title("⭐ Painel de Administração | Doce&Bella")
 tab_pedidos, tab_produtos = st.tabs(["Relatório de Pedidos", "Gerenciar Produtos"])
 
 with tab_pedidos:
+    # ... (código da aba de pedidos, sem alterações) ...
     st.header("📋 Pedidos Recebidos")
     if st.button("Recarregar Pedidos"):
         st.cache_data.clear()
@@ -140,11 +163,9 @@ with tab_pedidos:
                             st.success(f"Pedido {pedido['ID_PEDIDO']} finalizado!")
                             st.rerun()
                     st.markdown("---")
-                    # Lógica para exibir itens (sem alteração)
                     try:
                         detalhes_pedido = json.loads(pedido['ITENS_PEDIDO'])
                         for item in detalhes_pedido.get('itens', []):
-                            # ... (código de exibição de item)
                             link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
                             if not df_catalogo.empty and not df_catalogo[df_catalogo['ID'] == item['id']].empty:
                                 link_imagem = df_catalogo[df_catalogo['ID'] == item['id']].iloc[0]['LINKIMAGEM']
@@ -163,8 +184,6 @@ with tab_pedidos:
                 titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M')} - Total: R$ {pedido['VALOR_TOTAL']}"
                 with st.expander(titulo):
                     st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{pedido['ID_PEDIDO']}`")
-                    
-                    # --- NOVOS BOTÕES AQUI ---
                     col_reverter, col_excluir = st.columns(2)
                     with col_reverter:
                         if st.button("↩️ Reverter para Pendente", key=f"reverter_{pedido['ID_PEDIDO']}", use_container_width=True):
@@ -176,13 +195,10 @@ with tab_pedidos:
                             if excluir_pedido(pedido['ID_PEDIDO']):
                                 st.success(f"Pedido {pedido['ID_PEDIDO']} excluído!")
                                 st.rerun()
-                    
                     st.markdown("---")
-                    # Lógica para exibir itens (sem alteração)
                     try:
                         detalhes_pedido = json.loads(pedido['ITENS_PEDIDO'])
                         for item in detalhes_pedido.get('itens', []):
-                            # ... (código de exibição de item)
                             link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
                             if not df_catalogo.empty and not df_catalogo[df_catalogo['ID'] == item['id']].empty:
                                 link_imagem = df_catalogo[df_catalogo['ID'] == item['id']].iloc[0]['LINKIMAGEM']
