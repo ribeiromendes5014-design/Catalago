@@ -8,15 +8,17 @@ from oauth2client.service_account import ServiceAccountCredentials
 import time
 
 # --- Configurações de Dados ---
+# Usando o nome da aba "produtos" em minúsculo, como solicitado anteriormente
 SHEET_NAME_CATALOGO = "produtos"
-# O nome da aba de pedidos, como ajustamos
+# Usando o nome da aba "pedidos" em minúsculo por consistência
 SHEET_NAME_PEDIDOS = "pedidos"
-BACKGROUND_IMAGE_URL = 'https://i.ibb.co/P9Nbnk1/Без-названия-3.jpg'
+# Usando a URL de fundo que você aprovou
+BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
 
 
 # Inicialização do Carrinho de Compras e Estado
 if 'carrinho' not in st.session_state:
-    st.session_state.carrinho = {}
+    st.session_state.carrinho = {} # Estrutura: {id_produto: {'nome', 'preco', 'quantidade', 'imagem'}}
 
 # --- Funções de Conexão GSpread ---
 @st.cache_resource(ttl=None)
@@ -67,7 +69,7 @@ def carregar_catalogo():
         return pd.DataFrame()
 
 
-# --- Funções do Aplicativo ---
+# --- Funções do Aplicativo (Lógica do 55.py) ---
 def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
     """Salva um novo pedido na planilha."""
     try:
@@ -91,16 +93,15 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
         return False
 
 def adicionar_ao_carrinho(produto_id, produto_nome, produto_preco, link_imagem):
-    """Adiciona 1 unidade de um produto ao carrinho."""
+    """Adiciona 1 unidade de um produto ao carrinho, incluindo o link da imagem."""
     if produto_id in st.session_state.carrinho:
         st.session_state.carrinho[produto_id]['quantidade'] += 1
     else:
-        # --- ALTERAÇÃO AQUI: Salva também o link da imagem ---
         st.session_state.carrinho[produto_id] = {
             'nome': produto_nome,
             'preco': produto_preco,
             'quantidade': 1,
-            'imagem': link_imagem # Adicionado o campo imagem
+            'imagem': link_imagem
         }
     st.toast(f"✅ {produto_nome} adicionado!", icon="🛍️")
     time.sleep(0.1)
@@ -126,7 +127,7 @@ def render_product_image(link_imagem):
 # --- Layout do Aplicativo ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS ---
+# --- CSS (Unificado) ---
 st.markdown(f"""
 <style>
 .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
@@ -150,7 +151,7 @@ col_logo, col_titulo = st.columns([0.1, 5])
 with col_logo: st.markdown("<h3>💖</h3>", unsafe_allow_html=True)
 with col_titulo: st.title("Catálogo de Pedidos Doce&Bella")
 
-# --- BARRA ROSA (PESQUISA E CARRINHO) ---
+# --- BARRA ROSA (PESQUISA E CARRINHO) - (Interface do catalogo_app.py) ---
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 
@@ -180,7 +181,7 @@ with col_carrinho:
                 st.subheader("Finalizar Pedido"); nome = st.text_input("Seu Nome Completo:"); contato = st.text_input("Seu Contato (WhatsApp/E-mail):")
                 if st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True):
                     if nome and contato:
-                        # --- ALTERAÇÃO AQUI: Passa todos os dados do carrinho, incluindo a imagem ---
+                        # Lógica de salvar do 55.py (salva todos os dados, incluindo imagem)
                         detalhes = {"total": total_acumulado, "itens": [
                             {"id": int(k), **v} for k, v in st.session_state.carrinho.items()
                         ]}
@@ -202,7 +203,7 @@ def render_product_card(prod_id, row, key_prefix):
         col_preco, col_botao = st.columns([2, 2])
         col_preco.markdown(f"<h4 style='color: #880E4F; margin:0; line-height:2.5;'>R$ {row['PRECO']:.2f}</h4>", unsafe_allow_html=True)
         if col_botao.button("➕ Adicionar", key=f'{key_prefix}_{prod_id}', use_container_width=True):
-            # --- ALTERAÇÃO AQUI: Passa o link da imagem ao adicionar ao carrinho ---
+            # Chamada da função do 55.py (passa o link da imagem)
             adicionar_ao_carrinho(prod_id, row['NOME'], row['PRECO'], row.get('LINKIMAGEM'))
             st.rerun()
 
@@ -213,10 +214,13 @@ if termo:
     df_filtrado = df_catalogo[df_catalogo.apply(lambda r: termo in str(r['NOME']).lower() or termo in str(r['DESCRICAOLONGA']).lower(), axis=1)]
 
 if df_filtrado.empty:
-    st.info(f"Nenhum produto encontrado com o termo '{termo}'.") if termo else st.warning("Catálogo vazio.")
+    if termo:
+        st.info(f"Nenhum produto encontrado com o termo '{termo}'.")
+    else:
+        st.warning("O catálogo está vazio ou indisponível no momento.")
 else:
     st.subheader("✨ Nossos Produtos")
+    # Exibindo em 4 colunas como no seu layout preferido
     cols = st.columns(4)
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
         with cols[i % 4]: render_product_card(prod_id, row, key_prefix='prod')
-
