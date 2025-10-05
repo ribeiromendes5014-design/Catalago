@@ -9,7 +9,7 @@ from io import StringIO
 import time
 
 # --- Configurações de Dados ---
-SHEET_NAME_CATALOGO = "PRODUTOS" # CORRIGIDO: Nome da sua aba de produtos
+SHEET_NAME_CATALOGO = "produtos" # CORRIGIDO: Nome da sua aba de produtos
 SHEET_NAME_PEDIDOS = "PEDIDOS"
 
 # Inicialização do Carrinho de Compras e Estado
@@ -262,3 +262,4 @@ for i, (prod_id, row) in enumerate(df_catalogo.iterrows()):
                         row['PRECO']
                     )
                     st.rerun() # Recarrega para atualizar o popover flutuante
+
