@@ -8,6 +8,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import time
 from streamlit_autorefresh import st_autorefresh
 from collections import defaultdict
+import streamlit.components.v1 as components # <-- NOVO IMPORT
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
@@ -119,7 +120,7 @@ def carregar_mais_vendidos(df_catalogo, top_n=4):
         return pd.DataFrame()
 
 
-# --- Funções do Aplicativo (sem grandes alterações) ---
+# --- Funções do Aplicativo ---
 def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
     try:
         sh = get_gspread_client()
@@ -151,7 +152,7 @@ def render_product_image_html(link_imagem):
     return placeholder_html
 
 def get_product_card_html(prod_id, row):
-    """Gera o HTML para um card de produto, sem botões Streamlit."""
+    """Gera o HTML para um card de produto, sem botões Streamlit (para uso no carrossel)."""
     img_html = render_product_image_html(row.get('LINKIMAGEM'))
     preco_final = row['PRECO_FINAL']
     preco_original = row['PRECO']
@@ -164,7 +165,6 @@ def get_product_card_html(prod_id, row):
     else:
         price_html = f"<h4 class='price-normal'>R$ {preco_final:.2f}</h4>"
 
-    # Corrigido: Usando tags HTML simples e garantindo que tudo está dentro da string.
     card_html = f"""
     <div class="carousel-item-html">
         {img_html}
@@ -181,7 +181,7 @@ def get_product_card_html(prod_id, row):
 
 
 def render_product_card_with_streamlit_buttons(prod_id, row, key_prefix):
-    """Renderiza o card com colunas e botões funcionais do Streamlit."""
+    """Renderiza o card com colunas e botões funcionais do Streamlit (para uso em grids estáticos)."""
     with st.container(border=True):
         # Renderiza a imagem do produto usando Markdown (compatível com a área Streamlit)
         placeholder_html = """<div class="product-image-container"><span class="placeholder-text">Sem Imagem</span></div>"""
@@ -218,8 +218,9 @@ def render_product_card_with_streamlit_buttons(prod_id, row, key_prefix):
 # --- Layout do Aplicativo ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS (Adicionado CSS para o Carrossel) ---
-st.markdown(f"""
+# --- CSS PRINCIPAL (MANTIDO NO st.markdown) ---
+# Apenas os estilos globais e de componentes Streamlit permanecem aqui.
+STREAMLIT_CSS = f"""
 <style>
     .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}); background-size: cover; background-attachment: fixed; }}
     div.block-container {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 10px; padding: 2rem; margin-top: 1rem; }}
@@ -229,20 +230,8 @@ st.markdown(f"""
     .cart-badge-button {{ background-color: #C2185B; color: white; border-radius: 12px; padding: 8px 15px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; transition: background-color 0.3s; display: inline-flex; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-width: 150px; justify-content: center; }}
     .cart-badge-button:hover {{ background-color: #E91E63; }}
     .cart-count {{ background-color: white; color: #E91E63; border-radius: 50%; padding: 2px 7px; margin-left: 8px; font-size: 14px; line-height: 1; }}
-
-    /* Estilos para cards de produtos Streamlit (Mais Vendidos/Ofertas) */
     .product-image-container {{ height: 220px; display: flex; align-items: center; justify-content: center; margin-bottom: 1rem; overflow: hidden; }}
     .product-image-container img {{ max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }}
-    
-    /* Estilos para cards de produtos HTML (Carrossel) */
-    .product-image-container-html {{ height: 150px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.5rem; overflow: hidden; background-color: #fff; border-radius: 8px; }}
-    .product-image-container-html img {{ max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }}
-    .carousel-item-html {{ border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin: 5px 10px 5px 0; min-width: 200px; max-width: 200px; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }}
-    .product-short-desc {{ font-size: 0.8rem; color: #666; height: 30px; overflow: hidden; margin-bottom: 0.5rem; }}
-    .card-footer {{ display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }}
-    .add-to-cart-link {{ background-color: #C2185B; color: white; padding: 5px 10px; border-radius: 5px; text-decoration: none; font-size: 0.9rem; }}
-
-
     .placeholder-text {{ color: #a0a0a0; font-size: 1.1rem; font-weight: bold; }}
     .promo-badge {{ background-color: #D32F2F; color: white; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: inline-block;}}
     .price-container {{ line-height: 1.2; }}
@@ -251,20 +240,33 @@ st.markdown(f"""
     .price-normal {{ color: #880E4F; margin:0; line-height:2.5; }}
     .section-title-container {{ text-align: center; margin-top: 2rem; margin-bottom: 1.5rem; }}
     .section-title-image {{ max-width: 300px; }}
-
-    /* ESTILOS DO CARROSSEL */
-    .carousel-outer-container {{
-        overflow-x: scroll; /* Ativa a rolagem horizontal */
-        padding-bottom: 20px; /* Espaço para a barra de rolagem não cortar o conteúdo */
-        margin-top: 15px;
-    }}
-    .product-wrapper {{
-        display: flex; /* Garante que os itens fiquem lado a lado */
-        flex-direction: row;
-        width: max-content; /* Permite que a div cresça para o lado */
-    }}
 </style>
-""", unsafe_allow_html=True)
+"""
+st.markdown(STREAMLIT_CSS, unsafe_allow_html=True)
+
+# --- CSS DO CARROSSEL (MOVIDO PARA INJEÇÃO EM components.html) ---
+CAROUSEL_CSS = """
+<style>
+    /* Estilos para cards de produtos HTML (Carrossel) */
+    .product-image-container-html { height: 150px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.5rem; overflow: hidden; background-color: #fff; border-radius: 8px; }
+    .product-image-container-html img { max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }
+    .carousel-item-html { border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin: 5px 10px 5px 0; min-width: 200px; max-width: 200px; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .product-short-desc { font-size: 0.8rem; color: #666; height: 30px; overflow: hidden; margin-bottom: 0.5rem; }
+    .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+    .add-to-cart-link { background-color: #C2185B; color: white; padding: 5px 10px; border-radius: 5px; text-decoration: none; font-size: 0.9rem; }
+    /* ESTILOS DO CARROSSEL */
+    .carousel-outer-container {
+        overflow-x: scroll; 
+        padding-bottom: 20px; 
+        margin-top: 15px;
+    }
+    .product-wrapper {
+        display: flex; 
+        flex-direction: row;
+        width: max-content; 
+    }
+</style>
+"""
 
 # --- ATUALIZAÇÃO AUTOMÁTICA ---
 st_autorefresh(interval=60000, key="auto_refresh_catalogo")
@@ -284,7 +286,6 @@ with col_pesquisa:
     st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
 
 with col_carrinho:
-    # Cria o botão personalizado que aciona o popover
     custom_cart_button = f"""
         <div class='cart-badge-button' onclick='document.querySelector("[data-testid=\"stPopover\"] > div:first-child > button").click();'>
             🛒 SEU PEDIDO
@@ -300,11 +301,9 @@ with col_carrinho:
         if carrinho_vazio:
             st.info("Seu carrinho está vazio.")
         else:
-            # Mostra o total
             st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
             st.markdown("---")
 
-            # Lista os itens no carrinho
             for prod_id, item in list(st.session_state.carrinho.items()):
                 c1, c2, c3, c4 = st.columns([3, 1.5, 2, 1])
                 c1.write(f"*{item['nome']}*")
@@ -316,7 +315,6 @@ with col_carrinho:
 
             st.markdown("---")
 
-            # Formulário para finalizar o pedido
             with st.form("form_finalizar_pedido", clear_on_submit=True):
                 st.subheader("Finalizar Pedido")
                 nome = st.text_input("Seu Nome Completo:")
@@ -373,7 +371,7 @@ else:
         
         st.markdown("<hr>", unsafe_allow_html=True)
 
-    # --- SEÇÃO: CATÁLOGO COMPLETO (AGORA EM CARROSSEL) ---
+    # --- SEÇÃO: CATÁLOGO COMPLETO (AGORA EM CARROSSEL COM components.html) ---
     st.subheader("🛍️ Catálogo Completo")
     termo = st.session_state.get('termo_pesquisa_barra', '').lower()
     
@@ -388,14 +386,23 @@ else:
         # 1. Gera o HTML de todos os cards
         html_cards_catalogo = [get_product_card_html(prod_id, row) for prod_id, row in df_filtrado.iterrows()]
 
-        # 2. Renderiza o carrossel usando o HTML gerado
-        st.markdown(f"""
-            <div class="carousel-outer-container">
-                <div class="product-wrapper">
-                    {''.join(html_cards_catalogo)}
+        # 2. Renderiza o carrossel usando components.html
+        CAROUSEL_HTML_CONTENT = f"""
+            <html>
+            <head>
+                {CAROUSEL_CSS}
+            </head>
+            <body>
+                <div class="carousel-outer-container">
+                    <div class="product-wrapper">
+                        {''.join(html_cards_catalogo)}
+                    </div>
                 </div>
-            </div>
-        """, unsafe_allow_html=True)
+            </body>
+            </html>
+        """
+        # A altura precisa ser suficiente para o conteúdo, o valor 300 é estimado
+        components.html(CAROUSEL_HTML_CONTENT, height=350)
 
         # 3. Informa sobre a limitação do carrossel injetado
-        st.caption("✨ Role a barra abaixo para ver todos os produtos. Clique em 'Detalhes' para mais informações (funcionalidade completa de 'Adicionar' está nas seções acima).")
+        st.caption("✨ Role a barra abaixo (ou deslize a tela) para ver todos os produtos. Clique em 'Detalhes' para mais informações.")
