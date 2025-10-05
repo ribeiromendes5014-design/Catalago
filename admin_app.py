@@ -75,45 +75,53 @@ def excluir_pedido(id_pedido):
         st.error(f"Erro ao excluir o pedido: {e}")
         return False
 
-# --- FUNÇÃO ADICIONAR_PRODUTO (CORRIGIDA) ---
 def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponivel):
-    """Adiciona um novo produto na próxima linha vazia e nas colunas corretas."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_CATALOGO)
-        
-        # Pega todos os valores para encontrar o último ID de forma segura
         all_values = worksheet.get_all_values()
-        
-        # Pula o cabeçalho para ler apenas os IDs dos produtos existentes
-        # Assume que o ID está na segunda coluna (índice 1)
         ids_existentes = [int(row[1]) for row in all_values[1:] if len(row) > 1 and row[1].isdigit()]
-        
-        # Gera o novo ID
         novo_id = max(ids_existentes) + 1 if ids_existentes else 1
-        
-        # Monta a nova linha para ser inserida na planilha
-        # O "" no início é para pular a Coluna A, alinhando com sua planilha
-        nova_linha = [
-            "",  # Coluna A (em branco)
-            novo_id, # Coluna B (ID)
-            nome, # Coluna C (NOME)
-            str(preco).replace('.', ','), # Coluna D (PRECO)
-            desc_curta, # Coluna E (DESCRICAOCURTA)
-            desc_longa, # Coluna F (DESCRICAOLONGA)
-            link_imagem, # Coluna G (LINKIMAGEM)
-            disponivel # Coluna H (DISPONIVEL)
-        ]
-        
-        # Adiciona a nova linha na primeira tabela vazia que encontrar
+        nova_linha = ["", novo_id, nome, str(preco).replace('.', ','), desc_curta, desc_longa, link_imagem, disponivel]
         worksheet.append_row(nova_linha, value_input_option='USER_ENTERED')
-        
         st.cache_data.clear()
         return True
     except Exception as e:
         st.error(f"Ocorreu um erro ao adicionar o produto: {e}")
-        st.error("Dica: Verifique se os nomes das colunas na sua planilha 'produtos' estão corretos e na ordem esperada.")
         return False
+        
+# --- Função para exibir os itens de um pedido (COM A CORREÇÃO do subtotal) ---
+def exibir_itens_pedido(pedido_json, df_catalogo):
+    try:
+        detalhes_pedido = json.loads(pedido_json)
+        for item in detalhes_pedido.get('itens', []):
+            link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
+            if not df_catalogo.empty and not df_catalogo[df_catalogo['ID'] == item['id']].empty:
+                link_imagem = df_catalogo[df_catalogo['ID'] == item['id']].iloc[0]['LINKIMAGEM']
+            
+            col_img, col_detalhes = st.columns([1, 4])
+            col_img.image(link_imagem, width=100)
+            
+            # --- LÓGICA DE CÁLCULO DO SUBTOTAL ---
+            quantidade = item.get('qtd', item.get('quantidade', 0))
+            preco_unitario = float(item.get('preco', 0.0))
+            
+            # Tenta pegar o subtotal, se não existir, calcula na hora
+            subtotal = item.get('subtotal')
+            if subtotal is None:
+                subtotal = preco_unitario * quantidade
+            
+            col_detalhes.markdown(f"""
+            **Produto:** {item.get('nome', 'N/A')}
+
+            **Quantidade:** {quantidade}
+
+            **Subtotal:** R$ {subtotal:.2f}
+            """)
+            st.markdown("---")
+    except Exception as e:
+        st.error(f"Erro ao processar itens do pedido: {e}")
+
 
 # --- Layout do Aplicativo Admin ---
 st.set_page_config(page_title="Admin Doce&Bella", layout="wide")
@@ -121,7 +129,6 @@ st.title("⭐ Painel de Administração | Doce&Bella")
 tab_pedidos, tab_produtos = st.tabs(["Relatório de Pedidos", "Gerenciar Produtos"])
 
 with tab_pedidos:
-    # ... (código da aba de pedidos, sem alterações) ...
     st.header("📋 Pedidos Recebidos")
     if st.button("Recarregar Pedidos"):
         st.cache_data.clear()
@@ -163,18 +170,7 @@ with tab_pedidos:
                             st.success(f"Pedido {pedido['ID_PEDIDO']} finalizado!")
                             st.rerun()
                     st.markdown("---")
-                    try:
-                        detalhes_pedido = json.loads(pedido['ITENS_PEDIDO'])
-                        for item in detalhes_pedido.get('itens', []):
-                            link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
-                            if not df_catalogo.empty and not df_catalogo[df_catalogo['ID'] == item['id']].empty:
-                                link_imagem = df_catalogo[df_catalogo['ID'] == item['id']].iloc[0]['LINKIMAGEM']
-                            col_img, col_detalhes = st.columns([1, 4])
-                            col_img.image(link_imagem, width=100)
-                            quantidade = item.get('qtd', item.get('quantidade', 0))
-                            col_detalhes.markdown(f"**Produto:** {item['nome']}\n\n**Quantidade:** {quantidade}\n\n**Subtotal:** R$ {item.get('subtotal', 0):.2f}")
-                            st.markdown("---")
-                    except Exception as e: st.error(f"Erro ao processar itens: {e}")
+                    exibir_itens_pedido(pedido['ITENS_PEDIDO'], df_catalogo)
 
         st.header("✅ Pedidos Finalizados")
         if pedidos_finalizados.empty:
@@ -196,18 +192,7 @@ with tab_pedidos:
                                 st.success(f"Pedido {pedido['ID_PEDIDO']} excluído!")
                                 st.rerun()
                     st.markdown("---")
-                    try:
-                        detalhes_pedido = json.loads(pedido['ITENS_PEDIDO'])
-                        for item in detalhes_pedido.get('itens', []):
-                            link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
-                            if not df_catalogo.empty and not df_catalogo[df_catalogo['ID'] == item['id']].empty:
-                                link_imagem = df_catalogo[df_catalogo['ID'] == item['id']].iloc[0]['LINKIMAGEM']
-                            col_img, col_detalhes = st.columns([1, 4])
-                            col_img.image(link_imagem, width=100)
-                            quantidade = item.get('qtd', item.get('quantidade', 0))
-                            col_detalhes.markdown(f"**Produto:** {item['nome']}\n\n**Quantidade:** {quantidade}\n\n**Subtotal:** R$ {item.get('subtotal', 0):.2f}")
-                            st.markdown("---")
-                    except Exception as e: st.error(f"Erro ao processar itens: {e}")
+                    exibir_itens_pedido(pedido['ITENS_PEDIDO'], df_catalogo)
 
 with tab_produtos:
     st.header("🛍️ Gerenciamento de Produtos")
