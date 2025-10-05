@@ -5,13 +5,14 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import json
 from datetime import datetime
+import time
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
 SHEET_NAME_PEDIDOS = "pedidos"
 SHEET_NAME_PROMOCOES = "promocoes"
 
-# --- Funções de Conexão e Carregamento (Sem alterações) ---
+# --- Conexão e Carregamento de Dados (sem alterações) ---
 @st.cache_resource(ttl=None)
 def get_gspread_client():
     try:
@@ -22,28 +23,23 @@ def get_gspread_client():
         sh = client.open_by_url(st.secrets["gsheets"]["sheet_url"])
         return sh
     except Exception as e:
-        st.error(f"Erro na autenticação com o Google Sheets: {e}")
-        st.stop()
+        st.error(f"Erro na autenticação com o Google Sheets: {e}"); st.stop()
 
 @st.cache_data(ttl=60)
 def carregar_dados(sheet_name):
     try:
-        sh = get_gspread_client()
-        worksheet = sh.worksheet(sheet_name)
-        data = worksheet.get_all_values()
+        sh = get_gspread_client(); worksheet = sh.worksheet(sheet_name); data = worksheet.get_all_values()
         if len(data) < 2: return pd.DataFrame()
         df = pd.DataFrame(data[1:], columns=data[0])
         if sheet_name == SHEET_NAME_PEDIDOS and 'STATUS' not in df.columns: df['STATUS'] = ''
         if sheet_name == SHEET_NAME_CATALOGO and 'ID' in df.columns: df['ID'] = pd.to_numeric(df['ID'], errors='coerce')
         return df
     except gspread.exceptions.WorksheetNotFound:
-        st.warning(f"Atenção: A aba '{sheet_name}' não foi encontrada na sua planilha. Algumas funcionalidades podem não funcionar.")
-        return pd.DataFrame()
+        st.warning(f"Aba '{sheet_name}' não encontrada."); return pd.DataFrame()
     except Exception as e:
-        st.error(f"Ocorreu um erro ao carregar os dados de '{sheet_name}': {e}")
-        return pd.DataFrame()
+        st.error(f"Erro ao carregar dados de '{sheet_name}': {e}"); return pd.DataFrame()
 
-# --- Funções de Pedido ---
+# --- Funções de Pedidos (sem alterações) ---
 def atualizar_status_pedido(id_pedido, novo_status):
     try:
         sh = get_gspread_client(); worksheet = sh.worksheet(SHEET_NAME_PEDIDOS); cell = worksheet.find(id_pedido, in_column=1)
@@ -70,64 +66,77 @@ def exibir_itens_pedido(pedido_json, df_catalogo):
             col_detalhes.markdown(f"**Produto:** {item.get('nome', 'N/A')}\n\n**Quantidade:** {quantidade}\n\n**Subtotal:** R$ {subtotal:.2f}"); st.markdown("---")
     except Exception as e: st.error(f"Erro ao processar itens do pedido: {e}")
 
-# --- FUNÇÃO ADICIONAR_PRODUTO CORRIGIDA ---
+# --- FUNÇÕES CRUD PARA PRODUTOS (NOVAS E ATUALIZADAS) ---
 def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponivel):
     try:
-        sh = get_gspread_client()
-        worksheet = sh.worksheet(SHEET_NAME_CATALOGO)
-        all_values = worksheet.get_all_values()
-        
-        # Define explicitamente a próxima linha como o final da planilha
+        sh = get_gspread_client(); worksheet = sh.worksheet(SHEET_NAME_CATALOGO); all_values = worksheet.get_all_values()
         next_row_index = len(all_values) + 1
-        
         ids_existentes = [int(row[1]) for row in all_values[1:] if len(row) > 1 and row[1].isdigit()]
         novo_id = max(ids_existentes) + 1 if ids_existentes else 1
-        
         nova_linha = ["", novo_id, nome, str(preco).replace('.', ','), desc_curta, desc_longa, link_imagem, disponivel]
-        
-        # Usa insert_row para adicionar na linha exata, em vez de append_row
-        worksheet.insert_row(nova_linha, next_row_index, value_input_option='USER_ENTERED')
-        
-        st.cache_data.clear()
-        return True
-    except Exception as e:
-        st.error(f"Ocorreu um erro ao adicionar o produto: {e}")
-        return False
+        worksheet.insert_row(nova_linha, next_row_index, value_input_option='USER_ENTERED'); st.cache_data.clear(); return True
+    except Exception as e: st.error(f"Erro ao adicionar o produto: {e}"); return False
 
-# --- Funções de Promoção ---
+def excluir_produto(id_produto):
+    try:
+        sh = get_gspread_client(); worksheet = sh.worksheet(SHEET_NAME_CATALOGO)
+        cell = worksheet.find(str(id_produto), in_column=2) # Procura na coluna B (ID)
+        if cell:
+            worksheet.delete_rows(cell.row); st.cache_data.clear(); return True
+        return False
+    except Exception as e: st.error(f"Erro ao excluir o produto: {e}"); return False
+
+def atualizar_produto(id_produto, nome, preco, desc_curta, desc_longa, link_imagem, disponivel):
+    try:
+        sh = get_gspread_client(); worksheet = sh.worksheet(SHEET_NAME_CATALOGO)
+        cell = worksheet.find(str(id_produto), in_column=2)
+        if cell:
+            linha_para_atualizar = ["", id_produto, nome, str(preco).replace('.',','), desc_curta, desc_longa, link_imagem, disponivel]
+            worksheet.update(f'A{cell.row}:H{cell.row}', [linha_para_atualizar]); st.cache_data.clear(); return True
+        return False
+    except Exception as e: st.error(f"Erro ao atualizar o produto: {e}"); return False
+
+# --- FUNÇÕES CRUD PARA PROMOÇÕES (NOVAS E ATUALIZADAS) ---
 def criar_promocao(id_produto, nome_produto, preco_original, preco_promocional, data_inicio, data_fim):
     try:
-        sh = get_gspread_client()
-        worksheet = sh.worksheet(SHEET_NAME_PROMOCOES)
-        nova_linha = [str(id_produto), nome_produto, str(preco_original), str(preco_promocional), "Ativa", data_inicio, data_fim]
-        worksheet.append_row(nova_linha, value_input_option='USER_ENTERED')
-        st.cache_data.clear()
-        return True
-    except Exception as e:
-        st.error(f"Ocorreu um erro ao criar a promoção: {e}")
-        return False
-def desativar_promocao(id_produto):
-    try:
-        sh = get_gspread_client()
-        worksheet = sh.worksheet(SHEET_NAME_PROMOCOES)
-        cells = worksheet.findall(str(id_produto), in_column=1)
-        if not cells: return False
-        cell = cells[-1] 
-        worksheet.update_acell(f'E{cell.row}', "Inativa")
-        st.cache_data.clear()
-        return True
-    except Exception as e:
-        st.error(f"Ocorreu um erro ao desativar a promoção: {e}")
-        return False
+        sh = get_gspread_client(); worksheet = sh.worksheet(SHEET_NAME_PROMOCOES)
+        id_promocao = int(time.time()) # ID único baseado no tempo
+        nova_linha = [id_promocao, str(id_produto), nome_produto, str(preco_original), str(preco_promocional), "Ativa", data_inicio, data_fim]
+        worksheet.append_row(nova_linha, value_input_option='USER_ENTERED'); st.cache_data.clear(); return True
+    except Exception as e: st.error(f"Erro ao criar a promoção: {e}"); return False
 
-# --- Layout do Aplicativo Admin ---
+def excluir_promocao(id_promocao):
+    try:
+        sh = get_gspread_client(); worksheet = sh.worksheet(SHEET_NAME_PROMOCOES)
+        cell = worksheet.find(str(id_promocao), in_column=1) # Procura pelo ID_PROMOCAO
+        if cell:
+            worksheet.delete_rows(cell.row); st.cache_data.clear(); return True
+        return False
+    except Exception as e: st.error(f"Erro ao excluir a promoção: {e}"); return False
+
+def atualizar_promocao(id_promocao, preco_promocional, data_inicio, data_fim, status):
+    try:
+        sh = get_gspread_client(); worksheet = sh.worksheet(SHEET_NAME_PROMOCOES)
+        cell = worksheet.find(str(id_promocao), in_column=1)
+        if cell:
+            # Atualiza apenas os campos editáveis
+            worksheet.update_acell(f'E{cell.row}', str(preco_promocional).replace('.',','))
+            worksheet.update_acell(f'G{cell.row}', data_inicio)
+            worksheet.update_acell(f'H{cell.row}', data_fim)
+            worksheet.update_acell(f'F{cell.row}', status)
+            st.cache_data.clear(); return True
+        return False
+    except Exception as e: st.error(f"Erro ao atualizar a promoção: {e}"); return False
+
+
+# --- LAYOUT DO APP ---
 st.set_page_config(page_title="Admin Doce&Bella", layout="wide")
 st.title("⭐ Painel de Administração | Doce&Bella")
-tab_pedidos, tab_produtos, tab_promocoes = st.tabs(["Relatório de Pedidos", "Gerenciar Produtos", "🔥 Promoções"])
+tab_pedidos, tab_produtos, tab_promocoes = st.tabs(["Pedidos", "Produtos", "🔥 Promoções"])
 
 with tab_pedidos:
     # (código da aba de pedidos, sem alterações)
-    st.header("📋 Pedidos Recebidos")
+    st.header("📋 Pedidos Recebidos"); # ... (código existente)
     if st.button("Recarregar Pedidos"): st.cache_data.clear(); st.rerun()
     df_pedidos_raw = carregar_dados(SHEET_NAME_PEDIDOS); df_catalogo_pedidos = carregar_dados(SHEET_NAME_CATALOGO)
     if df_pedidos_raw.empty: st.info("Nenhum pedido foi encontrado na planilha.")
@@ -165,78 +174,101 @@ with tab_pedidos:
                             if excluir_pedido(pedido['ID_PEDIDO']): st.success(f"Pedido {pedido['ID_PEDIDO']} excluído!"); st.rerun()
                     st.markdown("---"); exibir_itens_pedido(pedido['ITENS_PEDIDO'], df_catalogo_pedidos)
 
+
 with tab_produtos:
-    # (código da aba de produtos, sem alterações)
     st.header("🛍️ Gerenciamento de Produtos")
-    with st.form("form_novo_produto", clear_on_submit=True):
-        st.subheader("Cadastrar Novo Produto"); col1, col2 = st.columns(2); nome_prod = col1.text_input("Nome do Produto*"); preco_prod = col1.number_input("Preço (R$)*", min_value=0.0, format="%.2f", step=0.50); link_imagem_prod = col1.text_input("URL da Imagem do Produto"); desc_curta_prod = col2.text_input("Descrição Curta"); desc_longa_prod = col2.text_area("Descrição Longa/Detalhada"); disponivel_prod = col2.selectbox("Disponível para venda?", ("Sim", "Não"))
-        if st.form_submit_button("Cadastrar Produto"):
-            if not nome_prod or preco_prod <= 0: st.warning("Preencha o Nome e o Preço.")
-            elif adicionar_produto(nome_prod, preco_prod, desc_curta_prod, desc_longa_prod, link_imagem_prod, disponivel_prod): st.success("Produto cadastrado!"); st.rerun()
-            else: st.error("Falha ao cadastrar o produto.")
-    st.markdown("---"); st.subheader("Catálogo Atual");
-    if st.button("Recarregar Catálogo"): st.cache_data.clear(); st.rerun()
-    df_produtos_display = carregar_dados(SHEET_NAME_CATALOGO)
-    if df_produtos_display.empty: st.warning("Nenhum produto encontrado.")
-    else: st.dataframe(df_produtos_display, use_container_width=True)
+    with st.expander("➕ Cadastrar Novo Produto", expanded=False):
+        with st.form("form_novo_produto", clear_on_submit=True):
+            col1, col2 = st.columns(2); nome_prod = col1.text_input("Nome do Produto*"); preco_prod = col1.number_input("Preço (R$)*", min_value=0.0, format="%.2f", step=0.50); link_imagem_prod = col1.text_input("URL da Imagem"); desc_curta_prod = col2.text_input("Descrição Curta"); desc_longa_prod = col2.text_area("Descrição Longa"); disponivel_prod = col2.selectbox("Disponível?", ("Sim", "Não"))
+            if st.form_submit_button("Cadastrar Produto"):
+                if not nome_prod or preco_prod <= 0: st.warning("Preencha Nome e Preço.")
+                elif adicionar_produto(nome_prod, preco_prod, desc_curta_prod, desc_longa_prod, link_imagem_prod, disponivel_prod):
+                    st.success("Produto cadastrado!"); st.rerun()
+                else: st.error("Falha ao cadastrar.")
+    
+    st.markdown("---")
+    st.subheader("Catálogo Atual")
+    df_produtos = carregar_dados(SHEET_NAME_CATALOGO)
+    if df_produtos.empty:
+        st.warning("Nenhum produto encontrado.")
+    else:
+        for index, produto in df_produtos.iterrows():
+            with st.container(border=True):
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    st.image(produto.get("LINKIMAGEM") or "https://via.placeholder.com/150?text=Sem+Imagem", width=100)
+                with col2:
+                    st.markdown(f"**{produto['NOME']}** (ID: {produto['ID']})")
+                    st.markdown(f"**Preço:** R$ {produto['PRECO']}")
+                    with st.popover("📝 Editar"):
+                        with st.form(f"edit_form_{produto['ID']}", clear_on_submit=True):
+                            st.markdown(f"Editando: **{produto['NOME']}**")
+                            nome_edit = st.text_input("Nome", value=produto['NOME'])
+                            preco_edit = st.number_input("Preço", value=float(produto['PRECO'].replace(',','.')), format="%.2f")
+                            link_edit = st.text_input("Link Imagem", value=produto.get('LINKIMAGEM'))
+                            curta_edit = st.text_input("Desc. Curta", value=produto.get('DESCRICAOCURTA'))
+                            longa_edit = st.text_area("Desc. Longa", value=produto.get('DESCRICAOLONGA'))
+                            disponivel_edit = st.selectbox("Disponível", ["Sim", "Não"], index=["Sim", "Não"].index(produto.get('DISPONIVEL', 'Sim')))
+                            if st.form_submit_button("Salvar Alterações"):
+                                if atualizar_produto(produto['ID'], nome_edit, preco_edit, curta_edit, longa_edit, link_edit, disponivel_edit):
+                                    st.success("Produto atualizado!"); st.rerun()
+                                else: st.error("Falha ao atualizar.")
+
+                    if st.button("🗑️ Excluir", key=f"del_{produto['ID']}", type="primary"):
+                        if excluir_produto(produto['ID']):
+                            st.success("Produto excluído!"); st.rerun()
+                        else: st.error("Falha ao excluir.")
+
 
 with tab_promocoes:
-    # (código da aba de promoções, sem alterações)
     st.header("🔥 Gerenciador de Promoções")
-    st.markdown("Crie e gerencie promoções com data de início e fim para produtos do seu catálogo.")
-    df_catalogo_promo = carregar_dados(SHEET_NAME_CATALOGO)
-    df_promocoes = carregar_dados(SHEET_NAME_PROMOCOES)
-    if df_catalogo_promo.empty:
-        st.warning("Você precisa ter produtos cadastrados no catálogo para criar uma promoção.")
-    else:
-        with st.form("form_nova_promocao", clear_on_submit=True):
-            st.subheader("Criar Nova Promoção")
-            df_catalogo_promo['PRECO'] = pd.to_numeric(df_catalogo_promo['PRECO'].str.replace(',', '.'), errors='coerce')
-            opcoes_produtos = {f"{row['NOME']} (R$ {row['PRECO']:.2f})": row['ID'] for index, row in df_catalogo_promo.iterrows()}
-            produto_selecionado_nome = st.selectbox("Escolha o produto:", options=opcoes_produtos.keys())
-            preco_promocional = st.number_input("Novo Preço Promocional (R$)", min_value=0.01, format="%.2f", step=0.50)
-            col_data1, col_data2 = st.columns(2)
-            with col_data1:
-                data_inicio = st.date_input("Data de Início", value=datetime.now())
-            with col_data2:
-                sem_data_fim = st.checkbox("Não tem data para acabar")
-                data_fim = None
-                if not sem_data_fim:
-                    data_fim = st.date_input("Data de Fim", min_value=data_inicio)
-            submitted = st.form_submit_button("Lançar Promoção")
-            if submitted:
-                id_produto_selecionado = opcoes_produtos[produto_selecionado_nome]
-                produto_info = df_catalogo_promo[df_catalogo_promo['ID'] == id_produto_selecionado].iloc[0]
-                if preco_promocional >= produto_info['PRECO']:
-                    st.error("O preço promocional deve ser menor que o preço original.")
-                else:
-                    data_inicio_str = data_inicio.strftime('%Y-%m-%d')
-                    data_fim_str = "" if sem_data_fim else data_fim.strftime('%Y-%m-%d')
-                    if criar_promocao(id_produto_selecionado, produto_info['NOME'], produto_info['PRECO'], preco_promocional, data_inicio_str, data_fim_str):
-                        st.success(f"Promoção para '{produto_info['NOME']}' criada com sucesso!")
-                        st.rerun()
-                    else:
-                        st.error("Falha ao criar a promoção.")
-        st.markdown("---")
-        st.subheader("Visão Geral das Promoções")
-        if df_promocoes.empty:
-            st.info("Nenhuma promoção foi criada ainda.")
+    with st.expander("➕ Criar Nova Promoção", expanded=False):
+        df_catalogo_promo = carregar_dados(SHEET_NAME_CATALOGO)
+        if df_catalogo_promo.empty:
+            st.warning("Cadastre produtos antes de criar uma promoção.")
         else:
-            hoje = pd.to_datetime(datetime.now().date())
-            df_promocoes['DATA_INICIO'] = pd.to_datetime(df_promocoes['DATA_INICIO'], errors='coerce')
-            df_promocoes['DATA_FIM'] = pd.to_datetime(df_promocoes['DATA_FIM'], errors='coerce')
-            promocoes_ativas_hoje = df_promocoes[
-                (df_promocoes['STATUS'] == 'Ativa') &
-                (df_promocoes['DATA_INICIO'] <= hoje) &
-                (df_promocoes['DATA_FIM'].isna() | (df_promocoes['DATA_FIM'] >= hoje))
-            ]
-            st.markdown("#### Promoções Ativas Hoje")
-            if promocoes_ativas_hoje.empty:
-                st.info("Nenhuma promoção está ativa para a data de hoje.")
-            else:
-                for index, promo in promocoes_ativas_hoje.iterrows():
-                    fim_str = "sem data para acabar" if pd.isna(promo['DATA_FIM']) else promo['DATA_FIM'].strftime('%d/%m/%Y')
-                    st.markdown(f"- **{promo['NOME_PRODUTO']}** por R$ {promo['PRECO_PROMOCIONAL']} (Válido até: {fim_str})")
-            st.markdown("---")
-            st.markdown("#### Todas as Promoções Criadas (Ativas e Inativas)")
-            st.dataframe(df_promocoes, use_container_width=True)
+            with st.form("form_nova_promocao", clear_on_submit=True):
+                df_catalogo_promo['PRECO_FLOAT'] = pd.to_numeric(df_catalogo_promo['PRECO'].str.replace(',', '.'), errors='coerce')
+                opcoes_produtos = {f"{row['NOME']} (R$ {row['PRECO_FLOAT']:.2f})": row['ID'] for _, row in df_catalogo_promo.iterrows()}
+                produto_selecionado_nome = st.selectbox("Escolha o produto:", options=opcoes_produtos.keys())
+                preco_promocional = st.number_input("Novo Preço Promocional (R$)", min_value=0.01, format="%.2f")
+                col_data1, col_data2 = st.columns(2)
+                data_inicio = col_data1.date_input("Data de Início", value=datetime.now())
+                sem_data_fim = col_data2.checkbox("Não tem data para acabar")
+                data_fim = col_data2.date_input("Data de Fim", min_value=data_inicio) if not sem_data_fim else None
+                if st.form_submit_button("Lançar Promoção"):
+                    id_produto = opcoes_produtos[produto_selecionado_nome]
+                    produto_info = df_catalogo_promo[df_catalogo_promo['ID'] == id_produto].iloc[0]
+                    if criar_promocao(id_produto, produto_info['NOME'], produto_info['PRECO_FLOAT'], preco_promocional, data_inicio.strftime('%Y-%m-%d'), "" if sem_data_fim else data_fim.strftime('%Y-%m-%d')):
+                        st.success("Promoção criada!"); st.rerun()
+
+    st.markdown("---")
+    st.subheader("Promoções Criadas")
+    df_promocoes = carregar_dados(SHEET_NAME_PROMOCOES)
+    if df_promocoes.empty:
+        st.info("Nenhuma promoção foi criada ainda.")
+    else:
+        for index, promo in df_promocoes.iterrows():
+            with st.container(border=True):
+                st.markdown(f"**{promo['NOME_PRODUTO']}** | De R$ {promo['PRECO_ORIGINAL']} por **R$ {promo['PRECO_PROMOCIONAL']}**")
+                st.caption(f"Status: {promo['STATUS']} | ID da Promoção: {promo['ID_PROMOCAO']}")
+                
+                with st.popover("📝 Editar Promoção"):
+                    with st.form(f"edit_promo_{promo['ID_PROMOCAO']}", clear_on_submit=True):
+                        st.markdown(f"Editando: **{promo['NOME_PRODUTO']}**")
+                        preco_promo_edit = st.number_input("Preço Promocional", value=float(promo['PRECO_PROMOCIONAL'].replace(',','.')), format="%.2f")
+                        
+                        di_val = datetime.strptime(promo['DATA_INICIO'], '%Y-%m-%d') if promo.get('DATA_INICIO') else datetime.now()
+                        df_val = datetime.strptime(promo['DATA_FIM'], '%Y-%m-%d') if promo.get('DATA_FIM') else di_val
+                        
+                        data_inicio_edit = st.date_input("Data de Início", value=di_val, key=f"di_{promo['ID_PROMOCAO']}")
+                        data_fim_edit = st.date_input("Data de Fim", value=df_val, min_value=data_inicio_edit, key=f"df_{promo['ID_PROMOCAO']}")
+                        status_edit = st.selectbox("Status", ["Ativa", "Inativa"], index=["Ativa", "Inativa"].index(promo.get('STATUS', 'Ativa')), key=f"st_{promo['ID_PROMOCAO']}")
+                        
+                        if st.form_submit_button("Salvar"):
+                            if atualizar_promocao(promo['ID_PROMOCAO'], preco_promo_edit, data_inicio_edit.strftime('%Y-%m-%d'), data_fim_edit.strftime('%Y-%m-%d'), status_edit):
+                                st.success("Promoção atualizada!"); st.rerun()
+
+                if st.button("🗑️ Excluir Promoção", key=f"del_promo_{promo['ID_PROMOCAO']}", type="primary"):
+                    if excluir_promocao(promo['ID_PROMOCAO']):
+                        st.success("Promoção excluída!"); st.rerun()
