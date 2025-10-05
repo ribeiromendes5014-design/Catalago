@@ -69,7 +69,7 @@ def carregar_catalogo():
         return pd.DataFrame()
 
 
-# --- Funções salvar_pedido, adicionar/remover do carrinho (Mantidas) ---
+# --- Funções do Aplicativo ---
 
 def salvar_pedido(nome_cliente: str, contato_cliente: str, valor_total: float, itens_json: str):
     """Salva um novo pedido na planilha de PEDIDOS."""
@@ -82,7 +82,7 @@ def salvar_pedido(nome_cliente: str, contato_cliente: str, valor_total: float, i
             nome_cliente,
             contato_cliente,
             itens_json,
-            f"{valor_total:.2f}".replace('.', ',') # Salva com vírgula
+            f"{valor_total:.2f}".replace('.', ',')
         ]
         worksheet.append_row(novo_registro)
         return True
@@ -117,7 +117,8 @@ def render_product_image(link_imagem):
         </div>
     """
     if link_imagem and str(link_imagem).strip().startswith('http'):
-        st.image(link_imagem, use_column_width="always")
+        # --- CORREÇÃO APLICADA AQUI ---
+        st.image(link_imagem, use_container_width=True)
     else:
         st.markdown(placeholder_html, unsafe_allow_html=True)
 
@@ -130,9 +131,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# -----------------------------------
-# CSS (Fundo, Carrinho e Botão Adicionar)
-# -----------------------------------
+# --- CSS (Fundo, Carrinho e Botão Adicionar) ---
 st.markdown(f"""
 <style>
 /* 1. BACKGROUND PERSONALIZADO */
@@ -225,31 +224,26 @@ div[data-testid="stButton"] > button:hover {{
 """, unsafe_allow_html=True)
 
 
-# --- 1. CABEÇALHO PRINCIPAL ---
-
+# --- CABEÇALHO PRINCIPAL ---
 col_logo, col_titulo = st.columns([0.1, 5])
 with col_logo:
     st.markdown("<h3>💖</h3>", unsafe_allow_html=True)
 with col_titulo:
     st.title("Catálogo de Pedidos Doce&Bella")
 
-# 2. Lógica do Carrinho
+# Lógica do Carrinho
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
 
-# 3. BARRA ROSA (PESQUISA E CARRINHO)
-st.markdown("<div class='pink-bar-container'>", unsafe_allow_html=True)
-st.markdown("<div class='pink-bar-content'>", unsafe_allow_html=True)
-
+# --- BARRA ROSA (PESQUISA E CARRINHO) ---
+st.markdown("<div class='pink-bar-container'><div class='pink-bar-content'>", unsafe_allow_html=True)
 col_pesquisa, col_carrinho = st.columns([5, 1])
-
 with col_pesquisa:
     termo_pesquisa = st.text_input("Buscar produtos...",
                                    key='termo_pesquisa_barra',
                                    label_visibility="collapsed",
                                    placeholder="Buscar produtos...")
-
 with col_carrinho:
     custom_cart_button = f"""
         <div class='cart-badge-button' onclick='document.querySelector("[data-testid=\"stPopover\"] > div:first-child > button").click();'>
@@ -258,34 +252,27 @@ with col_carrinho:
         </div>
     """
     st.markdown(custom_cart_button, unsafe_allow_html=True)
-
     with st.popover(" ", use_container_width=False, help="Clique para ver os itens e finalizar o pedido"):
         st.header("🛒 Detalhes do Seu Pedido")
-
         if carrinho_vazio:
             st.info("Seu carrinho está vazio. Adicione itens do catálogo!")
         else:
             st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
             st.markdown("---")
-
             for prod_id, item in list(st.session_state.carrinho.items()):
                 col_nome, col_qtd, col_preco, col_remover = st.columns([3, 1.5, 2, 1])
                 col_nome.write(f"*{item['nome']}*")
                 col_qtd.markdown(f"**{item['quantidade']}x**")
                 col_preco.markdown(f"R$ {item['preco'] * item['quantidade']:.2f}")
-
                 if col_remover.button("X", key=f'rem_{prod_id}_popover', help=f"Remover {item['nome']}"):
                     remover_do_carrinho(prod_id)
                     st.rerun()
-
             st.markdown("---")
-
             with st.form("form_finalizar_pedido_popover", clear_on_submit=True):
                 st.subheader("Finalizar Pedido")
                 nome = st.text_input("Seu Nome Completo:", key='nome_cliente_popover')
                 contato = st.text_input("Seu Contato (WhatsApp/E-mail):", key='contato_cliente_popover')
                 submitted = st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True)
-
                 if submitted:
                     if not nome or not contato:
                         st.warning("Por favor, preencha seu nome e contato para finalizar.")
@@ -304,32 +291,25 @@ with col_carrinho:
                             st.rerun()
                         else:
                             st.error("Falha ao salvar o pedido. Tente novamente.")
-
 st.markdown("</div></div>", unsafe_allow_html=True)
 
 
-# --- 4. SEÇÃO DE PRODUTOS ---
+# --- SEÇÃO DE PRODUTOS ---
 st.markdown("---")
 
 df_catalogo = carregar_catalogo()
 
-# Função para renderizar um único produto (evita repetição de código)
 def render_product_card(prod_id, row, key_prefix):
+    """Função para renderizar um único card de produto."""
     with st.container(border=True):
         render_product_image(row.get('LINKIMAGEM'))
         st.markdown(f"**{row['NOME']}**")
         st.caption(row.get('DESCRICAOCURTA', ''))
-
-        # Expander para detalhes longos
         with st.expander("Ver detalhes"):
             st.markdown(row.get('DESCRICAOLONGA', 'Sem descrição detalhada.'))
-
-        # Colunas para Preço e Botão Adicionar
         col_preco, col_botao = st.columns([2, 2])
-
         with col_preco:
             st.markdown(f"<h4 style='color: #880E4F; margin:0; line-height:2.5;'>R$ {row['PRECO']:.2f}</h4>", unsafe_allow_html=True)
-
         with col_botao:
             if st.button("➕ Adicionar", key=f'{key_prefix}_{prod_id}', use_container_width=True):
                 adicionar_ao_carrinho(prod_id, row['NOME'], row['PRECO'])
@@ -354,7 +334,6 @@ else:
     st.subheader("✨ Nossos Produtos")
     cols_per_row = 3
     cols = st.columns(cols_per_row)
-
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
         col = cols[i % cols_per_row]
         with col:
