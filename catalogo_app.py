@@ -10,57 +10,94 @@ from datetime import datetime
 def local_css(css_code):
     st.markdown(f'<style>{css_code}</style>', unsafe_allow_html=True)
 
-# CSS para o novo ícone de carrinho flutuante e painel
+# CSS COMBINADO: Ícone do Carrinho + Novo Layout Profissional do Catálogo
 local_css("""
-    /* Oculta a barra lateral padrão */
-    section[data-testid="stSidebar"] {
-        display: none;
+    /* ===== CONFIGURAÇÕES GLOBAIS ===== */
+    /* Oculta a barra lateral e o menu padrão do Streamlit */
+    section[data-testid="stSidebar"], #MainMenu, footer {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    .stApp {
+        background-color: #FFFFFF; /* Fundo branco para um look mais de e-commerce */
     }
 
-    /* Contêiner que segura o botão do popover para posicioná-lo */
+    /* ===== ESTILO DO CATÁLOGO DE PRODUTOS ===== */
+
+    /* Container principal da seção do catálogo para centralizar */
+    [data-testid="stVerticalBlock"]:has(div.st-emotion-cache-1r6slb0) {
+        max-width: 1200px;
+        margin: auto;
+    }
+    
+    /* Card de Produto Individual */
+    div[data-testid="stVerticalBlock"] [data-testid="stContainer"] {
+        border: 1px solid #e0e0e0 !important;
+        border-radius: 8px !important;
+        padding: 1rem !important;
+        transition: box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
+        height: 100%; /* Garante que todos os cards na mesma linha tenham a mesma altura */
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+    div[data-testid="stVerticalBlock"] [data-testid="stContainer"]:hover {
+        box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+        transform: translateY(-5px);
+    }
+
+    /* Imagem dentro do card */
+    div[data-testid="stVerticalBlock"] [data-testid="stContainer"] img {
+        border-radius: 4px;
+        object-fit: contain; /* Garante que a imagem caiba sem distorcer */
+        height: 180px; /* Altura fixa para alinhar as imagens */
+        margin-bottom: 1rem;
+    }
+
+    /* Título do produto (negrito) */
+    div[data-testid="stVerticalBlock"] [data-testid="stContainer"] p strong {
+        font-size: 1rem;
+        color: #333;
+    }
+
+    /* Preço do produto */
+    div[data-testid="stVerticalBlock"] [data-testid="stContainer"] p:not(:has(strong)) {
+        font-size: 1.1rem;
+        font-weight: bold;
+        color: #E91E63; /* Cor rosa para destaque */
+        margin-top: -10px;
+    }
+    
+    /* Botão 'Comprar' (Popover) */
+    div[data-testid="stVerticalBlock"] [data-testid="stContainer"] [data-testid="stPopover"] > button {
+        background-color: #E91E63 !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 5px !important;
+        width: 100% !important;
+        font-weight: bold;
+    }
+
+    /* ===== ESTILO DO CARRINHO FLUTUANTE ===== */
     div[data-testid="stVerticalBlock"]:has(div[data-testid="stPopover"]):last-of-type {
         position: fixed;
         bottom: 30px;
         right: 30px;
         z-index: 1000;
     }
-    
-    /* Estilo do novo botão de ícone flutuante */
     div[data-testid="stPopover"] > button {
-        background-color: #F06292 !important; /* Cor Rosa */
-        color: white !important;
-        border-radius: 50% !important; /* Círculo */
-        width: 60px !important;
-        height: 60px !important;
-        font-size: 28px !important; /* Tamanho do ícone de carrinho */
-        border: none !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        background-color: #F06292 !important; color: white !important;
+        border-radius: 50% !important; width: 60px !important; height: 60px !important;
+        font-size: 28px !important; border: none !important; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     }
-
-    /* Badge (notificação) com o número de itens */
     div[data-testid="stPopover"] > button::after {
-        content: attr(data-badge); /* Pega o número do atributo 'data-badge' */
-        position: absolute;
-        top: 0px;
-        right: 0px;
-        width: 25px;
-        height: 25px;
-        background-color: #E53935; /* Vermelho */
-        color: white;
-        border-radius: 50%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        font-size: 14px;
-        font-weight: bold;
-        border: 2px solid white;
+        content: attr(data-badge); position: absolute; top: 0px; right: 0px;
+        width: 25px; height: 25px; background-color: #E53935; color: white;
+        border-radius: 50%; display: flex; justify-content: center; align-items: center;
+        font-size: 14px; font-weight: bold; border: 2px solid white;
     }
-
-    /* Estilo do painel do carrinho que abre */
     div[data-testid="stPopover"] div[data-testid="stPopup"] {
-        width: 380px !important;
-        border-radius: 10px;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        width: 380px !important; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.2);
     }
 """)
 
@@ -81,16 +118,14 @@ if 'pedido_enviado' not in st.session_state:
 
 # --- Helpers ---
 def _normalize_header(s: str) -> str:
-    if s is None:
-        return ""
+    if s is None: return ""
     s = str(s)
     s = unicodedata.normalize('NFKD', s)
     s = s.encode('ASCII', 'ignore').decode('ASCII')
     return s.upper().strip()
 
 def _guess_yes(value):
-    if pd.isna(value):
-        return False
+    if pd.isna(value): return False
     v = str(value).strip().lower()
     return v in ('sim', 's', 'yes', 'y', 'true', '1', 'x')
 
@@ -101,12 +136,7 @@ def adicionar_ao_carrinho(produto_id, nome, preco, quantidade):
             item['quantidade'] += quantidade
             break
     else:
-        st.session_state.carrinho.append({
-            'id': produto_id,
-            'nome': nome,
-            'preco': preco,
-            'quantidade': quantidade
-        })
+        st.session_state.carrinho.append({'id': produto_id, 'nome': nome, 'preco': preco, 'quantidade': quantidade})
 
 def remover_do_carrinho(produto_id):
     st.session_state.carrinho = [item for item in st.session_state.carrinho if item['id'] != produto_id]
@@ -121,18 +151,7 @@ def limpar_carrinho():
 @st.cache_data(ttl=600)
 def load_data():
     try:
-        creds_json = {
-            "type": st.secrets["gsheets"]["creds"]["type"],
-            "project_id": st.secrets["gsheets"]["creds"]["project_id"],
-            "private_key_id": st.secrets["gsheets"]["creds"]["private_key_id"],
-            "private_key": st.secrets["gsheets"]["creds"]["private_key"],
-            "client_email": st.secrets["gsheets"]["creds"]["client_email"],
-            "client_id": st.secrets["gsheets"]["creds"]["client_id"],
-            "auth_uri": st.secrets["gsheets"]["creds"]["auth_uri"],
-            "token_uri": st.secrets["gsheets"]["creds"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["gsheets"]["creds"]["auth_provider_x509_cert_url"],
-            "client_x509_cert_url": st.secrets["gsheets"]["creds"]["client_x509_cert_url"],
-        }
+        creds_json = {"type": st.secrets["gsheets"]["creds"]["type"], "project_id": st.secrets["gsheets"]["creds"]["project_id"], "private_key_id": st.secrets["gsheets"]["creds"]["private_key_id"], "private_key": st.secrets["gsheets"]["creds"]["private_key"], "client_email": st.secrets["gsheets"]["creds"]["client_email"], "client_id": st.secrets["gsheets"]["creds"]["client_id"], "auth_uri": st.secrets["gsheets"]["creds"]["auth_uri"], "token_uri": st.secrets["gsheets"]["creds"]["token_uri"], "auth_provider_x509_cert_url": st.secrets["gsheets"]["creds"]["auth_provider_x509_cert_url"], "client_x509_cert_url": st.secrets["gsheets"]["creds"]["client_x509_cert_url"]}
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
         client = gspread.authorize(creds)
@@ -152,25 +171,14 @@ def load_data():
             st.error("Não há registros de produtos na planilha.")
             return pd.DataFrame(), client
 
-        expected_map = {
-            'ID': ['ID', 'CODIGO', 'SKU'],
-            'NOME': ['NOME', 'PRODUTO', 'NAME'],
-            'PRECO': ['PRECO', 'PREÇO', 'PRICE', 'VALOR'],
-            'DISPONIVEL': ['DISPONIVEL', 'DISPONÍVEL', 'ATIVO', 'ESTOQUE'],
-            'LINKIMAGEM': ['LINKIMAGEM', 'IMAGEM', 'IMG', 'FOTO', 'LINK'],
-            'DESCRICAOCURTA': ['DESCRICAOCURTA', 'DESCRIÇÃOCURTA', 'DESC CURTA'],
-            'DESCRICAOLONGA': ['DESCRICAOLONGA', 'DESCRIÇÃOLONGA', 'DESC LONGA', 'DESCRIÇÃO']
-        }
-        
+        expected_map = {'ID': ['ID', 'CODIGO', 'SKU'], 'NOME': ['NOME', 'PRODUTO', 'NAME'], 'PRECO': ['PRECO', 'PREÇO', 'PRICE', 'VALOR'], 'DISPONIVEL': ['DISPONIVEL', 'DISPONÍVEL', 'ATIVO', 'ESTOQUE'], 'LINKIMAGEM': ['LINKIMAGEM', 'IMAGEM', 'IMG', 'FOTO', 'LINK'], 'DESCRICAOCURTA': ['DESCRICAOCURTA', 'DESCRIÇÃOCURTA', 'DESC CURTA'], 'DESCRICAOLONGA': ['DESCRICAOLONGA', 'DESCRIÇÃOLONGA', 'DESC LONGA', 'DESCRIÇÃO']}
         rename_cols = {}
-        df_cols_normalized = { _normalize_header(c): c for c in df.columns }
-
+        df_cols_normalized = {_normalize_header(c): c for c in df.columns}
         for std_name, variations in expected_map.items():
             for var in variations:
                 if var in df_cols_normalized:
                     rename_cols[df_cols_normalized[var]] = std_name
                     break
-        
         df.rename(columns=rename_cols, inplace=True)
 
         for required in ['ID', 'NOME', 'PRECO', 'DISPONIVEL']:
@@ -182,11 +190,9 @@ def load_data():
         df = df[df['DISPONIVEL'] == True].copy()
         df['PRECO'] = pd.to_numeric(df['PRECO'], errors='coerce').fillna(0)
         df['ID'] = df['ID'].astype(str)
-
         for optional in ['LINKIMAGEM', 'DESCRICAOCURTA', 'DESCRICAOLONGA']:
             if optional not in df.columns:
                 df[optional] = ""
-
         return df, client
 
     except Exception as e:
@@ -197,9 +203,7 @@ df_produtos, gsheets_client = load_data()
 
 # --- 4. Função para Salvar o Pedido ---
 def salvar_pedido(nome_cliente, contato_cliente, pedido_df, total):
-    if gsheets_client is None:
-        st.error("Não foi possível salvar o pedido. Erro na conexão com o Google Sheets.")
-        return False
+    if gsheets_client is None: return False
     try:
         relatorio = "; ".join([f"{row['Qtd']}x {row['Produto']} (R$ {row['Subtotal']:.2f})" for index, row in pedido_df.iterrows()])
         spreadsheet_pedidos = gsheets_client.open_by_url(st.secrets["gsheets"]["pedidos_url"])
@@ -230,18 +234,13 @@ elif st.session_state.finalizando:
     pedido_final_df = pd.DataFrame(st.session_state.carrinho)
     pedido_final_df['Subtotal'] = pedido_final_df['preco'] * pedido_final_df['quantidade']
     pedido_final_df.rename(columns={'nome': 'Produto', 'quantidade': 'Qtd', 'preco': 'Preço Un.'}, inplace=True)
-    
     with st.form("Formulario_Finalizacao"):
         st.subheader("1. Seus Dados")
         nome_cliente = st.text_input("Seu Nome Completo:", placeholder="Ex: Maria da Silva")
         contato_cliente = st.text_input("Seu WhatsApp ou E-mail:", placeholder="(XX) XXXXX-XXXX ou email@exemplo.com")
-        
         st.subheader("2. Resumo do Pedido")
-        st.dataframe(pedido_final_df[['Produto', 'Qtd', 'Preço Un.', 'Subtotal']].style.format({
-            'Preço Un.': 'R$ {:.2f}', 'Subtotal': 'R$ {:.2f}'
-        }), use_container_width=True, hide_index=True)
+        st.dataframe(pedido_final_df[['Produto', 'Qtd', 'Preço Un.', 'Subtotal']].style.format({'Preço Un.': 'R$ {:.2f}', 'Subtotal': 'R$ {:.2f}'}), use_container_width=True, hide_index=True)
         st.markdown(f"### Valor Final: R$ {total_valor:.2f}")
-
         enviado = st.form_submit_button("✅ ENVIAR PEDIDO", type="primary", use_container_width=True)
         if enviado:
             if nome_cliente and contato_cliente:
@@ -249,7 +248,6 @@ elif st.session_state.finalizando:
                     st.rerun()
             else:
                 st.error("Por favor, preencha seu nome e contato para finalizar.")
-
     if st.button("⬅️ Voltar ao Catálogo"):
         st.session_state.finalizando = False
         st.rerun()
@@ -259,28 +257,21 @@ elif not df_produtos.empty:
     st.image("https://placehold.co/200x50/F06292/ffffff?text=Doce&Bella") 
     st.title("💖 Nossos Produtos")
     st.markdown("---")
-    
     num_colunas = 4
     cols = st.columns(num_colunas)
-    
     for index, row in df_produtos.iterrows():
         col = cols[index % num_colunas]
-        
         with col:
-            # Container com borda para cada produto, para um visual mais limpo
             with st.container(border=True):
                 img = row.get('LINKIMAGEM', '')
-                
                 if img:
-                    st.image(img, width=200) 
+                    st.image(img, use_container_width=True) 
                 else:
-                    st.image("https://placehold.co/400x300/F0F0F0/AAAAAA?text=Sem+imagem", width=200)
-
+                    st.image("https://placehold.co/400x300/F0F0F0/AAAAAA?text=Sem+imagem", use_container_width=True)
                 st.markdown(f"**{row.get('NOME', '')}**")
                 st.markdown(f"R$ {row.get('PRECO', 0.0):.2f}")
                 st.caption(row.get('DESCRICAOCURTA', ''))
-
-                with st.popover("Ver Detalhes/Adicionar", use_container_width=True):
+                with st.popover("Comprar", use_container_width=True):
                     st.subheader(row.get('NOME', ''))
                     st.markdown(f"**Preço:** R$ {row.get('PRECO', 0.0):.2f}")
                     st.markdown(f"**Descrição:** {row.get('DESCRICAOLONGA', '')}")
@@ -292,10 +283,8 @@ elif not df_produtos.empty:
 # --- ÍCONE DO CARRINHO FLUTUANTE (DEVE SER O ÚLTIMO ELEMENTO) ---
 total_itens = sum(item['quantidade'] for item in st.session_state.carrinho)
 total_valor = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho)
-
 if not st.session_state.finalizando and not st.session_state.pedido_enviado:
     st.markdown(f'<div data-badge="{total_itens if total_itens > 0 else ""}"></div>', unsafe_allow_html=True)
-
     with st.popover("🛒", use_container_width=False):
         st.header("Meu Carrinho")
         st.markdown("---")
@@ -311,10 +300,8 @@ if not st.session_state.finalizando and not st.session_state.pedido_enviado:
                     if st.button("🗑️", key=f"remove_{item['id']}", help="Remover item"):
                         remover_do_carrinho(item['id'])
                         st.rerun()
-            
             st.markdown("---")
             st.markdown(f"**Valor Total:** R$ {total_valor:.2f}")
-
             if st.button("✅ FINALIZAR PEDIDO", use_container_width=True, type="primary"):
                 st.session_state.finalizando = True
                 st.rerun()
