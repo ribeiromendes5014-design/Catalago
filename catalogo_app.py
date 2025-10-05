@@ -11,6 +11,9 @@ import time
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos" # CORRIGIDO: Nome da sua aba de produtos (minúsculo)
 SHEET_NAME_PEDIDOS = "PEDIDOS"
+# URL do Fundo (INSERIDO A URL DIRETA CORRETA AQUI)
+# **NOTA: TROQUE ESTA URL PELA SUA URL DIRETA QUE TERMINA EM .jpg ou .png**
+BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/sua-imagem.jpg'
 
 # Inicialização do Carrinho de Compras e Estado
 if 'carrinho' not in st.session_state:
@@ -317,3 +320,4 @@ for i, (prod_id, row) in enumerate(df_catalogo.iterrows()):
                         row['PRECO']
                     )
                     st.rerun()
+
