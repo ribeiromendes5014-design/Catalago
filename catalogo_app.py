@@ -8,7 +8,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import time
 from streamlit_autorefresh import st_autorefresh
 from collections import defaultdict
-import streamlit.components.v1 as components # <-- NOVO IMPORT
+import streamlit.components.v1 as components 
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
@@ -253,7 +253,26 @@ CAROUSEL_CSS = """
     .carousel-item-html { border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin: 5px 10px 5px 0; min-width: 200px; max-width: 200px; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     .product-short-desc { font-size: 0.8rem; color: #666; height: 30px; overflow: hidden; margin-bottom: 0.5rem; }
     .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
-    .add-to-cart-link { background-color: #C2185B; color: white; padding: 5px 10px; border-radius: 5px; text-decoration: none; font-size: 0.9rem; }
+
+    /* NOVO ESTILO PARA O LINK/BOTÃO "DETALHES" */
+    .add-to-cart-link {
+        display: inline-block;
+        background-color: #FF4B4B; /* Cor padrão do botão Streamlit */
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 0.9rem;
+        transition: all 0.2s ease;
+        text-align: center;
+        width: 100%; /* Adicionado para ocupar o espaço */
+    }
+    .add-to-cart-link:hover {
+        background-color: #ff6666;
+        transform: scale(1.05);
+    }
+
     /* ESTILOS DO CARROSSEL */
     .carousel-outer-container {
         overflow-x: scroll; 
@@ -401,7 +420,7 @@ else:
             </body>
             </html>
         """
-        # A altura precisa ser suficiente para o conteúdo, o valor 300 é estimado
+        # A altura precisa ser suficiente para o conteúdo, o valor 350 é estimado
         components.html(CAROUSEL_HTML_CONTENT, height=350)
 
         # 3. Informa sobre a limitação do carrossel injetado
