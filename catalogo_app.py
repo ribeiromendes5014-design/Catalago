@@ -19,7 +19,7 @@ BACKGROUND_IMAGE_URL = 'https://images.unsplash.com/photo-1549480103-51152a12908
 if 'carrinho' not in st.session_state:
     st.session_state.carrinho = {} # {id_produto: {'nome': str, 'preco': float, 'quantidade': int}}
 
-# --- Funções de Conexão GSpread (Mantidas) ---
+# --- Funções de Conexão GSpread (CORRIGIDO) ---
 
 @st.cache_resource(ttl=None) 
 def get_gspread_client():
@@ -34,7 +34,10 @@ def get_gspread_client():
             "client_id": st.secrets["gsheets"]["client_id"],
             "auth_uri": st.secrets["gsheets"]["auth_uri"],
             "token_uri": st.secrets["gsheets"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["googleapis.com"]
+            # CORREÇÃO CRÍTICA AQUI: Lendo corretamente do st.secrets
+            "auth_provider_x509_cert_url": st.secrets["gsheets"]["auth_provider_x509_cert_url"], 
+            "client_x509_cert_url": st.secrets["gsheets"]["client_x509_cert_url"],
+            "universe_domain": st.secrets["gsheets"].get("universe_domain", "googleapis.com")
         }
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         creds = ServiceAccountCredentials.from_json_keyfile_dict(gcp_sa_credentials, scope)
@@ -317,7 +320,7 @@ if not df_destaque.empty:
                             st.markdown("*(Erro ao carregar imagem)*")
                     st.caption(row['DESCRICAOCURTA'])
                     
-                    # RESTAURADO: Popover com o texto original do botão
+                    # Popover com o texto original do botão
                     with st.popover("Ver Detalhes/Adicionar ao Pedido", use_container_width=True):
                         st.markdown(f"### {row['NOME']}")
                         st.markdown(row['DESCRICAOLONGA'])
@@ -372,7 +375,7 @@ else:
                 
                 st.caption(row['DESCRICAOCURTA'])
                 
-                # RESTAURADO: Popover com o texto original do botão
+                # Popover com o texto original do botão
                 with st.popover("Ver Detalhes/Adicionar ao Pedido", use_container_width=True):
                     st.markdown(f"### {row['NOME']}")
                     st.markdown(row['DESCRICAOLONGA'])
