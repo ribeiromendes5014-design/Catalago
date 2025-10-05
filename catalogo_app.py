@@ -3,6 +3,7 @@ import pandas as pd
 import gspread # Biblioteca principal para interagir com o Google Sheets
 import math
 from oauth2client.service_account import ServiceAccountCredentials # Para autenticação
+from datetime import datetime # Para registrar a data do pedido (função salvar)
 
 # --- 1. Configuração da Página e Inicialização do Carrinho ---
 st.set_page_config(
@@ -43,12 +44,11 @@ def limpar_carrinho():
     st.experimental_rerun()
 
 
-# --- 3. Função de Cache para Carregar os Dados (CORREÇÃO DE CONEXÃO) ---
+# --- 3. Função de Cache para Carregar os Dados (CONEXÃO COM GOOGLE SHEETS) ---
 @st.cache_data(ttl=600)
 def load_data():
     try:
         # 1. AUTENTICAÇÃO E PREPARAÇÃO DA CHAVE SECRETA
-        # Recriamos a estrutura do JSON a partir dos segredos (secrets.toml)
         creds_json = {
             "type": st.secrets["gsheets"]["creds"]["type"],
             "project_id": st.secrets["gsheets"]["creds"]["project_id"],
@@ -65,7 +65,7 @@ def load_data():
         # O escopo define as permissões que a Service Account terá
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         
-        # CORREÇÃO DEFINITIVA: from_json_keyfile_dict lida corretamente com o dicionário JSON
+        # CORREÇÃO FINAL: from_json_keyfile_dict é a função universal para dicionários JSON
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
         client = gspread.authorize(creds)
         
@@ -86,38 +86,53 @@ def load_data():
         
     except Exception as e:
         # Mensagem de erro mais clara em caso de falha de autenticação/conexão
-        # Esta mensagem está mostrando o erro real de autenticação do Google
         st.error(f"Erro Crítico de Conexão. ❌ Verifique se o e-mail da Service Account está como 'Editor' na Planilha e se o secrets.toml está correto. Detalhe: {e}")
-        return pd.DataFrame(), None # Retorna DataFrame vazio e cliente None
+        return pd.DataFrame(), None 
         
 # Carrega os dados e o objeto cliente (que será usado para salvar pedidos)
 df_produtos, gsheets_client = load_data()
 
 
-# --- 4. Função para Salvar o Pedido (Próximo Passo) ---
+# --- 4. Função para Salvar o Pedido (IMPLEMENTAÇÃO) ---
 def salvar_pedido(nome_cliente, contato_cliente, pedido_df, total):
-    # Esta função será implementada no próximo passo (admin_app.py)
-    # Por enquanto, apenas simula o sucesso
-    
-    # 1. Montar a string do relatório
-    relatorio = f"PEDIDO DE: {nome_cliente}\nCONTATO: {contato_cliente}\n\nITENS:\n"
-    
-    for index, row in pedido_df.iterrows():
-        relatorio += f"- {row['Qtd']}x {row['Produto']} (R$ {row['Subtotal']:.2f})\n"
-    
-    relatorio += f"\nVALOR TOTAL: R$ {total:.2f}"
-    
-    # 2. Aqui a lógica real de SALVAR NA PLANILHA DE PEDIDOS ou ENVIAR E-MAIL viria.
-    # Ex: gsheets_client.open_by_url(PLANILHA_PEDIDOS_URL).worksheet('Pedidos').append_row([nome_cliente, contato_cliente, total, relatorio])
-    
-    # 3. Define o status como enviado
-    st.session_state.pedido_enviado = True
-    return relatorio
+    if gsheets_client is None:
+        st.error("Não foi possível salvar o pedido. Erro na conexão com o Google Sheets.")
+        return
+
+    try:
+        # 1. Montar a string do relatório detalhado
+        relatorio = ""
+        for index, row in pedido_df.iterrows():
+            relatorio += f"- {row['Qtd']}x {row['Produto']} (R$ {row['Subtotal']:.2f}); "
+        
+        # 2. Abrir a Planilha de Pedidos
+        # ATENÇÃO: É necessário ter a chave 'pedidos_url' no secrets.toml
+        spreadsheet_pedidos = gsheets_client.open_by_url(st.secrets["gsheets"]["pedidos_url"])
+        worksheet_pedidos = spreadsheet_pedidos.worksheet("Pedidos") # Nome da aba: Pedidos
+        
+        # 3. Montar a linha de dados (deve coincidir com o cabeçalho da Planilha de Pedidos)
+        linha_pedido = [
+            datetime.now().strftime("%d/%m/%Y %H:%M:%S"), # Data/Hora
+            nome_cliente,
+            contato_cliente,
+            f"{total:.2f}", # Salva o total como número (sem R$)
+            relatorio.strip()
+        ]
+        
+        # 4. Adicionar a linha (o relatório) à Planilha
+        worksheet_pedidos.append_row(linha_pedido)
+        
+        # 5. Sucesso e limpeza
+        st.session_state.pedido_enviado = True
+        return True
+        
+    except Exception as e:
+        st.error(f"Erro ao salvar o pedido. Verifique o secrets.toml (chave 'pedidos_url') e a permissão na Planilha de Pedidos. Detalhe: {e}")
+        return False
 
 
 # --- 5. Sidebar (O Botão Flutuante de Pedido) ---
 with st.sidebar:
-    # ATUALIZAÇÃO: use_container_width é o parâmetro recomendado
     st.image("https://placehold.co/200x50/F06292/ffffff?text=Doce&Bella", use_container_width=True) # Logo Placeholder
     st.header("🛒 Seu Pedido")
     st.markdown("---")
@@ -212,7 +227,6 @@ elif not df_produtos.empty:
         
         with col:
             # 7.1. Exibição do Card
-            # ATUALIZAÇÃO: use_container_width é o parâmetro recomendado
             st.image(row['LINKIMAGEM'], use_container_width=True)
             st.markdown(f"**{row['NOME']}**")
             st.markdown(f"R$ {row['PRECO']:.2f}")
