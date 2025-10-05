@@ -88,15 +88,19 @@ def salvar_pedido(nome_cliente: str, contato_cliente: str, valor_total: float, i
         st.error(f"Erro ao salvar o pedido: {e}")
         return False
 
-def adicionar_ao_carrinho(produto_id, quantidade, produto_nome, produto_preco):
+# --- NOVO: Função centralizada de adição/atualização com RERUN ---
+def adicionar_e_atualizar(prod_id, quantidade, nome, preco):
+    """Adiciona ao carrinho, mostra o toast de debug e força a atualização."""
     if quantidade > 0:
-        st.session_state.carrinho[produto_id] = {
-            'nome': produto_nome,
-            'preco': produto_preco,
+        st.session_state.carrinho[prod_id] = {
+            'nome': nome,
+            'preco': preco,
             'quantidade': quantidade
         }
-        st.toast(f"✅ {quantidade}x {produto_nome} adicionado(s) ao pedido!", icon="🛍️")
-        time.sleep(0.1) 
+        st.toast(f"✅ DEBUG: {quantidade}x {nome} adicionado!", icon="👍") 
+    st.rerun()
+
+# --- FUNÇÕES AUXILIARES ---
 
 def remover_do_carrinho(produto_id):
     if produto_id in st.session_state.carrinho:
@@ -104,10 +108,8 @@ def remover_do_carrinho(produto_id):
         del st.session_state.carrinho[produto_id]
         st.toast(f"❌ {nome} removido do pedido.", icon="🗑️")
 
-# --- Renderização do Placeholder de Imagem (NOVO) ---
 def render_product_image(link_imagem):
     """Renderiza a imagem do produto ou o placeholder 'Sem Imagem'."""
-    # Placeholder de imagem (um cinza claro com texto centralizado)
     placeholder_html = """
         <div style="background-color: #f0f0f0; border-radius: 4px; padding: 50px 0; text-align: center; color: #a0a0a0; font-size: 1.2rem; font-weight: bold; height: 200px; display: flex; align-items: center; justify-content: center;">
             Sem Imagem
@@ -328,15 +330,15 @@ if not df_destaque.empty:
         if i < 3:
             with cols_destaque[i]:
                 with st.container(border=True):
-                    # --- IMAGEM / PLACEHOLDER CORRIGIDO ---
+                    # --- IMAGEM / PLACEHOLDER ---
                     render_product_image(row['LINKIMAGEM'])
-                    # --- FIM DA CORREÇÃO ---
+                    # --- FIM ---
 
                     st.markdown(f"**{row['NOME']}**", unsafe_allow_html=True)
                     st.markdown(f"<h4 style='color: #880E4F;'>R$ {row['PRECO']:.2f}</h4>", unsafe_allow_html=True)
                     st.caption(row['DESCRICAOCURTA'])
                     
-                    # RESTAURADO: Popover com a lógica de compra
+                    # Popover com a lógica de compra
                     with st.popover("Ver Detalhes/Adicionar ao Pedido", use_container_width=True):
                         st.markdown(f"### {row['NOME']}")
                         st.markdown(row['DESCRICAOLONGA'])
@@ -346,8 +348,8 @@ if not df_destaque.empty:
                         quantidade = st.number_input("Quantidade:", min_value=1, step=1, key=f'qtd_destaque_{prod_id}', value=quantidade_inicial)
                         
                         if st.button("➕ Adicionar ao Pedido", key=f'add_detalhes_destaque_{prod_id}', type="primary", use_container_width=True):
-                            adicionar_ao_carrinho(prod_id, quantidade, row['NOME'], row['PRECO'])
-                            st.rerun() 
+                            # CHAMA A NOVA FUNÇÃO AQUI
+                            adicionar_e_atualizar(prod_id, quantidade, row['NOME'], row['PRECO'])
 
     st.markdown("---")
 
@@ -378,9 +380,9 @@ else:
         with col:
             with st.container(border=True):
                 
-                # --- IMAGEM / PLACEHOLDER CORRIGIDO ---
+                # --- IMAGEM / PLACEHOLDER ---
                 render_product_image(row['LINKIMAGEM'])
-                # --- FIM DA CORREÇÃO ---
+                # --- FIM ---
                 
                 st.markdown(f"**{row['NOME']}**", unsafe_allow_html=True)
                 st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>R$ {row['PRECO']:.2f}</h3>", unsafe_allow_html=True)
@@ -397,5 +399,5 @@ else:
                     quantidade = st.number_input("Quantidade:", min_value=1, step=1, key=f'qtd_geral_{prod_id}', value=quantidade_inicial)
                     
                     if st.button("➕ Adicionar ao Pedido", key=f'add_detalhes_geral_{prod_id}', type="primary", use_container_width=True):
-                        adicionar_ao_carrinho(prod_id, quantidade, row['NOME'], row['PRECO'])
-                        st.rerun()
+                        # CHAMA A NOVA FUNÇÃO AQUI
+                        adicionar_e_atualizar(prod_id, quantidade, row['NOME'], row['PRECO'])
