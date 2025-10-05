@@ -419,3 +419,4 @@ elif not df_produtos.empty:
                     adicionar_ao_carrinho(produto_id, nome_prod, preco_prod, quantidade)
                     st.success(f"{quantidade}x {nome_prod} adicionado(s)!")
                     st.experimental_rerun()  # Atualiza a sidebar para mostrar o carrinho
+
