@@ -180,9 +180,10 @@ def load_data():
 
         df['DISPONIVEL'] = df['DISPONIVEL'].apply(_guess_yes)
         df = df[df['DISPONIVEL'] == True].copy()
-        df['PRECO'] = pd.to_numeric(df['PRECO'], errors='coerce')
+        df['PRECO'] = pd.to_numeric(df['PRECO'], errors='coerce').fillna(0) # Converte para número, erro vira 0
         df['ID'] = df['ID'].astype(str)
-        df.dropna(subset=['PRECO'], inplace=True)
+        
+        # A LINHA PROBLEMÁTICA FOI REMOVIDA DAQUI
 
         for optional in ['LINKIMAGEM', 'DESCRICAOCURTA', 'DESCRICAOLONGA']:
             if optional not in df.columns:
@@ -194,6 +195,7 @@ def load_data():
         st.error(f"Erro Crítico de Conexão. ❌ Verifique se o e-mail da Service Account está como 'Editor' na Planilha e se o secrets.toml está correto. Detalhe: {e}")
         return pd.DataFrame(), None
 
+# Carrega os dados e o objeto cliente (que será usado para salvar pedidos)
 df_produtos, gsheets_client = load_data()
 
 # --- 4. Função para Salvar o Pedido ---
@@ -289,10 +291,9 @@ total_itens = sum(item['quantidade'] for item in st.session_state.carrinho)
 total_valor = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho)
 
 if not st.session_state.finalizando and not st.session_state.pedido_enviado:
-    # Hack para passar o número de itens para o atributo 'data-badge' no CSS
     st.markdown(f'<div data-badge="{total_itens if total_itens > 0 else ""}"></div>', unsafe_allow_html=True)
 
-    with st.popover("🛒", use_container_width=False): # Use_container_width=False para o botão não esticar
+    with st.popover("🛒", use_container_width=False):
         st.header("Meu Carrinho")
         st.markdown("---")
         if not st.session_state.carrinho:
