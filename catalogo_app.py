@@ -66,7 +66,7 @@ def carregar_promocoes():
         st.warning(f"Não foi possível carregar as promoções: {e}")
         return pd.DataFrame(columns=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=5)
 def carregar_catalogo():
     """Carrega o catálogo, aplica as promoções e prepara o DataFrame."""
     try:
@@ -248,6 +248,7 @@ else:
     cols = st.columns(4)
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
         with cols[i % 4]: render_product_card(prod_id, row, key_prefix='prod')
+
 
 
 
