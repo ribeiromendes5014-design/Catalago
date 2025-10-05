@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import json # Importar a biblioteca JSON
+import json
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
@@ -14,7 +14,6 @@ SHEET_NAME_PEDIDOS = "pedidos"
 def get_gspread_client():
     """Cria um cliente GSpread autenticado usando o service account do st.secrets."""
     try:
-        # Mantém a mesma lógica de autenticação que você já tem
         gcp_sa_credentials = {
             "type": st.secrets["gsheets"]["type"], "project_id": st.secrets["gsheets"]["project_id"],
             "private_key_id": st.secrets["gsheets"]["private_key_id"], "private_key": st.secrets["gsheets"]["private_key"],
@@ -43,7 +42,6 @@ def carregar_dados(sheet_name):
              return pd.DataFrame()
         df = pd.DataFrame(data[1:], columns=data[0])
         
-        # Garante que a coluna 'ID' do catálogo seja do tipo correto para busca
         if sheet_name == SHEET_NAME_CATALOGO and 'ID' in df.columns:
             df['ID'] = pd.to_numeric(df['ID'], errors='coerce')
 
@@ -62,7 +60,7 @@ def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponiv
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_CATALOGO)
         
-        all_data = worksheet.get_all_records() # Usar get_all_records para facilitar
+        all_data = worksheet.get_all_records()
         if all_data:
             last_id = max([int(row['ID']) for row in all_data if str(row.get('ID')).isdigit()])
             novo_id = last_id + 1
@@ -102,11 +100,9 @@ with tab_pedidos:
     if df_pedidos.empty:
         st.info("Nenhum pedido foi encontrado na planilha.")
     else:
-        # Inverte a ordem para mostrar os mais recentes primeiro
         df_pedidos = df_pedidos.iloc[::-1]
 
         for index, pedido in df_pedidos.iterrows():
-            # Título do Expander com as informações principais
             titulo_expander = f"Pedido de **{pedido['NOME_CLIENTE']}** - {pedido['DATA_HORA']} - Total: R$ {pedido['VALOR_TOTAL']}"
             
             with st.expander(titulo_expander):
@@ -114,7 +110,6 @@ with tab_pedidos:
                 st.markdown("---")
                 
                 try:
-                    # Tenta "ler" o texto da coluna ITENS_PEDIDO como um JSON
                     detalhes_pedido = json.loads(pedido['ITENS_PEDIDO'])
                     itens = detalhes_pedido.get('itens', [])
 
@@ -125,14 +120,12 @@ with tab_pedidos:
                     st.subheader("Itens do Pedido:")
                     
                     for item in itens:
-                        # Para cada item, busca a imagem no catálogo
-                        link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem" # Imagem padrão
+                        link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
                         if not df_catalogo.empty:
                             produto_no_catalogo = df_catalogo[df_catalogo['ID'] == item['id']]
                             if not produto_no_catalogo.empty:
                                 link_imagem = produto_no_catalogo.iloc[0]['LINKIMAGEM']
 
-                        # Exibe os detalhes em colunas
                         col_img, col_detalhes = st.columns([1, 4])
 
                         with col_img:
@@ -140,10 +133,14 @@ with tab_pedidos:
                                 st.image(link_imagem, width=100)
                         
                         with col_detalhes:
+                            # --- ESTA É A LINHA CORRIGIDA ---
+                            # Tenta pegar 'qtd', se não der, pega 'quantidade'. Se não tiver nenhum, usa 0.
+                            quantidade = item.get('qtd', item.get('quantidade', 0))
+                            
                             st.markdown(f"**Produto:** {item['nome']}")
-                            st.markdown(f"**Quantidade:** {item['qtd']}")
-                            st.markdown(f"**Preço Unitário:** R$ {item['preco']:.2f}")
-                            st.markdown(f"**Subtotal:** R$ {item['subtotal']:.2f}")
+                            st.markdown(f"**Quantidade:** {quantidade}")
+                            st.markdown(f"**Preço Unitário:** R$ {item.get('preco', 0):.2f}")
+                            st.markdown(f"**Subtotal:** R$ {item.get('subtotal', 0):.2f}")
                         
                         st.markdown("---")
 
