@@ -4,23 +4,24 @@ import pandas as pd
 from datetime import datetime
 import json
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from oauth2client.service_account import ServiceAccountCredentials 
+from io import StringIO 
 import time
 
 # --- Configurações de Dados ---
-SHEET_NAME_CATALOGO = "produtos"
+SHEET_NAME_CATALOGO = "produtos" 
 SHEET_NAME_PEDIDOS = "PEDIDOS"
-# **IMPORTANTE: SUBSTITUA ESTA URL PELO SEU LINK DIRETO DA IMAGEM DE FUNDO**
-BACKGROUND_IMAGE_URL = 'https://images.unsplash.com/photo-1549480103-51152a12908f?fm=jpg&w=1000&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTJ8fHBpbmt8ZW58MHx8MHx8fDA%3D'
+# **IMPORTANTE: SUBSTITUA ESTA URL PELO SEU LINK DIRETO DO ImgBB**
+BACKGROUND_IMAGE_URL = 'https://images.unsplash.com/photo-1549480103-51152a12908f?fm=jpg&w=1000&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTJ8fHBpbmt8ZW58MHx8MHx8fDA%3D' 
 
 
 # Inicialização do Carrinho de Compras e Estado
 if 'carrinho' not in st.session_state:
     st.session_state.carrinho = {} # {id_produto: {'nome': str, 'preco': float, 'quantidade': int}}
 
-# --- Funções de Conexão GSpread ---
+# --- Funções de Conexão GSpread (Mantidas) ---
 
-@st.cache_resource(ttl=None)
+@st.cache_resource(ttl=None) 
 def get_gspread_client():
     """Cria um cliente GSpread autenticado usando o service account do st.secrets."""
     try:
@@ -33,7 +34,7 @@ def get_gspread_client():
             "client_id": st.secrets["gsheets"]["client_id"],
             "auth_uri": st.secrets["gsheets"]["auth_uri"],
             "token_uri": st.secrets["gsheets"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["gsheets"]["auth_provider_x509_cert_url"],
+            "auth_provider_x509_cert_url": st.secrets["gsheets"]["auth_provider_x509_cert_url"], 
             "client_x509_cert_url": st.secrets["gsheets"]["client_x509_cert_url"],
             "universe_domain": st.secrets["gsheets"].get("universe_domain", "googleapis.com")
         }
@@ -43,9 +44,9 @@ def get_gspread_client():
         sh = client.open_by_url(st.secrets["gsheets"]["sheet_url"])
         return sh
     except Exception as e:
-        st.error(f"Erro na autenticação do Google Sheets. Verifique o secrets.toml. Detalhe: {e}")
+        st.error("Erro na autenticação do Google Sheets. Verifique o secrets.toml ou se o service account tem acesso à planilha.")
         st.stop()
-
+        
 @st.cache_data(ttl=600)
 def carregar_catalogo():
     """Carrega o catálogo de produtos (aba 'produtos') e prepara o DataFrame."""
@@ -53,20 +54,20 @@ def carregar_catalogo():
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_CATALOGO)
         data = worksheet.get_all_values()
-        if data and len(data) > 1:
-            df = pd.DataFrame(data[1:], columns=data[0])
+        if data:
+            df = pd.DataFrame(data[1:], columns=data[0]) 
         else:
             return pd.DataFrame()
-        df['PRECO'] = pd.to_numeric(df['PRECO'].str.replace(',', '.'), errors='coerce').fillna(0.0)
+        df['PRECO'] = pd.to_numeric(df['PRECO'], errors='coerce').fillna(0.0)
         df['ID'] = pd.to_numeric(df['ID'], errors='coerce').astype('Int64')
-        df_filtrado = df[df['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
+        df_filtrado = df[df['DISPONIVEL'].astype(str).str.lower() == 'sim'].copy()
         return df_filtrado.set_index('ID')
     except Exception as e:
         st.error(f"Erro ao carregar o catálogo: {e}")
         st.error(f"Dica: Verifique se o nome da aba da planilha está correto: '{SHEET_NAME_CATALOGO}'")
         return pd.DataFrame()
 
-# --- Funções de Lógica do Carrinho e Pedidos ---
+# --- Funções salvar_pedido, adicionar/remover do carrinho (Mantidas) ---
 
 def salvar_pedido(nome_cliente: str, contato_cliente: str, valor_total: float, itens_json: str):
     """Salva um novo pedido na planilha de PEDIDOS."""
@@ -74,12 +75,12 @@ def salvar_pedido(nome_cliente: str, contato_cliente: str, valor_total: float, i
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_PEDIDOS)
         novo_registro = [
-            int(datetime.now().timestamp()),
+            int(datetime.now().timestamp()), 
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            nome_cliente,
-            contato_cliente,
-            itens_json,
-            f"{valor_total:.2f}"
+            nome_cliente, 
+            contato_cliente, 
+            itens_json, 
+            f"{valor_total:.2f}" 
         ]
         worksheet.append_row(novo_registro)
         return True
@@ -94,8 +95,8 @@ def adicionar_ao_carrinho(produto_id, quantidade, produto_nome, produto_preco):
             'preco': produto_preco,
             'quantidade': quantidade
         }
-        st.toast(f"✅ {quantidade}x {produto_nome} adicionado(s)!", icon="🛍️")
-        time.sleep(0.1)
+        st.toast(f"✅ {quantidade}x {produto_nome} adicionado(s) ao pedido!", icon="🛍️")
+        time.sleep(0.1) 
 
 def remover_do_carrinho(produto_id):
     if produto_id in st.session_state.carrinho:
@@ -103,56 +104,68 @@ def remover_do_carrinho(produto_id):
         del st.session_state.carrinho[produto_id]
         st.toast(f"❌ {nome} removido do pedido.", icon="🗑️")
 
+# --- Renderização do Placeholder de Imagem (NOVO) ---
 def render_product_image(link_imagem):
-    """Renderiza a imagem do produto ou um placeholder elegante."""
+    """Renderiza a imagem do produto ou o placeholder 'Sem Imagem'."""
+    # Placeholder de imagem (um cinza claro com texto centralizado)
     placeholder_html = """
-        <div style="background-color: #f0f0f0; border-radius: 4px; height: 200px; display: flex; align-items: center; justify-content: center;">
-            <p style="color: #a0a0a0; font-size: 1.1rem; font-weight: bold;">Sem Imagem</p>
+        <div style="background-color: #f0f0f0; border-radius: 4px; padding: 50px 0; text-align: center; color: #a0a0a0; font-size: 1.2rem; font-weight: bold; height: 200px; display: flex; align-items: center; justify-content: center;">
+            Sem Imagem
         </div>
     """
+    
     if link_imagem and str(link_imagem).strip():
         try:
             st.image(link_imagem, use_column_width="always")
-        except Exception:
+        except:
             st.markdown(placeholder_html, unsafe_allow_html=True)
     else:
         st.markdown(placeholder_html, unsafe_allow_html=True)
 
+
 # --- Layout do Aplicativo ---
 
 st.set_page_config(
-    page_title="Catálogo Doce&Bella",
-    layout="wide",
-    initial_sidebar_state="collapsed"
+    page_title="Catálogo Doce&Bella", 
+    layout="wide", 
+    initial_sidebar_state="collapsed" 
 )
 
-# --- CSS Customizado ---
+# -----------------------------------
+# CSS de Fundo e Carrinho (Mantido)
+# -----------------------------------
 st.markdown(f"""
 <style>
-/* 1. BACKGROUND */
+/* 1. BACKGROUND PERSONALIZADO */
 .stApp {{
-    background-image: url({BACKGROUND_IMAGE_URL});
-    background-size: cover;
-    background-attachment: fixed;
-    background-position: center;
+    background-image: url({BACKGROUND_IMAGE_URL}) !important;
+    background-size: cover !important;
+    background-attachment: fixed !important;
+    background-position: center !important;
 }}
-/* 2. CONTAINER PRINCIPAL */
+
+/* Cor de Fundo para o conteúdo principal ficar legível */
 div.block-container {{
     background-color: rgba(255, 255, 255, 0.95);
     border-radius: 10px;
     padding: 2rem;
     margin-top: 1rem;
 }}
-/* 3. BARRA ROSA SUPERIOR */
+
+/* Força a barra rosa a ocupar a largura total */
 .pink-bar-container {{
-    background-color: #E91E63;
-    padding: 10px 0;
-    width: 100vw;
+    background-color: #E91E63; 
+    padding: 20px 0; 
+    width: 100vw; 
     position: relative;
-    left: 50%; right: 50%;
-    margin-left: -50vw; margin-right: -50vw;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw;
+    margin-right: -50vw;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }}
+
+/* Alinha o conteúdo interno da barra rosa */
 .pink-bar-content {{
     width: 100%;
     max-width: 1200px;
@@ -161,145 +174,228 @@ div.block-container {{
     display: flex;
     align-items: center;
 }}
-/* 4. BOTÃO DO CARRINHO */
-div[data-testid="stPopover"] > div:first-child > button {{ display: none; }}
+
+/* 2. ESTILO DO CARRINHO (Mantido) */
+div[data-testid="stPopover"] > div:first-child > button {{
+    display: none;
+}}
+
 .cart-badge-button {{
-    background-color: #C2185B; color: white; border-radius: 12px;
-    padding: 8px 15px; font-size: 16px; font-weight: bold; cursor: pointer;
-    border: none; transition: background-color 0.3s; display: inline-flex;
-    align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    min-width: 150px; justify-content: center;
+    background-color: #C2185B; 
+    color: white;
+    border-radius: 12px; 
+    padding: 8px 15px; 
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    border: none;
+    transition: background-color 0.3s;
+    display: inline-flex;
+    align-items: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    min-width: 150px; 
+    justify-content: center;
 }}
-.cart-badge-button:hover {{ background-color: #E91E63; }}
+
+.cart-badge-button:hover {{
+    background-color: #E91E63; 
+}}
+
 .cart-count {{
-    background-color: white; color: #E91E63; border-radius: 50%;
-    padding: 2px 7px; margin-left: 8px; font-size: 14px; line-height: 1;
+    background-color: white;
+    color: #E91E63;
+    border-radius: 50%;
+    padding: 2px 7px;
+    margin-left: 8px;
+    font-size: 14px;
+    line-height: 1;
 }}
-/* 5. ESTILO BOTÕES DOS PRODUTOS */
+/* Estilo para botão de detalhes */
 .stButton>button {{
-    border-radius: 8px;
-    width: 100%;
+    border-radius: 10px;
+    border: 1px solid #E91E63;
 }}
+
 </style>
 """, unsafe_allow_html=True)
 
-# --- 1. CABEÇALHO ---
+
+# --- 1. CABEÇALHO PRINCIPAL (Título e Logotipo) ---
+
 col_logo, col_titulo = st.columns([0.1, 5])
 with col_logo:
     st.markdown("<h3>💖</h3>", unsafe_allow_html=True)
 with col_titulo:
     st.title("Catálogo de Pedidos Doce&Bella")
 
-# --- 2. LÓGICA DO CARRINHO ---
+# 2. Lógica do Carrinho
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
 
-# --- 3. BARRA ROSA (PESQUISA E CARRINHO) ---
-st.markdown("<div class='pink-bar-container'><div class='pink-bar-content'>", unsafe_allow_html=True)
-col_pesquisa, col_carrinho = st.columns([4, 1])
+# 3. BARRA ROSA (PESQUISA E CARRINHO) 
+st.markdown("<div class='pink-bar-container'>", unsafe_allow_html=True)
+st.markdown("<div class='pink-bar-content'>", unsafe_allow_html=True) 
 
+# Colunas dentro da barra rosa: Pesquisa e Carrinho
+col_pesquisa, col_carrinho = st.columns([5, 1])
+
+# LÓGICA DE PESQUISA
 with col_pesquisa:
-    termo_pesquisa = st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
+    termo_pesquisa = st.text_input("Buscar produtos...", 
+                                   key='termo_pesquisa_barra', 
+                                   label_visibility="collapsed",
+                                   placeholder="Buscar produtos...")
 
+# LÓGICA DO BOTÃO DO CARRINHO
 with col_carrinho:
     custom_cart_button = f"""
         <div class='cart-badge-button' onclick='document.querySelector("[data-testid=\"stPopover\"] > div:first-child > button").click();'>
-            🛒 SEU PEDIDO <span class='cart-count'>{num_itens}</span>
+            🛒 SEU PEDIDO 
+            <span class='cart-count'>{num_itens}</span>
         </div>
     """
     st.markdown(custom_cart_button, unsafe_allow_html=True)
 
-    with st.popover(" ", use_container_width=False):
+    with st.popover(" ", use_container_width=False, help="Clique para ver os itens e finalizar o pedido"):
+        
         st.header("🛒 Detalhes do Seu Pedido")
+
         if carrinho_vazio:
-            st.info("Seu carrinho está vazio.")
+            st.info("Seu carrinho está vazio. Adicione itens do catálogo!")
         else:
             st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
             st.markdown("---")
+            
             for prod_id, item in st.session_state.carrinho.items():
-                c1, c2, c3, c4 = st.columns([3, 1.5, 2, 1])
-                c1.write(f"*{item['nome']}*")
-                c2.markdown(f"**{item['quantidade']}x**")
-                c3.markdown(f"R$ {item['preco'] * item['quantidade']:.2f}")
-                if c4.button("X", key=f'rem_{prod_id}_popover', help=f"Remover {item['nome']}"):
+                col_nome, col_qtd, col_preco, col_remover = st.columns([3, 1.5, 2, 1])
+                col_nome.write(f"*{item['nome']}*")
+                col_qtd.markdown(f"**{item['quantidade']}x**")
+                col_preco.markdown(f"R$ {item['preco'] * item['quantidade']:.2f}")
+
+                if col_remover.button("X", key=f'rem_{prod_id}_popover', help=f"Remover {item['nome']}"):
                     remover_do_carrinho(prod_id)
                     st.rerun()
-
+                    
             st.markdown("---")
+            
+            st.subheader("Finalizar Pedido")
             with st.form("form_finalizar_pedido_popover", clear_on_submit=True):
-                nome = st.text_input("Seu Nome Completo:", key='nome_cliente')
-                contato = st.text_input("Seu Contato (WhatsApp/E-mail):", key='contato_cliente')
-                if st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True):
+                nome = st.text_input("Seu Nome Completo:", key='nome_cliente_popover')
+                contato = st.text_input("Seu Contato (WhatsApp/E-mail):", key='contato_cliente_popover')
+                
+                submitted = st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True)
+                
+                if submitted:
                     if not nome or not contato:
-                        st.error("Por favor, preencha seu nome e contato.")
+                        st.error("Por favor, preencha seu nome e contato para finalizar.")
                     else:
-                        detalhes_pedido = {"total": total_acumulado, "itens": [{"id": int(k), **v} for k, v in st.session_state.carrinho.items()]}
-                        if salvar_pedido(nome, contato, total_acumulado, json.dumps(detalhes_pedido, ensure_ascii=False)):
-                            st.balloons()
-                            st.success("🎉 Pedido enviado com sucesso!")
-                            st.session_state.carrinho = {}
-                            time.sleep(2)
+                        detalhes_pedido = {
+                            "total": total_acumulado,
+                            "itens": [
+                                {"id": int(prod_id), "nome": item['nome'], "preco": item['preco'], "qtd": item['quantidade'], "subtotal": item['preco'] * item['quantidade']} 
+                                for prod_id, item in st.session_state.carrinho.items()
+                            ]
+                        }
+                        if salvar_pedido(nome, contato, total_acumulado, json.dumps(detalhes_pedido)):
+                            st.balloons() 
+                            st.success("🎉 Pedido enviado com sucesso! Entraremos em contato em breve para combinar o pagamento e a entrega.")
+                            st.session_state.carrinho = {} 
                             st.rerun()
                         else:
                             st.error("Falha ao salvar o pedido. Tente novamente.")
-st.markdown("</div></div>", unsafe_allow_html=True)
+
+st.markdown("</div>", unsafe_allow_html=True) 
+st.markdown("</div>", unsafe_allow_html=True)
 
 
-# --- 4. EXIBIÇÃO DOS PRODUTOS ---
-df_catalogo = carregar_catalogo()
-if df_catalogo.empty:
-    st.warning("O catálogo está vazio ou indisponível no momento. Tente novamente mais tarde.")
-    st.stop()
-
-# Lógica de Filtragem pela barra de pesquisa
-df_filtrado = df_catalogo.copy()
-if termo_pesquisa:
-    termo = termo_pesquisa.lower()
-    df_filtrado = df_catalogo[
-        df_catalogo['NOME'].str.lower().str.contains(termo) |
-        df_catalogo['DESCRICAOCURTA'].str.lower().str.contains(termo) |
-        df_catalogo['DESCRICAOLONGA'].str.lower().str.contains(termo)
-    ]
-
-st.markdown("<br>", unsafe_allow_html=True)
-st.subheader("🛍️ Nossos Produtos")
+# --- 3. SEÇÃO DE PRODUTOS EM DESTAQUE ---
 st.markdown("---")
 
-if df_filtrado.empty:
-    st.info(f"Nenhum produto encontrado com o termo '{termo_pesquisa}'.")
-else:
-    cols_per_row = 3
-    cols = st.columns(cols_per_row)
-    for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
-        col = cols[i % cols_per_row]
-        with col:
-            with st.container(border=True):
-                render_product_image(row.get('LINKIMAGEM'))
-                st.markdown(f"**{row['NOME']}**")
-                st.markdown(f"<h4 style='color: #E91E63; margin-top: 0;'>R$ {row['PRECO']:.2f}</h4>", unsafe_allow_html=True)
-                st.caption(row['DESCRICAOCURTA'])
+df_catalogo = carregar_catalogo()
+if df_catalogo.empty:
+    st.warning("O catálogo está vazio.")
+    st.stop()
 
-                # --- BOTÕES DE AÇÃO CORRIGIDOS ---
-                col_det, col_add = st.columns(2)
+# Filtra Destaque (os 3 primeiros)
+df_destaque = df_catalogo.head(3) 
 
-                # Botão para Ver Detalhes (abre o popover)
-                with col_det:
-                    with st.popover("🔍 Detalhes", use_container_width=True):
+if not df_destaque.empty:
+    st.subheader("✨ Produtos em Destaque")
+    cols_destaque = st.columns(3)
+
+    for i, (prod_id, row) in enumerate(df_destaque.iterrows()):
+        if i < 3:
+            with cols_destaque[i]:
+                with st.container(border=True):
+                    # --- IMAGEM / PLACEHOLDER CORRIGIDO ---
+                    render_product_image(row['LINKIMAGEM'])
+                    # --- FIM DA CORREÇÃO ---
+
+                    st.markdown(f"**{row['NOME']}**", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='color: #880E4F;'>R$ {row['PRECO']:.2f}</h4>", unsafe_allow_html=True)
+                    st.caption(row['DESCRICAOCURTA'])
+                    
+                    # RESTAURADO: Popover com a lógica de compra
+                    with st.popover("Ver Detalhes/Adicionar ao Pedido", use_container_width=True):
                         st.markdown(f"### {row['NOME']}")
                         st.markdown(row['DESCRICAOLONGA'])
                         st.markdown("---")
-                        q_inicial = st.session_state.carrinho.get(prod_id, {}).get('quantidade', 1)
-                        q = st.number_input("Quantidade:", min_value=1, step=1, key=f'qtd_{prod_id}', value=q_inicial)
-                        if st.button("Adicionar", key=f'add_pop_{prod_id}', type="primary", use_container_width=True):
-                            adicionar_ao_carrinho(prod_id, q, row['NOME'], row['PRECO'])
-                            st.rerun()
+                        
+                        quantidade_inicial = st.session_state.carrinho.get(prod_id, {}).get('quantidade', 1)
+                        quantidade = st.number_input("Quantidade:", min_value=1, step=1, key=f'qtd_destaque_{prod_id}', value=quantidade_inicial)
+                        
+                        if st.button("➕ Adicionar ao Pedido", key=f'add_detalhes_destaque_{prod_id}', type="primary", use_container_width=True):
+                            adicionar_ao_carrinho(prod_id, quantidade, row['NOME'], row['PRECO'])
+                            st.rerun() 
 
-                # Botão para Adicionar Rápido
-                with col_add:
-                    if st.button("➕ Add Pedido", key=f'add_card_{prod_id}', help="Adiciona 1 unidade ao pedido"):
-                        adicionar_ao_carrinho(prod_id, 1, row['NOME'], row['PRECO'])
+    st.markdown("---")
+
+
+# --- 4. EXIBIÇÃO DO CATÁLOGO GERAL (Filtrado pela Pesquisa) ---
+
+st.subheader("🛍️ Todos os Produtos")
+
+df_geral = df_catalogo.copy()
+
+# Lógica de Filtragem
+if 'termo_pesquisa_barra' in st.session_state and st.session_state.termo_pesquisa_barra:
+    termo = st.session_state.termo_pesquisa_barra.lower()
+    df_geral = df_geral[
+        df_geral['NOME'].astype(str).str.lower().str.contains(termo) |
+        df_geral['DESCRICAOLONGA'].astype(str).str.lower().str.contains(termo)
+    ]
+    
+if df_geral.empty:
+    st.info(f"Nenhum produto encontrado com o termo '{st.session_state.termo_pesquisa_barra}'." if 'termo_pesquisa_barra' in st.session_state else "Nenhum produto.")
+else:
+    cols_per_row = 3
+    cols_geral = st.columns(cols_per_row) 
+
+    for i, (prod_id, row) in enumerate(df_geral.iterrows()):
+        col = cols_geral[i % cols_per_row]
+        
+        with col:
+            with st.container(border=True):
+                
+                # --- IMAGEM / PLACEHOLDER CORRIGIDO ---
+                render_product_image(row['LINKIMAGEM'])
+                # --- FIM DA CORREÇÃO ---
+                
+                st.markdown(f"**{row['NOME']}**", unsafe_allow_html=True)
+                st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>R$ {row['PRECO']:.2f}</h3>", unsafe_allow_html=True)
+                
+                st.caption(row['DESCRICAOCURTA'])
+                
+                # RESTAURADO: Popover com a lógica de compra
+                with st.popover("Ver Detalhes/Adicionar ao Pedido", use_container_width=True):
+                    st.markdown(f"### {row['NOME']}")
+                    st.markdown(row['DESCRICAOLONGA'])
+                    st.markdown("---")
+                    
+                    quantidade_inicial = st.session_state.carrinho.get(prod_id, {}).get('quantidade', 1)
+                    quantidade = st.number_input("Quantidade:", min_value=1, step=1, key=f'qtd_geral_{prod_id}', value=quantidade_inicial)
+                    
+                    if st.button("➕ Adicionar ao Pedido", key=f'add_detalhes_geral_{prod_id}', type="primary", use_container_width=True):
+                        adicionar_ao_carrinho(prod_id, quantidade, row['NOME'], row['PRECO'])
                         st.rerun()
-
-            # Adiciona espaço vertical entre os cards
-            st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
