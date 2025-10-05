@@ -10,6 +10,8 @@ import time
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
 SHEET_NAME_PEDIDOS = "pedidos"
+# NOVO: Nome da sua aba de promoções
+SHEET_NAME_PROMOCOES = "promoções"
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
 
 
@@ -17,7 +19,7 @@ BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
 if 'carrinho' not in st.session_state:
     st.session_state.carrinho = {}  # {id_produto: {'nome': str, 'preco': float, 'quantidade': int}}
 
-# --- Funções de Conexão GSpread (Mantidas e Corrigidas) ---
+# --- Funções de Conexão GSpread ---
 
 @st.cache_resource(ttl=None)
 def get_gspread_client():
@@ -44,9 +46,36 @@ def get_gspread_client():
         st.error(f"Erro na autenticação do Google Sheets. Verifique o secrets.toml. Detalhe: {e}")
         st.stop()
 
+# NOVA FUNÇÃO: Para carregar apenas as promoções de forma isolada.
+@st.cache_data(ttl=300) # Um cache mais curto para promoções mudarem mais rápido
+def carregar_promocoes():
+    """Carrega as promoções da aba 'promoções'."""
+    try:
+        sh = get_gspread_client()
+        worksheet = sh.worksheet(SHEET_NAME_PROMOCOES)
+        data = worksheet.get_all_values()
+        # Se a planilha estiver vazia ou só tiver cabeçalho, retorna um DataFrame vazio
+        if not data or len(data) < 2:
+            return pd.DataFrame(columns=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
+
+        df = pd.DataFrame(data[1:], columns=data[0])
+        # Seleciona apenas as colunas que o código precisa, ignorando as outras
+        df_essencial = df[['ID_PRODUTO', 'PRECO_PROMOCIONAL']].copy()
+        df_essencial['PRECO_PROMOCIONAL'] = pd.to_numeric(df_essencial['PRECO_PROMOCIONAL'].str.replace(',', '.'), errors='coerce')
+        df_essencial['ID_PRODUTO'] = pd.to_numeric(df_essencial['ID_PRODUTO'], errors='coerce')
+        # Remove linhas onde o ID ou o Preço Promocional não sejam válidos
+        return df_essencial.dropna(subset=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
+    except gspread.exceptions.WorksheetNotFound:
+        # Não é um erro se a aba não existir, apenas não haverá promoções.
+        return pd.DataFrame(columns=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
+    except Exception as e:
+        st.warning(f"Não foi possível carregar as promoções: {e}")
+        return pd.DataFrame(columns=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
+
+# FUNÇÃO ALTERADA: Agora carrega produtos E aplica as promoções.
 @st.cache_data(ttl=600)
 def carregar_catalogo():
-    """Carrega o catálogo de produtos e prepara o DataFrame."""
+    """Carrega o catálogo, aplica as promoções e prepara o DataFrame."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_CATALOGO)
@@ -54,11 +83,36 @@ def carregar_catalogo():
         if not data or len(data) < 2:
             return pd.DataFrame()
 
-        df = pd.DataFrame(data[1:], columns=data[0])
-        df['PRECO'] = pd.to_numeric(df['PRECO'].str.replace(',', '.'), errors='coerce').fillna(0.0)
-        df['ID'] = pd.to_numeric(df['ID'], errors='coerce').astype('Int64')
-        df_filtrado = df[df['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
-        return df_filtrado.set_index('ID')
+        df_produtos = pd.DataFrame(data[1:], columns=data[0])
+        df_produtos['PRECO'] = pd.to_numeric(df_produtos['PRECO'].str.replace(',', '.'), errors='coerce').fillna(0.0)
+        df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
+        df_produtos = df_produtos[df_produtos['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
+        df_produtos.set_index('ID', inplace=True)
+        
+        # PASSO 1: Carrega as promoções usando a nova função
+        df_promocoes = carregar_promocoes()
+        
+        # PASSO 2: Junta a tabela de produtos com a de promoções
+        if not df_promocoes.empty:
+            df_final = pd.merge(
+                df_produtos, 
+                df_promocoes, 
+                left_index=True, 
+                right_on='ID_PRODUTO', 
+                how='left'
+            )
+            # PASSO 3: Cria a coluna 'PRECO_FINAL'
+            # Se 'PRECO_PROMOCIONAL' não for nulo, usa ele. Senão, usa o 'PRECO' original.
+            df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO'])
+        else:
+            # Se não houver promoções, o preço final é simplesmente o preço original
+            df_final = df_produtos
+            df_final['PRECO_FINAL'] = df_final['PRECO']
+            # Adiciona coluna vazia para evitar erros na hora de renderizar
+            df_final['PRECO_PROMOCIONAL'] = None 
+
+        return df_final
+
     except gspread.exceptions.WorksheetNotFound:
         st.error(f"Erro: A aba '{SHEET_NAME_CATALOGO}' não foi encontrada na planilha.")
         return pd.DataFrame()
@@ -67,21 +121,14 @@ def carregar_catalogo():
         return pd.DataFrame()
 
 
-# --- Funções do Aplicativo ---
+# --- Funções do Aplicativo (salvar_pedido, etc. - sem mudanças) ---
 
 def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
     """Salva um novo pedido na planilha."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_PEDIDOS)
-        novo_registro = [
-            int(datetime.now().timestamp()),
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            nome_cliente,
-            contato_cliente,
-            itens_json,
-            f"{valor_total:.2f}".replace('.', ',')
-        ]
+        novo_registro = [ int(datetime.now().timestamp()), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), nome_cliente, contato_cliente, itens_json, f"{valor_total:.2f}".replace('.', ',')]
         worksheet.append_row(novo_registro)
         return True
     except Exception as e:
@@ -94,8 +141,7 @@ def adicionar_ao_carrinho(produto_id, produto_nome, produto_preco):
         st.session_state.carrinho[produto_id]['quantidade'] += 1
     else:
         st.session_state.carrinho[produto_id] = {'nome': produto_nome, 'preco': produto_preco, 'quantidade': 1}
-    st.toast(f"✅ {produto_nome} adicionado!", icon="🛍️")
-    time.sleep(0.1)
+    st.toast(f"✅ {produto_nome} adicionado!", icon="🛍️"); time.sleep(0.1)
 
 def remover_do_carrinho(produto_id):
     """Remove um produto do carrinho."""
@@ -106,11 +152,7 @@ def remover_do_carrinho(produto_id):
 
 def render_product_image(link_imagem):
     """Renderiza a imagem do produto com HTML para controle de tamanho via CSS."""
-    placeholder_html = """
-        <div class="product-image-container" style="background-color: #f0f0f0; border-radius: 8px;">
-            <span style="color: #a0a0a0; font-size: 1.1rem; font-weight: bold;">Sem Imagem</span>
-        </div>
-    """
+    placeholder_html = """<div class="product-image-container" style="background-color: #f0f0f0; border-radius: 8px;"><span style="color: #a0a0a0; font-size: 1.1rem; font-weight: bold;">Sem Imagem</span></div>"""
     if link_imagem and str(link_imagem).strip().startswith('http'):
         st.markdown(f'<div class="product-image-container"><img src="{link_imagem}"></div>', unsafe_allow_html=True)
     else:
@@ -120,7 +162,7 @@ def render_product_image(link_imagem):
 # --- Layout do Aplicativo ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS ---
+# --- CSS (Sem alterações) ---
 st.markdown(f"""
 <style>
 .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
@@ -139,38 +181,24 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 """, unsafe_allow_html=True)
 
 
-# --- CABEÇALHO ---
-col_logo, col_titulo = st.columns([0.1, 5])
-with col_logo: st.markdown("<h3>💖</h3>", unsafe_allow_html=True)
-with col_titulo: st.title("Catálogo de Pedidos Doce&Bella")
+# --- CABEÇALHO (Sem alterações) ---
+col_logo, col_titulo = st.columns([0.1, 5]); col_logo.markdown("<h3>💖</h3>", unsafe_allow_html=True); col_titulo.title("Catálogo de Pedidos Doce&Bella")
 
-# --- BARRA ROSA (PESQUISA E CARRINHO) ---
+# --- BARRA ROSA (PESQUISA E CARRINHO) (Sem alterações) ---
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
-carrinho_vazio = not st.session_state.carrinho
-
 st.markdown("<div class='pink-bar-container'><div class='pink-bar-content'>", unsafe_allow_html=True)
 col_pesquisa, col_carrinho = st.columns([5, 1])
-with col_pesquisa:
-    st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
+with col_pesquisa: st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
 with col_carrinho:
-    custom_cart_button = f"""
-        <div class='cart-badge-button' onclick='document.querySelector("[data-testid=\"stPopover\"] > div:first-child > button").click();'>
-            🛒 SEU PEDIDO
-            <span class='cart-count'>{num_itens}</span>
-        </div>
-    """
-    st.markdown(custom_cart_button, unsafe_allow_html=True)
-    with st.popover(" ", use_container_width=False, help="Clique para ver os itens e finalizar o pedido"):
+    st.markdown(f"""<div class='cart-badge-button' onclick='document.querySelector("[data-testid=\"stPopover\"] > div:first-child > button").click();'>🛒 SEU PEDIDO<span class='cart-count'>{num_itens}</span></div>""", unsafe_allow_html=True)
+    with st.popover(" ", use_container_width=False):
         st.header("🛒 Detalhes do Pedido")
-        if carrinho_vazio:
-            st.info("Seu carrinho está vazio.")
+        if not st.session_state.carrinho: st.info("Seu carrinho está vazio.")
         else:
-            st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
-            st.markdown("---")
+            st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True); st.markdown("---")
             for prod_id, item in list(st.session_state.carrinho.items()):
-                c1, c2, c3, c4 = st.columns([3, 1.5, 2, 1])
-                c1.write(f"*{item['nome']}*"); c2.markdown(f"**{item['quantidade']}x**"); c3.markdown(f"R$ {item['preco']*item['quantidade']:.2f}")
+                c1,c2,c3,c4=st.columns([3,1.5,2,1]); c1.write(f"*{item['nome']}*"); c2.markdown(f"**{item['quantidade']}x**"); c3.markdown(f"R$ {item['preco']*item['quantidade']:.2f}")
                 if c4.button("X", key=f'rem_{prod_id}_popover'): remover_do_carrinho(prod_id); st.rerun()
             st.markdown("---")
             with st.form("form_finalizar_pedido", clear_on_submit=True):
@@ -188,17 +216,40 @@ st.markdown("</div></div>", unsafe_allow_html=True)
 st.markdown("---")
 df_catalogo = carregar_catalogo()
 
+# FUNÇÃO ALTERADA: Agora exibe o preço promocional e adiciona o preço correto ao carrinho.
 def render_product_card(prod_id, row, key_prefix):
     with st.container(border=True):
         render_product_image(row.get('LINKIMAGEM'))
         st.markdown(f"**{row['NOME']}**"); st.caption(row.get('DESCRICAOCURTA', ''))
         with st.expander("Ver detalhes"): st.markdown(row.get('DESCRICAOLONGA', 'Sem descrição detalhada.'))
+        
         col_preco, col_botao = st.columns([2, 2])
-        col_preco.markdown(f"<h4 style='color: #880E4F; margin:0; line-height:2.5;'>R$ {row['PRECO']:.2f}</h4>", unsafe_allow_html=True)
-        if col_botao.button("➕ Adicionar", key=f'{key_prefix}_{prod_id}', use_container_width=True):
-            adicionar_ao_carrinho(prod_id, row['NOME'], row['PRECO']); st.rerun()
+        
+        # Pega os preços relevantes da linha de dados do produto
+        preco_final = row['PRECO_FINAL']
+        preco_original = row['PRECO']
+        
+        with col_preco:
+            # Verifica se existe um preço promocional VÁLIDO e MENOR que o original
+            if pd.notna(row.get('PRECO_PROMOCIONAL')) and preco_final < preco_original:
+                # Se sim, mostra o preço antigo riscado e o novo em destaque
+                st.markdown(f"""
+                <div style="line-height: 1.2;">
+                    <span style='text-decoration: line-through; color: #757575; font-size: 0.9rem;'>R$ {preco_original:.2f}</span>
+                    <h4 style='color: #D32F2F; margin:0;'>R$ {preco_final:.2f}</h4>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                # Senão, mostra o preço normal
+                st.markdown(f"<h4 style='color: #880E4F; margin:0; line-height:2.5;'>R$ {preco_final:.2f}</h4>", unsafe_allow_html=True)
 
-# Filtragem e Renderização
+        with col_botao:
+            # ALTERADO: O botão agora adiciona o PREÇO FINAL ao carrinho
+            if st.button("➕ Adicionar", key=f'{key_prefix}_{prod_id}', use_container_width=True):
+                adicionar_ao_carrinho(prod_id, row['NOME'], preco_final)
+                st.rerun()
+
+# Filtragem e Renderização (sem alterações na lógica)
 termo = st.session_state.get('termo_pesquisa_barra', '').lower()
 if termo:
     df_filtrado = df_catalogo[df_catalogo.apply(lambda row: termo in str(row['NOME']).lower() or termo in str(row['DESCRICAOLONGA']).lower(), axis=1)]
@@ -210,8 +261,7 @@ if df_filtrado.empty:
     else: st.warning("O catálogo está vazio ou indisponível no momento.")
 else:
     st.subheader("✨ Nossos Produtos")
-    cols = st.columns(4) # Alterado para 4 colunas
+    cols = st.columns(4)
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
+        # O prod_id aqui é o índice do DataFrame (que definimos como a coluna ID)
         with cols[i % 4]: render_product_card(prod_id, row, key_prefix='prod')
-
-
