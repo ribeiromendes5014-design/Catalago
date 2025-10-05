@@ -2,11 +2,11 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import json # Importa a biblioteca para "ler" o JSON
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
-# --- ALTERAÇÃO APLICADA AQUI ---
-SHEET_NAME_PEDIDOS = "pedidos" # Trocado para minúsculo
+SHEET_NAME_PEDIDOS = "pedidos"
 
 # --- Conexão com Google Sheets ---
 @st.cache_resource(ttl=None)
@@ -43,7 +43,10 @@ def carregar_dados(sheet_name):
         data = worksheet.get_all_values()
         if len(data) < 2:
              return pd.DataFrame()
-        return pd.DataFrame(data[1:], columns=data[0])
+        df = pd.DataFrame(data[1:], columns=data[0])
+        # Converte a coluna de valor para número para ordenação
+        df['VALOR_TOTAL'] = pd.to_numeric(df['VALOR_TOTAL'].str.replace(',', '.'), errors='coerce')
+        return df
     except gspread.exceptions.WorksheetNotFound:
         st.error(f"Erro: A aba '{sheet_name}' não foi encontrada na sua planilha.")
         return pd.DataFrame()
@@ -89,11 +92,48 @@ with tab_pedidos:
     if st.button("Recarregar Pedidos"):
         st.cache_data.clear()
         st.rerun()
+
     df_pedidos = carregar_dados(SHEET_NAME_PEDIDOS)
+    
     if df_pedidos.empty:
         st.info("Nenhum pedido foi encontrado na planilha.")
     else:
-        st.dataframe(df_pedidos, use_container_width=True)
+        # Ordena os pedidos do mais recente para o mais antigo
+        df_pedidos = df_pedidos.sort_values(by="DATA_HORA", ascending=False)
+        
+        # --- NOVA VISUALIZAÇÃO DE PEDIDOS ---
+        for index, row in df_pedidos.iterrows():
+            with st.container(border=True):
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Cliente", row['NOME_CLIENTE'])
+                col2.metric("Data", row['DATA_HORA'].split(" ")[0]) # Pega só a data
+                col3.metric("Valor Total", f"R$ {row['VALOR_TOTAL']:.2f}")
+
+                with st.expander("Ver Detalhes do Pedido"):
+                    try:
+                        # Tenta "ler" o texto dos itens como um objeto de dados
+                        itens_dict = json.loads(row['ITENS_PEDIDO'])
+                        itens_df = pd.DataFrame(itens_dict['itens'])
+
+                        st.write(f"**Contato:** {row['CONTATO_CLIENTE']}")
+                        st.write("**Itens:**")
+                        
+                        # Mostra a tabela de itens formatada
+                        st.dataframe(
+                            itens_df[['quantidade', 'nome', 'preco']],
+                            column_config={
+                                "quantidade": "Qtd.",
+                                "nome": "Produto",
+                                "preco": st.column_config.NumberColumn("Preço Unit.", format="R$ %.2f")
+                            },
+                            hide_index=True,
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error("Não foi possível decodificar os itens deste pedido.")
+                        st.write("Dados brutos:")
+                        st.code(row['ITENS_PEDIDO'])
+
 
 with tab_produtos:
     st.header("🛍️ Gerenciamento de Produtos")
@@ -135,3 +175,4 @@ with tab_produtos:
         st.warning("Nenhum produto encontrado no catálogo.")
     else:
         st.dataframe(df_produtos, use_container_width=True)
+
