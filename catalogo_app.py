@@ -17,7 +17,7 @@ BACKGROUND_IMAGE_URL = 'https://images.unsplash.com/photo-1549480103-51152a12908
 
 # Inicialização do Carrinho de Compras e Estado
 if 'carrinho' not in st.session_state:
-    st.session_state.carrinho = {} 
+    st.session_state.carrinho = {} # {id_produto: {'nome': str, 'preco': float, 'quantidade': int}}
 
 # --- Funções de Conexão GSpread (Mantidas) ---
 
@@ -34,8 +34,7 @@ def get_gspread_client():
             "client_id": st.secrets["gsheets"]["client_id"],
             "auth_uri": st.secrets["gsheets"]["auth_uri"],
             "token_uri": st.secrets["gsheets"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["gsheets"]["auth_provider_x509_cert_url"],
-            "client_x509_cert_url": st.secrets["googleapis.com"]
+            "auth_provider_x509_cert_url": st.secrets["googleapis.com"]
         }
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         creds = ServiceAccountCredentials.from_json_keyfile_dict(gcp_sa_credentials, scope)
@@ -133,15 +132,15 @@ div.block-container {{
     margin-top: 1rem;
 }}
 
-/* Força a barra rosa a ocupar a largura total (CORREÇÃO DE LAYOUT) */
+/* Força a barra rosa a ocupar a largura total */
 .pink-bar-container {{
     background-color: #E91E63; 
-    padding: 20px 0; /* Aumenta a altura */
-    width: 100vw; /* Garante 100% da viewport width */
+    padding: 20px 0; 
+    width: 100vw; 
     position: relative;
     left: 50%;
     right: 50%;
-    margin-left: -50vw; /* Truque para centralizar e expandir a div */
+    margin-left: -50vw;
     margin-right: -50vw;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }}
@@ -149,9 +148,9 @@ div.block-container {{
 /* Alinha o conteúdo interno da barra rosa */
 .pink-bar-content {{
     width: 100%;
-    max-width: 1200px; /* Limita a largura do conteúdo interno */
-    margin: 0 auto; /* Centraliza o conteúdo */
-    padding: 0 2rem; /* Adiciona padding lateral */
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
     display: flex;
     align-items: center;
 }}
@@ -192,12 +191,11 @@ div[data-testid="stPopover"] > div:first-child > button {{
     line-height: 1;
 }}
 /* Estilo para botão de detalhes */
-.btn-detalhes {{
-    background-color: #fce4ec; /* Rosa claro para o botão de detalhes */
-    color: #E91E63;
-    border-radius: 8px;
-    font-weight: bold;
+.stButton>button {{
+    border-radius: 10px;
+    border: 1px solid #E91E63;
 }}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -215,10 +213,9 @@ total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
 
-# 3. BARRA ROSA (PESQUISA E CARRINHO) - ENVELOPADA PARA COBRIR A TELA
-
+# 3. BARRA ROSA (PESQUISA E CARRINHO) 
 st.markdown("<div class='pink-bar-container'>", unsafe_allow_html=True)
-st.markdown("<div class='pink-bar-content'>", unsafe_allow_html=True) # Alinha o conteúdo
+st.markdown("<div class='pink-bar-content'>", unsafe_allow_html=True) 
 
 # Colunas dentro da barra rosa: Pesquisa e Carrinho
 col_pesquisa, col_carrinho = st.columns([5, 1])
@@ -288,8 +285,8 @@ with col_carrinho:
                         else:
                             st.error("Falha ao salvar o pedido. Tente novamente.")
 
-st.markdown("</div>", unsafe_allow_html=True) # Fecha a div pink-bar-content
-st.markdown("</div>", unsafe_allow_html=True) # Fecha a div pink-bar-container
+st.markdown("</div>", unsafe_allow_html=True) 
+st.markdown("</div>", unsafe_allow_html=True)
 
 
 # --- 3. SEÇÃO DE PRODUTOS EM DESTAQUE ---
@@ -320,8 +317,8 @@ if not df_destaque.empty:
                             st.markdown("*(Erro ao carregar imagem)*")
                     st.caption(row['DESCRICAOCURTA'])
                     
-                    # NOVO: Botão de Detalhes
-                    with st.popover("✨ Detalhes", use_container_width=True):
+                    # RESTAURADO: Popover com o texto original do botão
+                    with st.popover("Ver Detalhes/Adicionar ao Pedido", use_container_width=True):
                         st.markdown(f"### {row['NOME']}")
                         st.markdown(row['DESCRICAOLONGA'])
                         st.markdown("---")
@@ -347,7 +344,6 @@ if 'termo_pesquisa_barra' in st.session_state and st.session_state.termo_pesquis
     termo = st.session_state.termo_pesquisa_barra.lower()
     df_geral = df_geral[
         df_geral['NOME'].astype(str).str.lower().str.contains(termo) |
-        df_geral['DESCRICAOCURTA'].astype(str).str.lower().str.contains(termo) |
         df_geral['DESCRICAOLONGA'].astype(str).str.lower().str.contains(termo)
     ]
     
@@ -376,8 +372,8 @@ else:
                 
                 st.caption(row['DESCRICAOCURTA'])
                 
-                # NOVO: Botão de Detalhes
-                with st.popover("✨ Detalhes", use_container_width=True):
+                # RESTAURADO: Popover com o texto original do botão
+                with st.popover("Ver Detalhes/Adicionar ao Pedido", use_container_width=True):
                     st.markdown(f"### {row['NOME']}")
                     st.markdown(row['DESCRICAOLONGA'])
                     st.markdown("---")
