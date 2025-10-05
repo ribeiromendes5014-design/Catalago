@@ -5,9 +5,10 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
-SHEET_NAME_PEDIDOS = "PEDIDOS"
+# --- ALTERAÇÃO APLICADA AQUI ---
+SHEET_NAME_PEDIDOS = "pedidos" # Trocado para minúsculo
 
-# --- Conexão com Google Sheets (mesma função do app do catálogo) ---
+# --- Conexão com Google Sheets ---
 @st.cache_resource(ttl=None)
 def get_gspread_client():
     """Cria um cliente GSpread autenticado usando o service account do st.secrets."""
@@ -33,15 +34,14 @@ def get_gspread_client():
         st.error(f"Erro na autenticação com o Google Sheets. Verifique seu `secrets.toml`. Detalhe: {e}")
         st.stop()
 
-@st.cache_data(ttl=60) # Cache de 1 minuto para dados do admin
+@st.cache_data(ttl=60)
 def carregar_dados(sheet_name):
     """Carrega todos os dados de uma aba específica."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(sheet_name)
-        # Usar get_all_values para garantir a ordem e tratar linhas vazias
         data = worksheet.get_all_values()
-        if len(data) < 2: # Se não tiver cabeçalho ou nenhuma linha de dados
+        if len(data) < 2:
              return pd.DataFrame()
         return pd.DataFrame(data[1:], columns=data[0])
     except gspread.exceptions.WorksheetNotFound:
@@ -51,49 +51,37 @@ def carregar_dados(sheet_name):
         st.error(f"Ocorreu um erro ao carregar os dados: {e}")
         return pd.DataFrame()
 
-# --- NOVA FUNÇÃO PARA ADICIONAR PRODUTO ---
 def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponivel):
     """Adiciona uma nova linha de produto na planilha."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_CATALOGO)
         
-        # Pega todos os dados para calcular o próximo ID
         all_data = worksheet.get_all_values()
-        if len(all_data) > 1: # Se existe algum dado além do cabeçalho
+        if len(all_data) > 1:
             last_id = max([int(row[0]) for row in all_data[1:] if row[0].isdigit()])
             novo_id = last_id + 1
-        else: # Se a planilha está vazia (só com cabeçalho)
+        else:
             novo_id = 1
 
-        # Monta a nova linha na ordem correta das colunas
         nova_linha = [
-            novo_id,
-            nome,
-            str(preco).replace('.', ','), # Salva com vírgula para manter padrão
-            desc_curta,
-            desc_longa,
-            link_imagem,
-            disponivel
+            novo_id, nome, str(preco).replace('.', ','),
+            desc_curta, desc_longa, link_imagem, disponivel
         ]
         
         worksheet.append_row(nova_linha)
-        st.cache_data.clear() # Limpa o cache para forçar a releitura dos dados
+        st.cache_data.clear()
         return True
     except Exception as e:
         st.error(f"Ocorreu um erro ao adicionar o produto: {e}")
         return False
 
 # --- Layout do Aplicativo Admin ---
-st.set_page_config(
-    page_title="Admin Doce&Bella",
-    layout="wide"
-)
+st.set_page_config(page_title="Admin Doce&Bella", layout="wide")
 
 st.title("⭐ Painel de Administração | Doce&Bella")
 st.markdown("Use este painel para gerenciar os pedidos e o catálogo de produtos.")
 
-# --- Abas para Organização ---
 tab_pedidos, tab_produtos = st.tabs(["Relatório de Pedidos", "Gerenciar Produtos"])
 
 with tab_pedidos:
@@ -110,11 +98,8 @@ with tab_pedidos:
 with tab_produtos:
     st.header("🛍️ Gerenciamento de Produtos")
     
-    # --- FORMULÁRIO PARA ADICIONAR NOVO PRODUTO ---
     with st.form("form_novo_produto", clear_on_submit=True):
         st.subheader("Cadastrar Novo Produto")
-        
-        # Colunas para organizar o formulário
         col1, col2 = st.columns(2)
         
         with col1:
@@ -134,7 +119,7 @@ with tab_produtos:
             else:
                 if adicionar_produto(nome_prod, preco_prod, desc_curta_prod, desc_longa_prod, link_imagem_prod, disponivel_prod):
                     st.success("Produto cadastrado com sucesso!")
-                    st.rerun() # Recarrega a página para mostrar o novo produto na lista
+                    st.rerun()
                 else:
                     st.error("Falha ao cadastrar o produto.")
 
