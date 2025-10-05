@@ -10,7 +10,7 @@ import time
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
 SHEET_NAME_PEDIDOS = "PEDIDOS"
-BACKGROUND_IMAGE_URL = 'https://images.unsplash.com/photo-1549480103-51152a12908f?fm=jpg&w=1000&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTJ8fHBpbmt8ZW58MHx8MHx8fDA%3D'
+BACKGROUND_IMAGE_URL = 'https://i.ibb.co/P9Nbnk1/Без-названия-3.jpg'
 
 
 # Inicialização do Carrinho de Compras e Estado
@@ -213,3 +213,4 @@ else:
     cols = st.columns(4) # Alterado para 4 colunas
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
         with cols[i % 4]: render_product_card(prod_id, row, key_prefix='prod')
+
