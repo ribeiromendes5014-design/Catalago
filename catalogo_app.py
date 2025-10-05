@@ -9,7 +9,7 @@ from io import StringIO
 import time
 
 # --- Configurações de Dados ---
-SHEET_NAME_CATALOGO = "CATALOGO"
+SHEET_NAME_CATALOGO = "produtos"
 SHEET_NAME_PEDIDOS = "PEDIDOS"
 
 # Inicialização do Carrinho de Compras e Estado
@@ -256,3 +256,4 @@ with st.sidebar:
                         st.rerun()
                     else:
                         st.error("Falha ao salvar o pedido. Tente novamente.")
+
