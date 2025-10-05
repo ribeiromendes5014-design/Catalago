@@ -157,6 +157,12 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 </style>
 """, unsafe_allow_html=True)
 
+# --- ATUALIZAÇÃO AUTOMÁTICA A CADA 60 SEGUNDOS ---
+from streamlit_autorefresh import st_autorefresh
+
+# Atualiza automaticamente o app a cada 60 segundos (60000 ms)
+count = st_autorefresh(interval=60000, key="auto_refresh_catalogo")
+
 
 # --- CABEÇALHO ---
 col_logo, col_titulo = st.columns([0.1, 5]); col_logo.markdown("<h3>💖</h3>", unsafe_allow_html=True); col_titulo.title("Catálogo de Pedidos Doce&Bella")
@@ -242,3 +248,4 @@ else:
     cols = st.columns(4)
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
         with cols[i % 4]: render_product_card(prod_id, row, key_prefix='prod')
+
