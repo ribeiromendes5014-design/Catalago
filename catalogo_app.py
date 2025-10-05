@@ -267,20 +267,18 @@ else:
                 render_product_card(row['ID'], row, key_prefix='vendido')
         st.markdown("<hr>", unsafe_allow_html=True)
 
-    # --- SEÇÃO: NOSSAS OFERTAS (COM A IMAGEM CORRIGIDA) ---
-    # Removido o ícone que estava quebrado
-    st.markdown(f"<div class='section-title-container'><img src='{URL_OFERTAS}' class='section-title-image'></div>", unsafe_allow_html=True)
+    # --- SEÇÃO: NOSSAS OFERTAS (AGORA SÓ APARECE SE HOUVER PROMOÇÕES) ---
     df_ofertas = df_catalogo[pd.notna(df_catalogo['PRECO_PROMOCIONAL']) & (df_catalogo['PRECO_FINAL'] < df_catalogo['PRECO'])]
     
-    if df_ofertas.empty:
-        st.info("Nenhum produto em promoção registrado no momento.")
-    else:
+    if not df_ofertas.empty: # <--- MUDANÇA AQUI: Só renderiza se houver ofertas
+        st.markdown(f"<div class='section-title-container'><img src='{URL_OFERTAS}' class='section-title-image'></div>", unsafe_allow_html=True)
+        
         cols = st.columns(4)
         for i, (prod_id, row) in enumerate(df_ofertas.iterrows()):
             with cols[i % 4]:
                 render_product_card(prod_id, row, key_prefix='oferta')
-    
-    st.markdown("<hr>", unsafe_allow_html=True)
+        
+        st.markdown("<hr>", unsafe_allow_html=True) # <--- MUDANÇA AQUI: A linha também é condicional
 
     # --- SEÇÃO: CATÁLOGO COMPLETO ---
     st.subheader("🛍️ Catálogo Completo")
@@ -297,4 +295,3 @@ else:
         for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
             with cols[i % 4]:
                 render_product_card(prod_id, row, key_prefix='catalogo')
-
