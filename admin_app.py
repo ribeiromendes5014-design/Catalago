@@ -58,29 +58,24 @@ def carregar_dados(sheet_name):
         st.error(f"Ocorreu um erro ao carregar os dados: {e}")
         return pd.DataFrame()
 
-# --- FUNÇÃO CORRIGIDA ---
 def atualizar_status_pedido(id_pedido, novo_status="Finalizado"):
     """Encontra um pedido pelo ID e atualiza seu status na coluna 'STATUS'."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_PEDIDOS)
         
-        # Encontra a célula que contém o ID do pedido (na primeira coluna)
         cell = worksheet.find(id_pedido, in_column=1)
         if not cell:
             st.error(f"ID do Pedido {id_pedido} não encontrado na planilha.")
             return False
 
-        # Encontra a coluna "STATUS" pelo nome no cabeçalho
         headers = worksheet.row_values(1)
         if 'STATUS' not in headers:
             st.error("A coluna 'STATUS' não foi encontrada na sua planilha de pedidos.")
             return False
         
-        # O índice da coluna é a posição na lista + 1 (gspread é 1-indexado)
         status_col_index = headers.index('STATUS') + 1
         
-        # Atualiza a célula na linha encontrada e na coluna de status correta
         worksheet.update_cell(cell.row, status_col_index, novo_status)
         st.cache_data.clear()
         return True
@@ -110,7 +105,7 @@ def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponiv
         st.error(f"Ocorreu um erro ao adicionar o produto: {e}")
         return False
 
-# --- Layout do Aplicativo Admin (Sem alterações) ---
+# --- Layout do Aplicativo Admin ---
 st.set_page_config(page_title="Admin Doce&Bella", layout="wide")
 
 st.title("⭐ Painel de Administração | Doce&Bella")
@@ -196,12 +191,41 @@ with tab_pedidos:
                     except Exception as e:
                         st.error(f"Erro ao processar itens do pedido: {e}")
 
+        # --- SEÇÃO DE PEDIDOS FINALIZADOS (MODIFICADA) ---
         st.header("✅ Pedidos Finalizados")
         if pedidos_finalizados.empty:
             st.info("Nenhum pedido finalizado encontrado (com os filtros aplicados).")
         else:
-             st.dataframe(pedidos_finalizados[['DATA_HORA', 'NOME_CLIENTE', 'VALOR_TOTAL', 'ITENS_PEDIDO']], use_container_width=True)
+             # Loop para exibir cada pedido finalizado com detalhes, igual aos pendentes
+             for index, pedido in pedidos_finalizados.iloc[::-1].iterrows():
+                titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M')} - Total: R$ {pedido['VALOR_TOTAL']}"
+                with st.expander(titulo):
+                    st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID do Pedido:** `{pedido['ID_PEDIDO']}`")
+                    st.markdown("---")
+                    
+                    try:
+                        detalhes_pedido = json.loads(pedido['ITENS_PEDIDO'])
+                        for item in detalhes_pedido.get('itens', []):
+                            link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
+                            if not df_catalogo.empty:
+                                produto_no_catalogo = df_catalogo[df_catalogo['ID'] == item['id']]
+                                if not produto_no_catalogo.empty:
+                                    link_imagem = produto_no_catalogo.iloc[0]['LINKIMAGEM']
+                            
+                            col_img, col_detalhes = st.columns([1, 4])
+                            with col_img:
+                                if link_imagem: st.image(link_imagem, width=100)
+                            with col_detalhes:
+                                quantidade = item.get('qtd', item.get('quantidade', 0))
+                                st.markdown(f"**Produto:** {item['nome']}")
+                                st.markdown(f"**Quantidade:** {quantidade}")
+                                st.markdown(f"**Preço Unitário:** R$ {item.get('preco', 0):.2f}")
+                                st.markdown(f"**Subtotal:** R$ {item.get('subtotal', 0):.2f}")
+                            st.markdown("---")
+                    except Exception as e:
+                        st.error(f"Erro ao processar itens do pedido: {e}")
 
+# --- ABA DE PRODUTOS (Sem alterações) ---
 with tab_produtos:
     st.header("🛍️ Gerenciamento de Produtos")
     
