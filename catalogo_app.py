@@ -9,17 +9,17 @@ from io import StringIO
 import time
 
 # --- Configurações de Dados ---
-SHEET_NAME_CATALOGO = "produtos" # CORRIGIDO: Nome da sua aba de produtos (minúsculo)
+SHEET_NAME_CATALOGO = "produtos" 
 SHEET_NAME_PEDIDOS = "PEDIDOS"
-# URL do Fundo (INSERIDO A URL DIRETA CORRETA AQUI)
-# **NOTA: TROQUE ESTA URL PELA SUA URL DIRETA QUE TERMINA EM .jpg ou .png**
-BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/sua-imagem.jpg'
+# **IMPORTANTE: SUBSTITUA ESTA URL PELO SEU LINK DIRETO DO ImgBB**
+BACKGROUND_IMAGE_URL = 'https://images.unsplash.com/photo-1549480103-51152a12908f?fm=jpg&w=1000&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTJ8fHBpbmt8ZW58MHx8MHx8fDA%3D' 
+
 
 # Inicialização do Carrinho de Compras e Estado
 if 'carrinho' not in st.session_state:
-    st.session_state.carrinho = {} # {id_produto: {'nome': str, 'preco': float, 'quantidade': int}}
+    st.session_state.carrinho = {} 
 
-# --- Funções de Conexão GSpread (Seguras e Cache) ---
+# --- Funções de Conexão GSpread (Mantidas) ---
 
 @st.cache_resource(ttl=None) 
 def get_gspread_client():
@@ -67,6 +67,8 @@ def carregar_catalogo():
         st.error(f"Dica: Verifique se o nome da aba da planilha está correto: '{SHEET_NAME_CATALOGO}'")
         return pd.DataFrame()
 
+# --- Funções salvar_pedido, adicionar/remover do carrinho (Mantidas) ---
+
 def salvar_pedido(nome_cliente: str, contato_cliente: str, valor_total: float, itens_json: str):
     """Salva um novo pedido na planilha de PEDIDOS."""
     try:
@@ -111,34 +113,48 @@ st.set_page_config(
     initial_sidebar_state="collapsed" 
 )
 
-# Adiciona CSS para o carrinho customizado (simulando um badge)
-st.markdown("""
+# -----------------------------------
+# NOVO: CSS de Fundo e Carrinho
+# -----------------------------------
+st.markdown(f"""
 <style>
-/* Remove a margem superior padrão do Streamlit */
-div.block-container {
-    padding-top: 2rem;
-}
+/* 1. BACKGROUND PERSONALIZADO */
+/* Adicionado !important para forçar a substituição do fundo Streamlit */
+.stApp {{
+    background-image: url({BACKGROUND_IMAGE_URL}) !important;
+    background-size: cover !important;
+    background-attachment: fixed !important;
+    background-position: center !important;
+}}
 
-/* Esconde o botão padrão do popover para que possamos usar um customizado */
-div[data-testid="stPopover"] > div:first-child > button {
+/* Cor de Fundo para o conteúdo principal ficar legível */
+/* Aumentado a transparência para ver mais o fundo */
+div.block-container {{
+    background-color: rgba(255, 255, 255, 0.95); /* Fundo branco semi-transparente */
+    border-radius: 10px;
+    padding: 2rem;
+    margin-top: 1rem;
+}}
+
+/* Fundo para o Container do Catálogo */
+.stContainer, [data-testid="stHorizontalBlock"] {{
+    background-color: rgba(255, 255, 255, 0.95); /* Fundo branco semi-transparente */
+    border-radius: 10px;
+    padding: 10px;
+}}
+
+
+/* 2. ESTILO DO CARRINHO (Mantido) */
+/* Esconde o botão padrão do popover */
+div[data-testid="stPopover"] > div:first-child > button {{
     display: none;
-}
+}}
 
-/* Estiliza o placeholder para o popover, para parecer um botão flutuante */
-.st-emotion-cache-163l75u { /* Este seletor pode mudar dependendo da versão do Streamlit */
-    position: fixed; /* Tenta fixar o botão na tela */
-    top: 20px;
-    right: 20px;
-    z-index: 9999; /* Garante que fique acima de outros elementos */
-}
-
-
-/* Estiliza o botão do carrinho para parecer um badge rosa de e-commerce */
-.cart-badge-button {
-    background-color: #E91E63; /* Cor primária Doce&Bella */
+.cart-badge-button {{
+    background-color: #E91E63; 
     color: white;
-    border-radius: 12px; /* Cantos arredondados */
-    padding: 8px 15px; /* Preenchimento */
+    border-radius: 12px; 
+    padding: 8px 15px; 
     font-size: 16px;
     font-weight: bold;
     cursor: pointer;
@@ -147,16 +163,15 @@ div[data-testid="stPopover"] > div:first-child > button {
     display: inline-flex;
     align-items: center;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    min-width: 150px; /* Garante largura mínima para o texto */
+    min-width: 150px; 
     justify-content: center;
-}
+}}
 
-.cart-badge-button:hover {
-    background-color: #C2185B; /* Cor mais escura no hover */
-}
+.cart-badge-button:hover {{
+    background-color: #C2185B; 
+}}
 
-/* Estiliza o contador de itens */
-.cart-count {
+.cart-count {{
     background-color: white;
     color: #E91E63;
     border-radius: 50%;
@@ -164,7 +179,7 @@ div[data-testid="stPopover"] > div:first-child > button {
     margin-left: 8px;
     font-size: 14px;
     line-height: 1;
-}
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -183,12 +198,8 @@ num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values(
 carrinho_vazio = not st.session_state.carrinho
 
 with col_carrinho:
-    st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True) # Espaçamento vertical
+    st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True) 
     
-    # O st.popover agora terá um título de texto simples, mas usaremos CSS para escondê-lo
-    # e um st.markdown para criar o botão visual que queremos.
-    
-    # Criamos o botão HTML/CSS customizado
     custom_cart_button = f"""
         <div class='cart-badge-button' onclick='document.querySelector("[data-testid=\"stPopover\"] > div:first-child > button").click();'>
             🛒 SEU PEDIDO 
@@ -196,11 +207,8 @@ with col_carrinho:
         </div>
     """
     
-    # Usamos st.markdown para exibir o botão customizado
     st.markdown(custom_cart_button, unsafe_allow_html=True)
 
-    # O popover real é ativado por um "clique simulado" no botão oculto.
-    # O título do popover pode ser vazio ou um espaço em branco para não aparecer.
     with st.popover(" ", use_container_width=False, help="Clique para ver os itens e finalizar o pedido"):
         
         st.header("🛒 Detalhes do Seu Pedido")
@@ -208,11 +216,9 @@ with col_carrinho:
         if carrinho_vazio:
             st.info("Seu carrinho está vazio. Adicione itens do catálogo!")
         else:
-            # Mostra o total na parte superior do popover
             st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
             st.markdown("---")
             
-            # Visualização e remoção de itens
             for prod_id, item in st.session_state.carrinho.items():
                 col_nome, col_qtd, col_preco, col_remover = st.columns([3, 1.5, 2, 1])
                 
@@ -220,14 +226,12 @@ with col_carrinho:
                 col_qtd.markdown(f"**{item['quantidade']}x**")
                 col_preco.markdown(f"R$ {item['preco'] * item['quantidade']:.2f}")
 
-                # Botão de remoção
                 if col_remover.button("X", key=f'rem_{prod_id}_popover', help=f"Remover {item['nome']}"):
                     remover_do_carrinho(prod_id)
                     st.rerun()
                     
             st.markdown("---")
             
-            # 3. Finalização de Pedido
             st.subheader("Finalizar Pedido")
             with st.form("form_finalizar_pedido_popover", clear_on_submit=True):
                 nome = st.text_input("Seu Nome Completo:", key='nome_cliente_popover')
@@ -239,7 +243,6 @@ with col_carrinho:
                     if not nome or not contato:
                         st.error("Por favor, preencha seu nome e contato para finalizar.")
                     else:
-                        # Prepara o relatório em JSON e salva
                         detalhes_pedido = {
                             "total": total_acumulado,
                             "itens": [
@@ -261,63 +264,111 @@ with col_carrinho:
                         else:
                             st.error("Falha ao salvar o pedido. Tente novamente.")
 
+# --- BARRA DE PESQUISA (Filtra o Catálogo Geral) ---
 
-# --- Exibição do Catálogo em Grade ---
 st.markdown("---")
-st.subheader("Nossos Produtos Disponíveis")
+termo_pesquisa = st.text_input("🔍 Buscar produtos por Nome ou Descrição:", key='termo_pesquisa')
+st.markdown("---")
+
+
+# --- 3. SEÇÃO DE PRODUTOS EM DESTAQUE ---
 
 df_catalogo = carregar_catalogo()
 
-cols_per_row = 3
-cols = st.columns(cols_per_row) 
+if df_catalogo.empty:
+    st.warning("O catálogo está vazio.")
+    st.stop()
 
-for i, (prod_id, row) in enumerate(df_catalogo.iterrows()):
-    col = cols[i % cols_per_row]
+# Filtra Destaque (os 3 primeiros)
+df_destaque = df_catalogo.head(3) 
+
+if not df_destaque.empty:
+    st.subheader("✨ Produtos em Destaque")
+    cols_destaque = st.columns(3)
+
+    for i, (prod_id, row) in enumerate(df_destaque.iterrows()):
+        if i < 3:
+            with cols_destaque[i]:
+                with st.container(border=True):
+                    st.markdown(f"**{row['NOME']}**", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='color: #880E4F;'>R$ {row['PRECO']:.2f}</h4>", unsafe_allow_html=True)
+                    if row['LINKIMAGEM']: 
+                        try:
+                            st.image(row['LINKIMAGEM'], use_column_width="always")
+                        except:
+                            st.markdown("*(Erro ao carregar imagem)*")
+                    st.caption(row['DESCRICAOCURTA'])
+
+    st.markdown("---")
+
+
+# --- 4. EXIBIÇÃO DO CATÁLOGO GERAL (Filtrado pela Pesquisa) ---
+
+st.subheader("🛍️ Todos os Produtos")
+
+df_geral = df_catalogo.copy()
+
+# Lógica de Filtragem
+if termo_pesquisa:
+    termo = termo_pesquisa.lower()
+    df_geral = df_geral[
+        df_geral['NOME'].astype(str).str.lower().str.contains(termo) |
+        df_geral['DESCRICAOCURTA'].astype(str).str.lower().str.contains(termo) |
+        df_geral['DESCRICAOLONGA'].astype(str).str.lower().str.contains(termo)
+    ]
     
-    with col:
-        with st.container(border=True):
-            
-            # Título e Preço
-            st.markdown(f"**{row['NOME']}**", unsafe_allow_html=True)
-            st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>R$ {row['PRECO']:.2f}</h3>", unsafe_allow_html=True)
+if df_geral.empty:
+    st.info(f"Nenhum produto encontrado com o termo '{termo_pesquisa}'.")
+else:
+    cols_per_row = 3
+    cols_geral = st.columns(cols_per_row) 
 
-            # Imagem
-            if row['LINKIMAGEM']:
-                try:
-                    st.image(row['LINKIMAGEM'], use_column_width="always")
-                except:
-                    st.markdown("*(Erro ao carregar imagem)*")
-            else:
-                st.markdown("*(Sem Imagem)*")
-            
-            # Descrição Curta
-            st.caption(row['DESCRICAOCURTA'])
-            
-            # --- Zoom do Produto e Adicionar ao Pedido (st.popover) ---
-            with st.popover("✨ Detalhes e Pedido", use_container_width=True):
-                st.markdown(f"### {row['NOME']}")
+    for i, (prod_id, row) in enumerate(df_geral.iterrows()):
+        col = cols_geral[i % cols_per_row]
+        
+        with col:
+            with st.container(border=True):
                 
-                # Descrição Longa
-                st.markdown(row['DESCRICAOLONGA'])
-                st.markdown("---")
+                # Título e Preço
+                st.markdown(f"**{row['NOME']}**", unsafe_allow_html=True)
+                st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>R$ {row['PRECO']:.2f}</h3>", unsafe_allow_html=True)
+
+                # Imagem
+                if row['LINKIMAGEM']:
+                    try:
+                        st.image(row['LINKIMAGEM'], use_column_width="always")
+                    except:
+                        st.markdown("*(Erro ao carregar imagem)*")
+                else:
+                    st.markdown("*(Sem Imagem)*")
                 
-                quantidade_inicial = st.session_state.carrinho.get(prod_id, {}).get('quantidade', 1)
+                # Descrição Curta
+                st.caption(row['DESCRICAOCURTA'])
                 
-                # Formulário para Quantidade
-                quantidade = st.number_input(
-                    "Quantidade:", 
-                    min_value=1, 
-                    step=1, 
-                    key=f'qtd_{prod_id}_popover_item', 
-                    value=quantidade_inicial
-                )
-                
-                if st.button("➕ Adicionar/Atualizar Pedido", key=f'add_{prod_id}', type="primary", use_container_width=True):
-                    adicionar_ao_carrinho(
-                        prod_id, 
-                        quantidade, 
-                        row['NOME'], 
-                        row['PRECO']
+                # --- Zoom do Produto e Adicionar ao Pedido (st.popover) ---
+                with st.popover("✨ Detalhes e Pedido", use_container_width=True):
+                    st.markdown(f"### {row['NOME']}")
+                    
+                    # Descrição Longa
+                    st.markdown(row['DESCRICAOLONGA'])
+                    st.markdown("---")
+                    
+                    quantidade_inicial = st.session_state.carrinho.get(prod_id, {}).get('quantidade', 1)
+                    
+                    # Formulário para Quantidade
+                    quantidade = st.number_input(
+                        "Quantidade:", 
+                        min_value=1, 
+                        step=1, 
+                        key=f'qtd_{prod_id}_popover_item', 
+                        value=quantidade_inicial
                     )
-                    st.rerun()
-
+                    
+                    if st.button("➕ Adicionar/Atualizar Pedido", key=f'add_{prod_id}', type="primary", use_container_width=True):
+                        adicionar_ao_carrinho(
+                            prod_id, 
+                            quantidade, 
+                            row['NOME'], 
+                            row['PRECO']
+                        )
+                        st.rerun()
