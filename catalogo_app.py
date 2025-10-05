@@ -8,7 +8,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import time
 from streamlit_autorefresh import st_autorefresh
 from collections import defaultdict
-import streamlit.components.v1 as components 
+import streamlit.components.v1 as components # Mantido, embora não seja mais usado na seção Catálogo Completo
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
@@ -145,45 +145,12 @@ def remover_do_carrinho(produto_id):
         del st.session_state.carrinho[produto_id]
         st.toast(f"❌ {nome} removido.", icon="🗑️")
 
-def render_product_image_html(link_imagem):
-    placeholder_html = """<div class="product-image-container-html"><span class="placeholder-text">Sem Imagem</span></div>"""
-    if link_imagem and str(link_imagem).strip().startswith('http'):
-        return f'<div class="product-image-container-html"><img src="{link_imagem}"></div>'
-    return placeholder_html
-
-def get_product_card_html(prod_id, row):
-    """Gera o HTML para um card de produto, sem botões Streamlit (para uso no carrossel)."""
-    img_html = render_product_image_html(row.get('LINKIMAGEM'))
-    preco_final = row['PRECO_FINAL']
-    preco_original = row['PRECO']
-    is_promotion = pd.notna(row.get('PRECO_PROMOCIONAL')) and preco_final < preco_original
-
-    promo_badge = f"""<span class="promo-badge">🔥 PROMOÇÃO</span>""" if is_promotion else ""
-    
-    if is_promotion:
-        price_html = f"""<div class="price-container"><span class='price-original'>R$ {preco_original:.2f}</span><h4 class='price-promo'>R$ {preco_final:.2f}</h4></div>"""
-    else:
-        price_html = f"<h4 class='price-normal'>R$ {preco_final:.2f}</h4>"
-
-    card_html = f"""
-    <div class="carousel-item-html">
-        {img_html}
-        {promo_badge}
-        <strong>{row['NOME']}</strong>
-        <p class="product-short-desc">{row.get('DESCRICAOCURTA', '')}</p>
-        <div class="card-footer">
-            {price_html}
-            <a href="#" class="add-to-cart-link">Detalhes</a>
-        </div>
-    </div>
-    """
-    return card_html
-
+# Removidas as funções render_product_image_html e get_product_card_html, pois voltamos ao Streamlit nativo.
 
 def render_product_card_with_streamlit_buttons(prod_id, row, key_prefix):
-    """Renderiza o card com colunas e botões funcionais do Streamlit (para uso em grids estáticos)."""
+    """Renderiza o card com st.container, st.expander e botões funcionais do Streamlit."""
     with st.container(border=True):
-        # Renderiza a imagem do produto usando Markdown (compatível com a área Streamlit)
+        # Renderiza a imagem do produto usando Markdown
         placeholder_html = """<div class="product-image-container"><span class="placeholder-text">Sem Imagem</span></div>"""
         link_imagem = row.get('LINKIMAGEM')
         if link_imagem and str(link_imagem).strip().startswith('http'):
@@ -201,6 +168,7 @@ def render_product_card_with_streamlit_buttons(prod_id, row, key_prefix):
         st.markdown(f"**{row['NOME']}**")
         st.caption(row.get('DESCRICAOCURTA', ''))
         
+        # A parte "Ver detalhes" que usa st.expander
         with st.expander("Ver detalhes"): 
             st.markdown(row.get('DESCRICAOLONGA', 'Sem descrição detalhada.'))
             
@@ -218,8 +186,8 @@ def render_product_card_with_streamlit_buttons(prod_id, row, key_prefix):
 # --- Layout do Aplicativo ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS PRINCIPAL (MANTIDO NO st.markdown) ---
-# Apenas os estilos globais e de componentes Streamlit permanecem aqui.
+# --- CSS PRINCIPAL ---
+# Mantendo o CSS global e adicionando o estilo para a borda do expander (Ver detalhes)
 STREAMLIT_CSS = f"""
 <style>
     .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}); background-size: cover; background-attachment: fixed; }}
@@ -240,52 +208,27 @@ STREAMLIT_CSS = f"""
     .price-normal {{ color: #880E4F; margin:0; line-height:2.5; }}
     .section-title-container {{ text-align: center; margin-top: 2rem; margin-bottom: 1.5rem; }}
     .section-title-image {{ max-width: 300px; }}
+
+    /* ESTILO PARA O st.expander (Ver detalhes) - Deve ter a borda rosa */
+    div[data-testid="stExpander"] > div:first-child {{
+        border: 2px solid #F8BBD0; /* Cor rosa clara */
+        border-radius: 0.5rem;
+        padding: 0.5rem;
+        background-color: #FFF;
+    }}
+    div[data-testid="stExpander"] button {{
+        background-color: transparent !important; /* Remove o fundo padrão */
+        border: none !important; /* Remove a borda padrão */
+    }}
+    
 </style>
 """
 st.markdown(STREAMLIT_CSS, unsafe_allow_html=True)
 
-# --- CSS DO CARROSSEL (MOVIDO PARA INJEÇÃO EM components.html) ---
-CAROUSEL_CSS = """
-<style>
-    /* Estilos para cards de produtos HTML (Carrossel) */
-    .product-image-container-html { height: 150px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.5rem; overflow: hidden; background-color: #fff; border-radius: 8px; }
-    .product-image-container-html img { max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }
-    .carousel-item-html { border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin: 5px 10px 5px 0; min-width: 200px; max-width: 200px; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .product-short-desc { font-size: 0.8rem; color: #666; height: 30px; overflow: hidden; margin-bottom: 0.5rem; }
-    .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+# O CSS do Carrossel não é mais necessário, mas será mantido vazio para evitar erros de referência,
+# embora a seção de Catálogo Completo tenha sido revertida.
+CAROUSEL_CSS = ""
 
-    /* NOVO ESTILO PARA O LINK/BOTÃO "DETALHES" */
-    .add-to-cart-link {
-        display: inline-block;
-        background-color: #FF4B4B; /* Cor padrão do botão Streamlit */
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 0.5rem;
-        text-decoration: none;
-        font-weight: 600;
-        font-size: 0.9rem;
-        transition: all 0.2s ease;
-        text-align: center;
-        width: 100%; /* Adicionado para ocupar o espaço */
-    }
-    .add-to-cart-link:hover {
-        background-color: #ff6666;
-        transform: scale(1.05);
-    }
-
-    /* ESTILOS DO CARROSSEL */
-    .carousel-outer-container {
-        overflow-x: scroll; 
-        padding-bottom: 20px; 
-        margin-top: 15px;
-    }
-    .product-wrapper {
-        display: flex; 
-        flex-direction: row;
-        width: max-content; 
-    }
-</style>
-"""
 
 # --- ATUALIZAÇÃO AUTOMÁTICA ---
 st_autorefresh(interval=60000, key="auto_refresh_catalogo")
@@ -366,7 +309,7 @@ df_catalogo = carregar_catalogo()
 if df_catalogo.empty:
     st.warning("O catálogo de produtos não pôde ser carregado. Verifique a planilha.")
 else:
-    # --- SEÇÃO: OS MAIS QUERIDINHOS (COM BOTÕES FUNCIONAIS) ---
+    # --- SEÇÃO: OS MAIS QUERIDINHOS (COM BOTÕES E EXPANDER FUNCIONAIS) ---
     df_mais_vendidos = carregar_mais_vendidos(df_catalogo, top_n=4)
 
     if not df_mais_vendidos.empty:
@@ -377,7 +320,7 @@ else:
                 render_product_card_with_streamlit_buttons(row['ID'], row, key_prefix='vendido')
         st.markdown("<hr>", unsafe_allow_html=True)
 
-    # --- SEÇÃO: NOSSAS OFERTAS (COM BOTÕES FUNCIONAIS) ---
+    # --- SEÇÃO: NOSSAS OFERTAS (COM BOTÕES E EXPANDER FUNCIONAIS) ---
     df_ofertas = df_catalogo[pd.notna(df_catalogo['PRECO_PROMOCIONAL']) & (df_catalogo['PRECO_FINAL'] < df_catalogo['PRECO'])]
     
     if not df_ofertas.empty: 
@@ -390,7 +333,7 @@ else:
         
         st.markdown("<hr>", unsafe_allow_html=True)
 
-    # --- SEÇÃO: CATÁLOGO COMPLETO (AGORA EM CARROSSEL COM components.html) ---
+    # --- SEÇÃO: CATÁLOGO COMPLETO (REVERTIDO PARA GRID COM EXPANDER FUNCIONAL) ---
     st.subheader("🛍️ Catálogo Completo")
     termo = st.session_state.get('termo_pesquisa_barra', '').lower()
     
@@ -402,26 +345,8 @@ else:
     if df_filtrado.empty:
         st.info(f"Nenhum produto encontrado com o termo '{termo}'.")
     else:
-        # 1. Gera o HTML de todos os cards
-        html_cards_catalogo = [get_product_card_html(prod_id, row) for prod_id, row in df_filtrado.iterrows()]
-
-        # 2. Renderiza o carrossel usando components.html
-        CAROUSEL_HTML_CONTENT = f"""
-            <html>
-            <head>
-                {CAROUSEL_CSS}
-            </head>
-            <body>
-                <div class="carousel-outer-container">
-                    <div class="product-wrapper">
-                        {''.join(html_cards_catalogo)}
-                    </div>
-                </div>
-            </body>
-            </html>
-        """
-        # A altura precisa ser suficiente para o conteúdo, o valor 350 é estimado
-        components.html(CAROUSEL_HTML_CONTENT, height=350)
-
-        # 3. Informa sobre a limitação do carrossel injetado
-        st.caption("✨ Role a barra abaixo (ou deslize a tela) para ver todos os produtos. Clique em 'Detalhes' para mais informações.")
+        # Revertido para o layout de colunas para garantir que o st.expander e os botões funcionem
+        cols = st.columns(4)
+        for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
+            with cols[i % 4]:
+                render_product_card_with_streamlit_buttons(prod_id, row, key_prefix='catalogo')
