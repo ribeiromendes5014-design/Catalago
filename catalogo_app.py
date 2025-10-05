@@ -1,44 +1,59 @@
 import streamlit as st
 import pandas as pd
+import gspread # Biblioteca principal para interagir com o Google Sheets
 import math
-# Precisamos importar a biblioteca gspread-streamlit para a conexão
-from gspread_streamlit import get_worksheet 
+from oauth2client.service_account import ServiceAccountCredentials # Para autenticação
 
-# ... (restante do código: st.set_page_config, etc.) ...
+# --- Configuração da Página ---
+st.set_page_config(
+    page_title="Catálogo de Produtos | Doce&Bella",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # --- Função de Cache para Carregar os Dados ---
-# ATENÇÃO: É preciso instalar a biblioteca gspread-streamlit no ambiente (requirements.txt)
 @st.cache_data(ttl=600)
 def load_data():
     try:
-        # AQUI USAMOS O GET_WORKSHEET DA BIBLIOTECA gspread-streamlit
-        # Ele lê as credenciais do seu secrets.toml automaticamente!
-        worksheet = get_worksheet(
-            spreadsheet_title=None, # Título não é necessário se usar a URL
-            # A URL da planilha vem do seu secrets.toml
-            spreadsheet_url=st.secrets["gsheets"]["sheets_url"],
-            worksheet_name="Sheet1" # O nome da sua primeira aba
-        )
+        # 1. AUTENTICAÇÃO E PREPARAÇÃO DA CHAVE SECRETA
+        # Recriamos a estrutura do JSON a partir dos segredos guardados no secrets.toml
+        creds_json = {
+            "type": st.secrets["gsheets"]["creds"]["type"],
+            "project_id": st.secrets["gsheets"]["creds"]["project_id"],
+            "private_key_id": st.secrets["gsheets"]["creds"]["private_key_id"],
+            "private_key": st.secrets["gsheets"]["creds"]["private_key"],
+            "client_email": st.secrets["gsheets"]["creds"]["client_email"],
+            "client_id": st.secrets["gsheets"]["creds"]["client_id"],
+            "auth_uri": st.secrets["gsheets"]["creds"]["auth_uri"],
+            "token_uri": st.secrets["gsheets"]["creds"]["token_uri"],
+            "auth_provider_x509_cert_url": st.secrets["gsheets"]["creds"]["auth_provider_x509_cert_url"],
+            "client_x509_cert_url": st.secrets["gsheets"]["creds"]["client_x509_cert_url"],
+        }
         
-        # Converte a planilha lida para um DataFrame do Pandas
+        # O escopo define as permissões que a Service Account terá
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        
+        # 2. CONEXÃO COM O GOOGLE SHEETS
+        creds = ServiceAccountCredentials.from_json(creds_json, scope)
+        client = gspread.authorize(creds)
+        
+        # 3. ABRIR A PLANILHA E LER OS DADOS
+        spreadsheet = client.open_by_url(st.secrets["gsheets"]["sheets_url"])
+        worksheet = spreadsheet.worksheet("Sheet1") # O nome da sua primeira aba de produtos
+        
+        # 4. CONVERTER PARA DATAFRAME
         df = pd.DataFrame(worksheet.get_all_records())
                        
-        # Filtra apenas os produtos que estão 'Disponivel' como 'Sim'
+        # (Lógica de limpeza e filtro permanece a mesma)
         df = df[df['DISPONIVEL'].astype(str).str.lower() == 'sim'].copy()
-        
-        # Converte o Preço para um formato numérico para cálculos
         df['PRECO'] = pd.to_numeric(df['PRECO'], errors='coerce')
+        df['ID'] = df['ID'].astype(str) 
         
-        # Garante que as colunas críticas existam, caso a planilha esteja vazia
-        if df.empty or 'ID' not in df.columns:
-             st.warning("A planilha foi carregada, mas está vazia ou faltando colunas!")
-             return pd.DataFrame()
-             
-        df['ID'] = df['ID'].astype(str)
         return df
     except Exception as e:
-        # st.error(f"Erro ao carregar dados da planilha. Detalhe: {e}")
-        return pd.DataFrame() # Retorna um DataFrame vazio em caso de erro
+        # Mensagem de erro mais clara em caso de falha de autenticação/conexão
+        st.error(f"Erro Crítico de Conexão. ❌ Verifique se o e-mail da Service Account está como 'Editor' na Planilha e se o secrets.toml está correto. Detalhe: {e}")
+        return pd.DataFrame()
 
 # Carrega os dados
 df_produtos = load_data()
@@ -68,4 +83,5 @@ else:
 
 
     st.success(f"Catálogo Carregado com Sucesso! Total de {len(df_produtos)} produtos disponíveis.")
+
 
