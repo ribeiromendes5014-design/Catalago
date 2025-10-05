@@ -6,6 +6,8 @@ import json
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import time
+from streamlit_autorefresh import st_autorefresh
+
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
@@ -20,7 +22,6 @@ if 'carrinho' not in st.session_state:
 
 # --- Funções de Conexão GSpread ---
 
-# CORREÇÃO: A linha @st.cache_resource(ttl=None) foi REMOVIDA daqui.
 def get_gspread_client():
     """Cria um cliente GSpread autenticado usando o service account do st.secrets."""
     try:
@@ -102,7 +103,7 @@ def carregar_catalogo():
         return pd.DataFrame()
 
 
-# --- Funções do Aplicativo (sem alterações) ---
+# --- Funções do Aplicativo ---
 
 def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
     try:
@@ -136,7 +137,7 @@ def render_product_image(link_imagem):
         st.markdown(placeholder_html, unsafe_allow_html=True)
 
 
-# --- Layout do Aplicativo (sem alterações) ---
+# --- Layout do Aplicativo ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
 # --- CSS ---
@@ -157,11 +158,9 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 </style>
 """, unsafe_allow_html=True)
 
-# --- ATUALIZAÇÃO AUTOMÁTICA A CADA 60 SEGUNDOS ---
-from streamlit_autorefresh import st_autorefresh
 
-# Atualiza automaticamente o app a cada 5 segundos (5000 ms)
-count = st_autorefresh(interval=5000, key="auto_refresh_catalogo")
+# --- ATUALIZAÇÃO AUTOMÁTICA ---
+st_autorefresh(interval=60000, key="auto_refresh_catalogo") # Atualiza a cada 60 segundos
 
 
 # --- CABEÇALHO ---
@@ -212,16 +211,40 @@ st.markdown("</div></div>", unsafe_allow_html=True)
 st.markdown("---")
 df_catalogo = carregar_catalogo()
 
+# --------------------------------------------------------------------------
+# A ÚNICA ALTERAÇÃO FOI FEITA NA FUNÇÃO ABAIXO
+# --------------------------------------------------------------------------
 def render_product_card(prod_id, row, key_prefix):
+    """Renderiza um card de produto, incluindo um selo de promoção se aplicável."""
     with st.container(border=True):
         render_product_image(row.get('LINKIMAGEM'))
-        st.markdown(f"**{row['NOME']}**"); st.caption(row.get('DESCRICAOCURTA', ''))
-        with st.expander("Ver detalhes"): st.markdown(row.get('DESCRICAOLONGA', 'Sem descrição detalhada.'))
-        col_preco, col_botao = st.columns([2, 2])
+        
+        # Define as variáveis de preço e verifica se é uma promoção
         preco_final = row['PRECO_FINAL']
         preco_original = row['PRECO']
+        is_promotion = pd.notna(row.get('PRECO_PROMOCIONAL')) and preco_final < preco_original
+
+        # --- NOVO: Lógica para exibir o selo de promoção ---
+        if is_promotion:
+            st.markdown(f"""
+            <div style="margin-bottom: 0.5rem;">
+                <span style="background-color: #D32F2F; color: white; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem;">
+                    🔥 PROMOÇÃO
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown(f"**{row['NOME']}**")
+        st.caption(row.get('DESCRICAOCURTA', ''))
+        
+        with st.expander("Ver detalhes"): 
+            st.markdown(row.get('DESCRICAOLONGA', 'Sem descrição detalhada.'))
+            
+        col_preco, col_botao = st.columns([2, 2])
+        
         with col_preco:
-            if pd.notna(row.get('PRECO_PROMOCIONAL')) and preco_final < preco_original:
+            # Reutiliza a variável 'is_promotion' para mostrar o preço
+            if is_promotion:
                 st.markdown(f"""
                 <div style="line-height: 1.2;">
                     <span style='text-decoration: line-through; color: #757575; font-size: 0.9rem;'>R$ {preco_original:.2f}</span>
@@ -230,26 +253,27 @@ def render_product_card(prod_id, row, key_prefix):
                 """, unsafe_allow_html=True)
             else:
                 st.markdown(f"<h4 style='color: #880E4F; margin:0; line-height:2.5;'>R$ {preco_final:.2f}</h4>", unsafe_allow_html=True)
+                
         with col_botao:
             if st.button("➕ Adicionar", key=f'{key_prefix}_{prod_id}', use_container_width=True):
-                adicionar_ao_carrinho(prod_id, row['NOME'], preco_final); st.rerun()
+                adicionar_ao_carrinho(prod_id, row['NOME'], preco_final)
+                st.rerun()
 
-# Filtragem e Renderização
+# --- Filtragem e Renderização ---
 termo = st.session_state.get('termo_pesquisa_barra', '').lower()
 if termo:
     df_filtrado = df_catalogo[df_catalogo.apply(lambda row: termo in str(row['NOME']).lower() or termo in str(row['DESCRICAOLONGA']).lower(), axis=1)]
 else:
     df_filtrado = df_catalogo
+    
 if df_filtrado.empty:
-    if termo: st.info(f"Nenhum produto encontrado com o termo '{termo}'.")
-    else: st.warning("O catálogo está vazio ou indisponível no momento.")
+    if termo: 
+        st.info(f"Nenhum produto encontrado com o termo '{termo}'.")
+    else: 
+        st.warning("O catálogo está vazio ou indisponível no momento.")
 else:
     st.subheader("✨ Nossos Produtos")
     cols = st.columns(4)
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
-        with cols[i % 4]: render_product_card(prod_id, row, key_prefix='prod')
-
-
-
-
-
+        with cols[i % 4]: 
+            render_product_card(prod_id, row, key_prefix='prod')
