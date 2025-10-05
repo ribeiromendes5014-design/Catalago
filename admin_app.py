@@ -1,27 +1,25 @@
+# admin_app.py
 import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import json # Importar a biblioteca JSON
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
-# --- ALTERAÇÃO APLICADA AQUI ---
-SHEET_NAME_PEDIDOS = "pedidos" # Trocado para minúsculo
+SHEET_NAME_PEDIDOS = "pedidos"
 
-# --- Conexão com Google Sheets ---
+# --- Conexão com Google Sheets (Sem alterações) ---
 @st.cache_resource(ttl=None)
 def get_gspread_client():
     """Cria um cliente GSpread autenticado usando o service account do st.secrets."""
     try:
+        # Mantém a mesma lógica de autenticação que você já tem
         gcp_sa_credentials = {
-            "type": st.secrets["gsheets"]["type"],
-            "project_id": st.secrets["gsheets"]["project_id"],
-            "private_key_id": st.secrets["gsheets"]["private_key_id"],
-            "private_key": st.secrets["gsheets"]["private_key"],
-            "client_email": st.secrets["gsheets"]["client_email"],
-            "client_id": st.secrets["gsheets"]["client_id"],
-            "auth_uri": st.secrets["gsheets"]["auth_uri"],
-            "token_uri": st.secrets["gsheets"]["token_uri"],
+            "type": st.secrets["gsheets"]["type"], "project_id": st.secrets["gsheets"]["project_id"],
+            "private_key_id": st.secrets["gsheets"]["private_key_id"], "private_key": st.secrets["gsheets"]["private_key"],
+            "client_email": st.secrets["gsheets"]["client_email"], "client_id": st.secrets["gsheets"]["client_id"],
+            "auth_uri": st.secrets["gsheets"]["auth_uri"], "token_uri": st.secrets["gsheets"]["token_uri"],
             "auth_provider_x509_cert_url": st.secrets["gsheets"]["auth_provider_x509_cert_url"],
             "client_x509_cert_url": st.secrets["gsheets"]["client_x509_cert_url"]
         }
@@ -43,7 +41,13 @@ def carregar_dados(sheet_name):
         data = worksheet.get_all_values()
         if len(data) < 2:
              return pd.DataFrame()
-        return pd.DataFrame(data[1:], columns=data[0])
+        df = pd.DataFrame(data[1:], columns=data[0])
+        
+        # Garante que a coluna 'ID' do catálogo seja do tipo correto para busca
+        if sheet_name == SHEET_NAME_CATALOGO and 'ID' in df.columns:
+            df['ID'] = pd.to_numeric(df['ID'], errors='coerce')
+
+        return df
     except gspread.exceptions.WorksheetNotFound:
         st.error(f"Erro: A aba '{sheet_name}' não foi encontrada na sua planilha.")
         return pd.DataFrame()
@@ -51,15 +55,16 @@ def carregar_dados(sheet_name):
         st.error(f"Ocorreu um erro ao carregar os dados: {e}")
         return pd.DataFrame()
 
+# --- Funções de Produto (Sem alterações) ---
 def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponivel):
     """Adiciona uma nova linha de produto na planilha."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_CATALOGO)
         
-        all_data = worksheet.get_all_values()
-        if len(all_data) > 1:
-            last_id = max([int(row[0]) for row in all_data[1:] if row[0].isdigit()])
+        all_data = worksheet.get_all_records() # Usar get_all_records para facilitar
+        if all_data:
+            last_id = max([int(row['ID']) for row in all_data if str(row.get('ID')).isdigit()])
             novo_id = last_id + 1
         else:
             novo_id = 1
@@ -69,7 +74,7 @@ def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponiv
             desc_curta, desc_longa, link_imagem, disponivel
         ]
         
-        worksheet.append_row(nova_linha)
+        worksheet.append_row(nova_linha, value_input_option='USER_ENTERED')
         st.cache_data.clear()
         return True
     except Exception as e:
@@ -84,17 +89,72 @@ st.markdown("Use este painel para gerenciar os pedidos e o catálogo de produtos
 
 tab_pedidos, tab_produtos = st.tabs(["Relatório de Pedidos", "Gerenciar Produtos"])
 
+# --- ABA DE PEDIDOS (MODIFICADA) ---
 with tab_pedidos:
     st.header("📋 Pedidos Recebidos")
     if st.button("Recarregar Pedidos"):
         st.cache_data.clear()
         st.rerun()
+
     df_pedidos = carregar_dados(SHEET_NAME_PEDIDOS)
+    df_catalogo = carregar_dados(SHEET_NAME_CATALOGO)
+
     if df_pedidos.empty:
         st.info("Nenhum pedido foi encontrado na planilha.")
     else:
-        st.dataframe(df_pedidos, use_container_width=True)
+        # Inverte a ordem para mostrar os mais recentes primeiro
+        df_pedidos = df_pedidos.iloc[::-1]
 
+        for index, pedido in df_pedidos.iterrows():
+            # Título do Expander com as informações principais
+            titulo_expander = f"Pedido de **{pedido['NOME_CLIENTE']}** - {pedido['DATA_HORA']} - Total: R$ {pedido['VALOR_TOTAL']}"
+            
+            with st.expander(titulo_expander):
+                st.markdown(f"**Contato do Cliente:** `{pedido['CONTATO_CLIENTE']}`")
+                st.markdown("---")
+                
+                try:
+                    # Tenta "ler" o texto da coluna ITENS_PEDIDO como um JSON
+                    detalhes_pedido = json.loads(pedido['ITENS_PEDIDO'])
+                    itens = detalhes_pedido.get('itens', [])
+
+                    if not itens:
+                        st.warning("Não foi possível encontrar os itens neste pedido.")
+                        continue
+
+                    st.subheader("Itens do Pedido:")
+                    
+                    for item in itens:
+                        # Para cada item, busca a imagem no catálogo
+                        link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem" # Imagem padrão
+                        if not df_catalogo.empty:
+                            produto_no_catalogo = df_catalogo[df_catalogo['ID'] == item['id']]
+                            if not produto_no_catalogo.empty:
+                                link_imagem = produto_no_catalogo.iloc[0]['LINKIMAGEM']
+
+                        # Exibe os detalhes em colunas
+                        col_img, col_detalhes = st.columns([1, 4])
+
+                        with col_img:
+                            if link_imagem:
+                                st.image(link_imagem, width=100)
+                        
+                        with col_detalhes:
+                            st.markdown(f"**Produto:** {item['nome']}")
+                            st.markdown(f"**Quantidade:** {item['qtd']}")
+                            st.markdown(f"**Preço Unitário:** R$ {item['preco']:.2f}")
+                            st.markdown(f"**Subtotal:** R$ {item['subtotal']:.2f}")
+                        
+                        st.markdown("---")
+
+                except json.JSONDecodeError:
+                    st.error("O formato dos itens do pedido está inválido e não pôde ser lido.")
+                    st.write("Conteúdo original:", pedido['ITENS_PEDIDO'])
+                except Exception as e:
+                    st.error(f"Ocorreu um erro inesperado ao processar os itens: {e}")
+
+
+# --- ABA DE PRODUTOS (Sem alterações) ---
 with tab_produtos:
     st.header("🛍️ Gerenciamento de Produtos")
     
@@ -130,8 +190,8 @@ with tab_produtos:
         st.cache_data.clear()
         st.rerun()
         
-    df_produtos = carregar_dados(SHEET_NAME_CATALOGO)
-    if df_produtos.empty:
+    df_produtos_display = carregar_dados(SHEET_NAME_CATALOGO)
+    if df_produtos_display.empty:
         st.warning("Nenhum produto encontrado no catálogo.")
     else:
-        st.dataframe(df_produtos, use_container_width=True)
+        st.dataframe(df_produtos_display, use_container_width=True)
