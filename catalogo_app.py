@@ -15,7 +15,7 @@ st.set_page_config(
 def load_data():
     try:
         # AQUI O STREAMLIT SE CONECTA USANDO AS CHAVES SECRETAS
-        conn = st.connection("gsheets", type=st.secrets["gsheets"]["type"])
+        conn = st.connection("gsheets", type=st.secrets["gsheets"]["creds"]["type"])
         
         # Pega os dados da primeira aba da planilha (sheet=0)
         df = conn.read(spreadsheet=st.secrets["gsheets"]["sheets_url"], 
@@ -57,5 +57,6 @@ else:
             # Placeholder para a funcionalidade de adicionar/detalhes
             col.button(f"Ver Detalhes/Comprar", key=f"btn_{row['ID']}")
             st.divider()
+
 
     st.success(f"Catálogo Carregado com Sucesso! Total de {len(df_produtos)} produtos disponíveis.")
