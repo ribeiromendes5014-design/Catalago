@@ -17,15 +17,16 @@ local_css("""
         display: none;
     }
     
-    /* Tenta fixar o contêiner do Popover no canto inferior direito */
-    /* ATENÇÃO: Seletor frágil - Pode ser necessário ajuste em versões futuras do Streamlit */
-    /* Este seletor (st-emotion-cache-1c5c10s:last-child) pega o último container */
-    .st-emotion-cache-1c5c10s:last-child {
+    /* Target do Popover para fixar no canto inferior direito */
+    /* Este seletor (st-emotion-cache-1c5c10s:last-child) é usado para fixar o último contêiner */
+    /* Ele pode quebrar dependendo da versão do Streamlit, mas é a abordagem nativa mais próxima. */
+    div.st-emotion-cache-1c5c10s:has(div[data-testid="stPopover"]) {
         position: fixed;
         bottom: 20px;
         right: 20px;
         z-index: 1000;
-        background-color: transparent; 
+        /* Adicionado para garantir que o CSS do botão funcione e que ele não tenha fundo */
+        background-color: transparent !important;
         border-radius: 10px;
     }
     
@@ -359,6 +360,7 @@ total_valor = sum(item['preco'] * item['quantidade'] for item in st.session_stat
 if total_itens > 0 and not st.session_state.finalizando and not st.session_state.pedido_enviado:
     
     # O Popover será o botão flutuante. O texto mostra o resumo.
+    # Removido o st.container() externo para evitar o TypeError
     with st.popover(
         f"🛒 **{total_itens} Item(s)** | **R$ {total_valor:.2f}**", 
         use_container_width=True,
