@@ -20,7 +20,7 @@ if 'carrinho' not in st.session_state:
 
 # --- Funções de Conexão GSpread ---
 
-@st.cache_resource(ttl=None)
+# CORREÇÃO: A linha @st.cache_resource(ttl=None) foi REMOVIDA daqui.
 def get_gspread_client():
     """Cria um cliente GSpread autenticado usando o service account do st.secrets."""
     try:
@@ -45,7 +45,6 @@ def get_gspread_client():
         st.error(f"Erro na autenticação do Google Sheets. Verifique o secrets.toml. Detalhe: {e}")
         st.stop()
 
-# ALTERADO: TTL diminuído para 60 segundos (1 minuto)
 @st.cache_data(ttl=60)
 def carregar_promocoes():
     """Carrega as promoções da aba 'promoções'."""
@@ -67,7 +66,6 @@ def carregar_promocoes():
         st.warning(f"Não foi possível carregar as promoções: {e}")
         return pd.DataFrame(columns=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
 
-# ALTERADO: TTL diminuído para 60 segundos (1 minuto)
 @st.cache_data(ttl=60)
 def carregar_catalogo():
     """Carrega o catálogo, aplica as promoções e prepara o DataFrame."""
@@ -104,10 +102,9 @@ def carregar_catalogo():
         return pd.DataFrame()
 
 
-# --- Funções do Aplicativo ---
+# --- Funções do Aplicativo (sem alterações) ---
 
 def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
-    """Salva um novo pedido na planilha."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_PEDIDOS)
@@ -119,7 +116,6 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
         return False
 
 def adicionar_ao_carrinho(produto_id, produto_nome, produto_preco):
-    """Adiciona 1 unidade de um produto ao carrinho."""
     if produto_id in st.session_state.carrinho:
         st.session_state.carrinho[produto_id]['quantidade'] += 1
     else:
@@ -127,14 +123,12 @@ def adicionar_ao_carrinho(produto_id, produto_nome, produto_preco):
     st.toast(f"✅ {produto_nome} adicionado!", icon="🛍️"); time.sleep(0.1)
 
 def remover_do_carrinho(produto_id):
-    """Remove um produto do carrinho."""
     if produto_id in st.session_state.carrinho:
         nome = st.session_state.carrinho[produto_id]['nome']
         del st.session_state.carrinho[produto_id]
         st.toast(f"❌ {nome} removido.", icon="🗑️")
 
 def render_product_image(link_imagem):
-    """Renderiza a imagem do produto com HTML para controle de tamanho via CSS."""
     placeholder_html = """<div class="product-image-container" style="background-color: #f0f0f0; border-radius: 8px;"><span style="color: #a0a0a0; font-size: 1.1rem; font-weight: bold;">Sem Imagem</span></div>"""
     if link_imagem and str(link_imagem).strip().startswith('http'):
         st.markdown(f'<div class="product-image-container"><img src="{link_imagem}"></div>', unsafe_allow_html=True)
@@ -142,7 +136,7 @@ def render_product_image(link_imagem):
         st.markdown(placeholder_html, unsafe_allow_html=True)
 
 
-# --- Layout do Aplicativo ---
+# --- Layout do Aplicativo (sem alterações) ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
 # --- CSS ---
@@ -185,7 +179,6 @@ with col_carrinho:
         </div>
     """
     st.markdown(custom_cart_button, unsafe_allow_html=True)
-
     with st.popover(" ", use_container_width=False, help="Clique para ver os itens e finalizar o pedido"):
         st.header("🛒 Detalhes do Pedido")
         if carrinho_vazio:
@@ -194,30 +187,19 @@ with col_carrinho:
             st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
             st.markdown("---")
             for prod_id, item in list(st.session_state.carrinho.items()):
-                c1, c2, c3, c4 = st.columns([3, 1.5, 2, 1])
-                c1.write(f"*{item['nome']}*")
-                c2.markdown(f"**{item['quantidade']}x**")
-                c3.markdown(f"R$ {item['preco']*item['quantidade']:.2f}")
-                if c4.button("X", key=f'rem_{prod_id}_popover'):
-                    remover_do_carrinho(prod_id)
-                    st.rerun()
+                c1,c2,c3,c4=st.columns([3,1.5,2,1]);c1.write(f"*{item['nome']}*");c2.markdown(f"**{item['quantidade']}x**");c3.markdown(f"R$ {item['preco']*item['quantidade']:.2f}")
+                if c4.button("X", key=f'rem_{prod_id}_popover'): remover_do_carrinho(prod_id); st.rerun()
             st.markdown("---")
             with st.form("form_finalizar_pedido", clear_on_submit=True):
                 st.subheader("Finalizar Pedido")
-                nome = st.text_input("Seu Nome Completo:")
-                contato = st.text_input("Seu Contato (WhatsApp/E-mail):")
+                nome=st.text_input("Seu Nome Completo:");contato=st.text_input("Seu Contato (WhatsApp/E-mail):")
                 if st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True):
                     if nome and contato:
-                        detalhes = {"total": total_acumulado, "itens": [{"id": int(k), "nome": v['nome'], "preco": v['preco'], "quantidade": v['quantidade']} for k, v in st.session_state.carrinho.items()]}
-                        if salvar_pedido(nome, contato, total_acumulado, json.dumps(detalhes, ensure_ascii=False)):
-                            st.balloons()
-                            st.success("🎉 Pedido enviado com sucesso!")
-                            st.session_state.carrinho = {}
-                            st.rerun()
-                        else:
-                            st.error("Falha ao salvar o pedido.")
-                    else:
-                        st.warning("Preencha seu nome e contato.")
+                        detalhes={"total":total_acumulado,"itens":[{"id":int(k),"nome":v['nome'],"preco":v['preco'],"quantidade":v['quantidade']} for k,v in st.session_state.carrinho.items()]}
+                        if salvar_pedido(nome,contato,total_acumulado,json.dumps(detalhes,ensure_ascii=False)):
+                            st.balloons();st.success("🎉 Pedido enviado com sucesso!");st.session_state.carrinho={};st.rerun()
+                        else:st.error("Falha ao salvar o pedido.")
+                    else:st.warning("Preencha seu nome e contato.")
 st.markdown("</div></div>", unsafe_allow_html=True)
 
 # --- SEÇÃO DE PRODUTOS ---
@@ -229,11 +211,9 @@ def render_product_card(prod_id, row, key_prefix):
         render_product_image(row.get('LINKIMAGEM'))
         st.markdown(f"**{row['NOME']}**"); st.caption(row.get('DESCRICAOCURTA', ''))
         with st.expander("Ver detalhes"): st.markdown(row.get('DESCRICAOLONGA', 'Sem descrição detalhada.'))
-        
         col_preco, col_botao = st.columns([2, 2])
         preco_final = row['PRECO_FINAL']
         preco_original = row['PRECO']
-        
         with col_preco:
             if pd.notna(row.get('PRECO_PROMOCIONAL')) and preco_final < preco_original:
                 st.markdown(f"""
@@ -244,11 +224,9 @@ def render_product_card(prod_id, row, key_prefix):
                 """, unsafe_allow_html=True)
             else:
                 st.markdown(f"<h4 style='color: #880E4F; margin:0; line-height:2.5;'>R$ {preco_final:.2f}</h4>", unsafe_allow_html=True)
-
         with col_botao:
             if st.button("➕ Adicionar", key=f'{key_prefix}_{prod_id}', use_container_width=True):
-                adicionar_ao_carrinho(prod_id, row['NOME'], preco_final)
-                st.rerun()
+                adicionar_ao_carrinho(prod_id, row['NOME'], preco_final); st.rerun()
 
 # Filtragem e Renderização
 termo = st.session_state.get('termo_pesquisa_barra', '').lower()
@@ -256,7 +234,6 @@ if termo:
     df_filtrado = df_catalogo[df_catalogo.apply(lambda row: termo in str(row['NOME']).lower() or termo in str(row['DESCRICAOLONGA']).lower(), axis=1)]
 else:
     df_filtrado = df_catalogo
-
 if df_filtrado.empty:
     if termo: st.info(f"Nenhum produto encontrado com o termo '{termo}'.")
     else: st.warning("O catálogo está vazio ou indisponível no momento.")
@@ -265,4 +242,3 @@ else:
     cols = st.columns(4)
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
         with cols[i % 4]: render_product_card(prod_id, row, key_prefix='prod')
-
