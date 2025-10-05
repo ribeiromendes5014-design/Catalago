@@ -9,16 +9,16 @@ import time
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
-SHEET_NAME_PEDIDOS = "PEDIDOS"
-BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
+# --- ALTERAÇÃO APLICADA AQUI ---
+SHEET_NAME_PEDIDOS = "pedidos" # Trocado para minúsculo
+BACKGROUND_IMAGE_URL = 'https://i.ibb.co/P9Nbnk1/Без-названия-3.jpg'
 
 
 # Inicialização do Carrinho de Compras e Estado
 if 'carrinho' not in st.session_state:
-    st.session_state.carrinho = {}  # {id_produto: {'nome': str, 'preco': float, 'quantidade': int}}
+    st.session_state.carrinho = {}
 
-# --- Funções de Conexão GSpread (Mantidas e Corrigidas) ---
-
+# --- Funções de Conexão GSpread ---
 @st.cache_resource(ttl=None)
 def get_gspread_client():
     """Cria um cliente GSpread autenticado usando o service account do st.secrets."""
@@ -84,6 +84,9 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
         ]
         worksheet.append_row(novo_registro)
         return True
+    except gspread.exceptions.WorksheetNotFound:
+        st.error(f"Erro ao salvar: A aba '{SHEET_NAME_PEDIDOS}' não foi encontrada. Verifique o nome da aba na planilha.")
+        return False
     except Exception as e:
         st.error(f"Erro ao salvar o pedido: {e}")
         return False
@@ -210,8 +213,6 @@ if df_filtrado.empty:
     else: st.warning("O catálogo está vazio ou indisponível no momento.")
 else:
     st.subheader("✨ Nossos Produtos")
-    cols = st.columns(4) # Alterado para 4 colunas
+    cols = st.columns(4)
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
         with cols[i % 4]: render_product_card(prod_id, row, key_prefix='prod')
-
-
