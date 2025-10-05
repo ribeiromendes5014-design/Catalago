@@ -19,7 +19,7 @@ BACKGROUND_IMAGE_URL = 'https://images.unsplash.com/photo-1549480103-51152a12908
 if 'carrinho' not in st.session_state:
     st.session_state.carrinho = {} # {id_produto: {'nome': str, 'preco': float, 'quantidade': int}}
 
-# --- Funções de Conexão GSpread (CORRIGIDO) ---
+# --- Funções de Conexão GSpread (Mantidas) ---
 
 @st.cache_resource(ttl=None) 
 def get_gspread_client():
@@ -34,7 +34,6 @@ def get_gspread_client():
             "client_id": st.secrets["gsheets"]["client_id"],
             "auth_uri": st.secrets["gsheets"]["auth_uri"],
             "token_uri": st.secrets["gsheets"]["token_uri"],
-            # CORREÇÃO CRÍTICA AQUI: Lendo corretamente do st.secrets
             "auth_provider_x509_cert_url": st.secrets["gsheets"]["auth_provider_x509_cert_url"], 
             "client_x509_cert_url": st.secrets["gsheets"]["client_x509_cert_url"],
             "universe_domain": st.secrets["gsheets"].get("universe_domain", "googleapis.com")
@@ -105,6 +104,24 @@ def remover_do_carrinho(produto_id):
         del st.session_state.carrinho[produto_id]
         st.toast(f"❌ {nome} removido do pedido.", icon="🗑️")
 
+# --- Renderização do Placeholder de Imagem (NOVO) ---
+def render_product_image(link_imagem):
+    """Renderiza a imagem do produto ou o placeholder 'Sem Imagem'."""
+    # Placeholder de imagem (um cinza claro com texto centralizado)
+    placeholder_html = """
+        <div style="background-color: #f0f0f0; border-radius: 4px; padding: 50px 0; text-align: center; color: #a0a0a0; font-size: 1.2rem; font-weight: bold; height: 200px; display: flex; align-items: center; justify-content: center;">
+            Sem Imagem
+        </div>
+    """
+    
+    if link_imagem and str(link_imagem).strip():
+        try:
+            st.image(link_imagem, use_column_width="always")
+        except:
+            st.markdown(placeholder_html, unsafe_allow_html=True)
+    else:
+        st.markdown(placeholder_html, unsafe_allow_html=True)
+
 
 # --- Layout do Aplicativo ---
 
@@ -115,7 +132,7 @@ st.set_page_config(
 )
 
 # -----------------------------------
-# NOVO: CSS de Fundo e Carrinho
+# CSS de Fundo e Carrinho (Mantido)
 # -----------------------------------
 st.markdown(f"""
 <style>
@@ -311,13 +328,12 @@ if not df_destaque.empty:
         if i < 3:
             with cols_destaque[i]:
                 with st.container(border=True):
+                    # --- IMAGEM / PLACEHOLDER CORRIGIDO ---
+                    render_product_image(row['LINKIMAGEM'])
+                    # --- FIM DA CORREÇÃO ---
+
                     st.markdown(f"**{row['NOME']}**", unsafe_allow_html=True)
                     st.markdown(f"<h4 style='color: #880E4F;'>R$ {row['PRECO']:.2f}</h4>", unsafe_allow_html=True)
-                    if row['LINKIMAGEM']: 
-                        try:
-                            st.image(row['LINKIMAGEM'], use_column_width="always")
-                        except:
-                            st.markdown("*(Erro ao carregar imagem)*")
                     st.caption(row['DESCRICAOCURTA'])
                     
                     # Popover com o texto original do botão
@@ -342,7 +358,7 @@ st.subheader("🛍️ Todos os Produtos")
 
 df_geral = df_catalogo.copy()
 
-# Lógica de Filtragem (agora baseada no termo_pesquisa global)
+# Lógica de Filtragem
 if 'termo_pesquisa_barra' in st.session_state and st.session_state.termo_pesquisa_barra:
     termo = st.session_state.termo_pesquisa_barra.lower()
     df_geral = df_geral[
@@ -362,16 +378,12 @@ else:
         with col:
             with st.container(border=True):
                 
+                # --- IMAGEM / PLACEHOLDER CORRIGIDO ---
+                render_product_image(row['LINKIMAGEM'])
+                # --- FIM DA CORREÇÃO ---
+
                 st.markdown(f"**{row['NOME']}**", unsafe_allow_html=True)
                 st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>R$ {row['PRECO']:.2f}</h3>", unsafe_allow_html=True)
-
-                if row['LINKIMAGEM']:
-                    try:
-                        st.image(row['LINKIMAGEM'], use_column_width="always")
-                    except:
-                        st.markdown("*(Erro ao carregar imagem)*")
-                else:
-                    st.markdown("*(Sem Imagem)*")
                 
                 st.caption(row['DESCRICAOCURTA'])
                 
