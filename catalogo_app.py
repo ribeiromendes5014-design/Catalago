@@ -9,17 +9,14 @@ from io import StringIO
 import time
 
 # --- Configurações de Dados ---
-SHEET_NAME_CATALOGO = "produtos" 
+SHEET_NAME_CATALOGO = "produtos" # CORRIGIDO: Nome da sua aba de produtos (minúsculo)
 SHEET_NAME_PEDIDOS = "PEDIDOS"
 
 # Inicialização do Carrinho de Compras e Estado
 if 'carrinho' not in st.session_state:
-    st.session_state.carrinho = {} 
+    st.session_state.carrinho = {} # {id_produto: {'nome': str, 'preco': float, 'quantidade': int}}
 
 # --- Funções de Conexão GSpread (Seguras e Cache) ---
-
-# Reutilizamos get_gspread_client, carregar_catalogo, salvar_pedido, adicionar/remover do carrinho
-# (Sem alterações nas funções de backend, apenas no layout)
 
 @st.cache_resource(ttl=None) 
 def get_gspread_client():
@@ -49,7 +46,7 @@ def get_gspread_client():
         
 @st.cache_data(ttl=600)
 def carregar_catalogo():
-    """Carrega o catálogo de produtos (aba PRODUTOS) e prepara o DataFrame."""
+    """Carrega o catálogo de produtos (aba 'produtos') e prepara o DataFrame."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_CATALOGO)
@@ -64,7 +61,7 @@ def carregar_catalogo():
         return df_filtrado.set_index('ID')
     except Exception as e:
         st.error(f"Erro ao carregar o catálogo: {e}")
-        st.error("Dica: Verifique se o nome da aba da planilha está correto: 'PRODUTOS'")
+        st.error(f"Dica: Verifique se o nome da aba da planilha está correto: '{SHEET_NAME_CATALOGO}'")
         return pd.DataFrame()
 
 def salvar_pedido(nome_cliente: str, contato_cliente: str, valor_total: float, itens_json: str):
@@ -119,6 +116,20 @@ div.block-container {
     padding-top: 2rem;
 }
 
+/* Esconde o botão padrão do popover para que possamos usar um customizado */
+div[data-testid="stPopover"] > div:first-child > button {
+    display: none;
+}
+
+/* Estiliza o placeholder para o popover, para parecer um botão flutuante */
+.st-emotion-cache-163l75u { /* Este seletor pode mudar dependendo da versão do Streamlit */
+    position: fixed; /* Tenta fixar o botão na tela */
+    top: 20px;
+    right: 20px;
+    z-index: 9999; /* Garante que fique acima de outros elementos */
+}
+
+
 /* Estiliza o botão do carrinho para parecer um badge rosa de e-commerce */
 .cart-badge-button {
     background-color: #E91E63; /* Cor primária Doce&Bella */
@@ -133,15 +144,12 @@ div.block-container {
     display: inline-flex;
     align-items: center;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    min-width: 150px; /* Garante largura mínima para o texto */
+    justify-content: center;
 }
 
 .cart-badge-button:hover {
     background-color: #C2185B; /* Cor mais escura no hover */
-}
-
-/* Oculta o popover que o Streamlit coloca no título */
-.stButton>button {
-    background-color: transparent !important;
 }
 
 /* Estiliza o contador de itens */
@@ -171,19 +179,26 @@ total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
 
-# Conteúdo do botão customizado (HTML/CSS)
-cart_html = f"""
-<div class='cart-badge-button'>
-    🛒 SEU PEDIDO 
-    <span class='cart-count'>{num_itens}</span>
-</div>
-"""
-
 with col_carrinho:
-    st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True) # Espaçamento
+    st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True) # Espaçamento vertical
     
-    # O Popover é ativado ao clicar no badge customizado (o Markdown)
-    with st.popover(cart_html, use_container_width=False, help="Clique para ver os itens e finalizar o pedido"):
+    # O st.popover agora terá um título de texto simples, mas usaremos CSS para escondê-lo
+    # e um st.markdown para criar o botão visual que queremos.
+    
+    # Criamos o botão HTML/CSS customizado
+    custom_cart_button = f"""
+        <div class='cart-badge-button' onclick='document.querySelector("[data-testid=\"stPopover\"] > div:first-child > button").click();'>
+            🛒 SEU PEDIDO 
+            <span class='cart-count'>{num_itens}</span>
+        </div>
+    """
+    
+    # Usamos st.markdown para exibir o botão customizado
+    st.markdown(custom_cart_button, unsafe_allow_html=True)
+
+    # O popover real é ativado por um "clique simulado" no botão oculto.
+    # O título do popover pode ser vazio ou um espaço em branco para não aparecer.
+    with st.popover(" ", use_container_width=False, help="Clique para ver os itens e finalizar o pedido"):
         
         st.header("🛒 Detalhes do Seu Pedido")
 
@@ -243,6 +258,7 @@ with col_carrinho:
                         else:
                             st.error("Falha ao salvar o pedido. Tente novamente.")
 
+
 # --- Exibição do Catálogo em Grade ---
 st.markdown("---")
 st.subheader("Nossos Produtos Disponíveis")
@@ -301,4 +317,3 @@ for i, (prod_id, row) in enumerate(df_catalogo.iterrows()):
                         row['PRECO']
                     )
                     st.rerun()
-
