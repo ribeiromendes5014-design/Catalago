@@ -44,7 +44,6 @@ def carregar_dados(sheet_name):
         
         df = pd.DataFrame(data[1:], columns=data[0])
         
-        # Garante que a coluna STATUS exista na tabela de pedidos
         if sheet_name == SHEET_NAME_PEDIDOS and 'STATUS' not in df.columns:
             df['STATUS'] = ''
         
@@ -59,20 +58,33 @@ def carregar_dados(sheet_name):
         st.error(f"Ocorreu um erro ao carregar os dados: {e}")
         return pd.DataFrame()
 
+# --- FUNÇÃO CORRIGIDA ---
 def atualizar_status_pedido(id_pedido, novo_status="Finalizado"):
-    """Encontra um pedido pelo ID e atualiza seu status na planilha."""
+    """Encontra um pedido pelo ID e atualiza seu status na coluna 'STATUS'."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_PEDIDOS)
-        # Encontra a célula que contém o ID do pedido
+        
+        # Encontra a célula que contém o ID do pedido (na primeira coluna)
         cell = worksheet.find(id_pedido, in_column=1)
-        if cell:
-            # Assume que a coluna STATUS é a 7ª (G)
-            # Você pode precisar ajustar o 'G' se a sua coluna for outra
-            worksheet.update_acell(f'G{cell.row}', novo_status)
-            st.cache_data.clear()
-            return True
-        return False
+        if not cell:
+            st.error(f"ID do Pedido {id_pedido} não encontrado na planilha.")
+            return False
+
+        # Encontra a coluna "STATUS" pelo nome no cabeçalho
+        headers = worksheet.row_values(1)
+        if 'STATUS' not in headers:
+            st.error("A coluna 'STATUS' não foi encontrada na sua planilha de pedidos.")
+            return False
+        
+        # O índice da coluna é a posição na lista + 1 (gspread é 1-indexado)
+        status_col_index = headers.index('STATUS') + 1
+        
+        # Atualiza a célula na linha encontrada e na coluna de status correta
+        worksheet.update_cell(cell.row, status_col_index, novo_status)
+        st.cache_data.clear()
+        return True
+
     except Exception as e:
         st.error(f"Erro ao atualizar o status do pedido: {e}")
         return False
@@ -98,7 +110,7 @@ def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponiv
         st.error(f"Ocorreu um erro ao adicionar o produto: {e}")
         return False
 
-# --- Layout do Aplicativo Admin ---
+# --- Layout do Aplicativo Admin (Sem alterações) ---
 st.set_page_config(page_title="Admin Doce&Bella", layout="wide")
 
 st.title("⭐ Painel de Administração | Doce&Bella")
@@ -106,7 +118,6 @@ st.markdown("Use este painel para gerenciar os pedidos e o catálogo de produtos
 
 tab_pedidos, tab_produtos = st.tabs(["Relatório de Pedidos", "Gerenciar Produtos"])
 
-# --- ABA DE PEDIDOS (MODIFICADA) ---
 with tab_pedidos:
     st.header("📋 Pedidos Recebidos")
     if st.button("Recarregar Pedidos"):
@@ -121,7 +132,6 @@ with tab_pedidos:
     else:
         df_pedidos_raw['DATA_HORA'] = pd.to_datetime(df_pedidos_raw['DATA_HORA'], errors='coerce')
         
-        # --- FILTROS ---
         st.subheader("🔍 Filtrar Pedidos")
         col_filtro1, col_filtro2 = st.columns(2)
         with col_filtro1:
@@ -131,14 +141,11 @@ with tab_pedidos:
 
         df_filtrado = df_pedidos_raw.copy()
 
-        # Aplica filtro de data
         if data_filtro:
             df_filtrado = df_filtrado[df_filtrado['DATA_HORA'].dt.date == data_filtro]
 
-        # Aplica filtro de texto
         if texto_filtro.strip():
             texto_filtro = texto_filtro.lower()
-            # Filtra por nome do cliente OU por item no pedido
             df_filtrado = df_filtrado[
                 df_filtrado['NOME_CLIENTE'].str.lower().str.contains(texto_filtro) |
                 df_filtrado['ITENS_PEDIDO'].str.lower().str.contains(texto_filtro)
@@ -146,11 +153,9 @@ with tab_pedidos:
         
         st.markdown("---")
 
-        # --- SEPARAÇÃO DE PEDIDOS ---
         pedidos_pendentes = df_filtrado[df_filtrado['STATUS'] != 'Finalizado']
         pedidos_finalizados = df_filtrado[df_filtrado['STATUS'] == 'Finalizado']
 
-        # Exibe Pedidos Pendentes
         st.header("⏳ Pedidos Pendentes")
         if pedidos_pendentes.empty:
             st.info("Nenhum pedido pendente encontrado (com os filtros aplicados).")
@@ -172,7 +177,6 @@ with tab_pedidos:
                     try:
                         detalhes_pedido = json.loads(pedido['ITENS_PEDIDO'])
                         for item in detalhes_pedido.get('itens', []):
-                            # ... (lógica de exibição dos itens, sem alterações)
                             link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
                             if not df_catalogo.empty:
                                 produto_no_catalogo = df_catalogo[df_catalogo['ID'] == item['id']]
@@ -192,16 +196,12 @@ with tab_pedidos:
                     except Exception as e:
                         st.error(f"Erro ao processar itens do pedido: {e}")
 
-        # Exibe Pedidos Finalizados
         st.header("✅ Pedidos Finalizados")
         if pedidos_finalizados.empty:
             st.info("Nenhum pedido finalizado encontrado (com os filtros aplicados).")
         else:
-             # Exibe a tabela de finalizados de forma mais simples
              st.dataframe(pedidos_finalizados[['DATA_HORA', 'NOME_CLIENTE', 'VALOR_TOTAL', 'ITENS_PEDIDO']], use_container_width=True)
 
-
-# --- ABA DE PRODUTOS (Sem alterações) ---
 with tab_produtos:
     st.header("🛍️ Gerenciamento de Produtos")
     
