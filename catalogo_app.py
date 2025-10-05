@@ -10,7 +10,7 @@ import time
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
 SHEET_NAME_PEDIDOS = "pedidos"
-SHEET_NAME_PROMOCOES = "promoções"
+SHEET_NAME_PROMOCOES = "promocoes"
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
 
 
@@ -265,3 +265,4 @@ else:
     cols = st.columns(4)
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
         with cols[i % 4]: render_product_card(prod_id, row, key_prefix='prod')
+
