@@ -160,7 +160,7 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 
 
 # --- ATUALIZAÇÃO AUTOMÁTICA ---
-st_autorefresh(interval=60000, key="auto_refresh_catalogo") # Atualiza a cada 60 segundos
+st_autorefresh(interval=5000, key="auto_refresh_catalogo") # Atualiza a cada 5 segundos
 
 
 # --- CABEÇALHO ---
@@ -277,3 +277,4 @@ else:
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
         with cols[i % 4]: 
             render_product_card(prod_id, row, key_prefix='prod')
+
