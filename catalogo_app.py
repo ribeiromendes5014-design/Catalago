@@ -45,7 +45,7 @@ def get_gspread_client():
         st.error(f"Erro na autenticação do Google Sheets. Verifique o secrets.toml. Detalhe: {e}")
         st.stop()
 
-@st.cache_data(ttl=05)
+@st.cache_data(ttl=5)
 def carregar_promocoes():
     """Carrega as promoções da aba 'promoções'."""
     try:
@@ -248,6 +248,7 @@ else:
     cols = st.columns(4)
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
         with cols[i % 4]: render_product_card(prod_id, row, key_prefix='prod')
+
 
 
 
