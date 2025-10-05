@@ -70,8 +70,9 @@ def load_data():
         client = gspread.authorize(creds)
         
         # 3. ABRIR A PLANILHA E LER OS DADOS
-        # ATENÇÃO: Verifique se o nome da aba é 'Sheet1' ou se você o renomeou!
         spreadsheet = client.open_by_url(st.secrets["gsheets"]["sheets_url"])
+        
+        # *** LINHA CRÍTICA: SUBSTITUA "Sheet1" PELO NOME EXATO DA SUA ABA DE PRODUTOS ***
         worksheet = spreadsheet.worksheet("Sheet1") 
         
         # 4. CONVERTER PARA DATAFRAME
@@ -106,7 +107,7 @@ def salvar_pedido(nome_cliente, contato_cliente, pedido_df, total):
             relatorio += f"- {row['Qtd']}x {row['Produto']} (R$ {row['Subtotal']:.2f}); "
         
         # 2. Abrir a Planilha de Pedidos
-        # ATENÇÃO: É necessário ter a chave 'pedidos_url' no secrets.toml
+        # ATENÇÃO: A Planilha de Pedidos precisa ter a chave 'pedidos_url' no secrets.toml
         spreadsheet_pedidos = gsheets_client.open_by_url(st.secrets["gsheets"]["pedidos_url"])
         worksheet_pedidos = spreadsheet_pedidos.worksheet("Pedidos") # Nome da aba: Pedidos
         
