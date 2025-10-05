@@ -1,244 +1,205 @@
+# catalogo_app.py
 import streamlit as st
 import pandas as pd
-import gspread
-import unicodedata
-from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+import json
 
-# =====================================================================================
-# 1. CONFIGURAÇÃO VISUAL COMPLETA E PROFISSIONAL
-# =====================================================================================
+# --- Configurações de Dados ---
+SHEET_NAME_CATALOGO = "CATALOGO"
+SHEET_NAME_PEDIDOS = "PEDIDOS"
 
-def setup_app():
-    """Configura a página e injeta todo o CSS customizado."""
-    st.set_page_config(layout="wide", page_title="Doce&Bella | Catálogo", page_icon="🌸")
+# Inicialização do Carrinho de Compras
+if 'carrinho' not in st.session_state:
+    st.session_state.carrinho = {} # {id_produto: {'nome': str, 'preco': float, 'quantidade': int}}
 
-    # CSS com design responsivo para desktop e mobile
-    st.markdown("""
-        <style>
-        /* ===== CONFIGURAÇÕES GLOBAIS ===== */
-        #MainMenu, footer, [data-testid="stHeader"] {
-            display: none !important;
-        }
-        .stApp {
-            background-color: #FFFFFF;
-        }
+# --- Funções de Persistência Segura ---
 
-        /* ===== HEADER CUSTOMIZADO ===== */
-        .centered-header {
-            display: flex; flex-direction: column; align-items: center;
-            justify-content: center;
-        }
-        .centered-header img {
-            max-width: 220px; margin-bottom: -10px;
-        }
-        .centered-header h1 {
-            font-size: 2.5rem; color: #E91E63; text-align: center; font-weight: 700;
-        }
-
-        /* ===== CARD DE PRODUTO ===== */
-        .st-emotion-cache-16txtl3 { gap: 2rem; }
-        div[data-testid="stVerticalBlock"] [data-testid="stContainer"] {
-            border: 1px solid #e9e9e9 !important; border-radius: 10px !important;
-            padding: 1.2rem !important; transition: all 0.2s ease-in-out;
-            height: 100%; display: flex; flex-direction: column;
-            justify-content: space-between;
-        }
-        div[data-testid="stVerticalBlock"] [data-testid="stContainer"]:hover {
-            box-shadow: 0 10px 25px rgba(0,0,0,0.08); transform: translateY(-4px);
-            border-color: #E91E63 !important;
-        }
-        div[data-testid="stVerticalBlock"] [data-testid="stContainer"] img {
-            border-radius: 4px; object-fit: contain; height: 200px; margin-bottom: 1rem;
-        }
-        div[data-testid="stVerticalBlock"] [data-testid="stContainer"] p strong {
-            font-size: 1rem; color: #333;
-        }
-        div[data-testid="stVerticalBlock"] [data-testid="stContainer"] p:not(:has(strong)) {
-            font-size: 1.15rem; font-weight: bold; color: #E91E63; margin-top: -8px;
-        }
-        div[data-testid="stVerticalBlock"] [data-testid="stContainer"] [data-testid="stPopover"] > button {
-            background-color: #E91E63 !important; color: white !important;
-            border: none !important; border-radius: 5px !important; width: 100% !important; font-weight: bold;
-        }
-
-        /* ===== CARRINHO FLUTUANTE ===== */
-        div[data-testid="stVerticalBlock"]:has(div[data-testid="stPopover"]):last-of-type {
-            position: fixed; bottom: 30px; right: 30px; z-index: 1000;
-        }
-        div[data-testid="stPopover"] > button {
-            background-color: #F06292 !important; color: white !important; border-radius: 50% !important;
-            width: 60px !important; height: 60px !important; font-size: 28px !important;
-            border: none !important; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-        }
-        div[data-testid="stPopover"] > button::after {
-            content: attr(data-badge); position: absolute; top: 0px; right: 0px;
-            width: 25px; height: 25px; background-color: #E53935; color: white;
-            border-radius: 50%; display: flex; justify-content: center; align-items: center;
-            font-size: 14px; font-weight: bold; border: 2px solid white;
-        }
-        
-        /* ===== JANELA DO CARRINHO ===== */
-        div[data-testid="stPopover"] div[data-testid="stPopup"] {
-             width: 380px !important; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-        }
-
-        /* =============================================== */
-        /* =========== MEDIA QUERY PARA CELULAR ========== */
-        /* =============================================== */
-        @media (max-width: 640px) {
-            .centered-header h1 {
-                font-size: 1.8rem; /* Diminui o título principal */
-            }
-            /* Ajusta a janela do carrinho para não sair da tela */
-            div[data-testid="stPopover"] div[data-testid="stPopup"] {
-                width: 90vw !important; /* Ocupa 90% da largura da tela */
-                left: 5vw !important;   /* Centraliza com 5% de margem */
-            }
-            /* Ajusta o carrinho flutuante para ficar mais perto do canto */
-            div[data-testid="stVerticalBlock"]:has(div[data-testid="stPopover"]):last-of-type {
-                bottom: 15px;
-                right: 15px;
-            }
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-setup_app()
-
-# =====================================================================================
-# 2. LÓGICA DO APLICATIVO (FUNÇÕES DE DADOS E CARRINHO)
-# =====================================================================================
-
-# --- Inicialização do Estado da Sessão ---
-if 'carrinho' not in st.session_state: st.session_state.carrinho = []
-if 'finalizando' not in st.session_state: st.session_state.finalizando = False
-if 'pedido_enviado' not in st.session_state: st.session_state.pedido_enviado = False
-
-# --- Funções do Carrinho ---
-def adicionar_ao_carrinho(prod_id, nome, preco, qtd):
-    for item in st.session_state.carrinho:
-        if item['id'] == prod_id: item['quantidade'] += qtd; break
-    else: st.session_state.carrinho.append({'id': prod_id, 'nome': nome, 'preco': preco, 'quantidade': qtd})
-
-def remover_do_carrinho(prod_id):
-    st.session_state.carrinho = [item for item in st.session_state.carrinho if item['id'] != prod_id]
-
-def limpar_carrinho():
-    st.session_state.carrinho, st.session_state.finalizando, st.session_state.pedido_enviado = [], False, False
-    st.rerun()
-
-# --- Funções de Conexão com Google Sheets ---
-@st.cache_data(ttl=300)
-def load_data():
+@st.cache_data(ttl=600) # Recarrega a cada 10 minutos
+def carregar_catalogo():
+    """Carrega o catálogo de produtos do Google Sheets."""
     try:
-        creds_json = st.secrets["gsheets"]["creds"]
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
-        client = gspread.authorize(creds)
-        worksheet = client.open_by_url(st.secrets["gsheets"]["sheets_url"]).worksheet("produtos")
-        df = pd.DataFrame(worksheet.get_all_records())
-        if df.empty: return pd.DataFrame(), None
+        # Usa a conexão segura configurada em st.secrets
+        conn = st.connection("gsheets", type=st.connections.SnowflakeConnection)
+        df = conn.read(worksheet=SHEET_NAME_CATALOGO, ttl=600)
         
-        def _normalize(s): return unicodedata.normalize('NFKD', str(s)).encode('ASCII', 'ignore').decode('ASCII').upper().strip()
-        df.columns = [_normalize(col) for col in df.columns]
+        # Converte tipos e filtra
+        df['PRECO'] = pd.to_numeric(df['PRECO'], errors='coerce').fillna(0.0)
+        df['ID'] = pd.to_numeric(df['ID'], errors='coerce').astype('Int64')
+        df_filtrado = df[df['DISPONIVEL'].str.lower() == 'sim'].copy()
         
-        rename_map = {'PRODUTO': 'NOME', 'PRECO': 'PRECO', 'IMAGEM': 'LINKIMAGEM', 'DESCRICAO CURTA': 'DESCRICAOCURTA', 'DESCRICAO LONGA': 'DESCRICAOLONGA'}
-        df.rename(columns=lambda c: rename_map.get(c, c), inplace=True)
-        
-        df = df[df['DISPONIVEL'].astype(str).str.lower().isin(['sim', 's', 'true', '1'])].copy()
-        df['PRECO'] = pd.to_numeric(df['PRECO'], errors='coerce').fillna(0)
-        df['ID'] = df['ID'].astype(str)
-        return df, client
+        return df_filtrado.set_index('ID')
     except Exception as e:
-        st.error(f"Erro ao carregar produtos: {e}"); return pd.DataFrame(), None
+        st.error(f"Erro ao carregar o catálogo: {e}")
+        return pd.DataFrame()
 
-df_produtos, gsheets_client = load_data()
-
-def salvar_pedido(nome, contato, pedido_df, total):
-    if gsheets_client is None: return False
+def salvar_pedido(nome_cliente: str, contato_cliente: str, valor_total: float, itens_json: str):
+    """Salva um novo pedido na planilha de PEDIDOS."""
     try:
-        relatorio = "; ".join([f"{row['Qtd']}x {row['Produto']}" for _, row in pedido_df.iterrows()])
-        worksheet = gsheets_client.open_by_url(st.secrets["gsheets"]["pedidos_url"]).worksheet("Pedidos")
-        worksheet.append_row([datetime.now().strftime("%d/%m/%Y %H:%M:%S"), nome, contato, f"{total:.2f}", relatorio])
-        st.session_state.pedido_enviado = True; return True
-    except Exception: return False
+        conn = st.connection("gsheets", type=st.connections.SnowflakeConnection)
+        
+        novo_registro = pd.DataFrame([{
+            'ID_PEDIDO': int(datetime.now().timestamp()), # ID único
+            'DATA_HORA': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'NOME_CLIENTE': nome_cliente,
+            'CONTATO_CLIENTE': contato_cliente,
+            'ITENS_JSON': itens_json,
+            'VALOR_TOTAL': valor_total
+        }])
+        
+        conn.insert(worksheet=SHEET_NAME_PEDIDOS, data=novo_registro)
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar o pedido: {e}")
+        return False
 
-# =====================================================================================
-# 3. RENDERIZAÇÃO DA PÁGINA
-# =====================================================================================
+# --- Funções de Lógica do Carrinho ---
 
-# --- Header Centralizado ---
-st.markdown("""
-    <div class="centered-header">
-        <img src="https://i.ibb.co/cdqJ92W/logo_docebella.png" alt="Logo Doce&Bella">
-        <h1>💖 Nossos Produtos</h1>
-    </div>
-""", unsafe_allow_html=True)
-st.divider()
+def adicionar_ao_carrinho(produto_id, quantidade, produto_nome, produto_preco):
+    if quantidade > 0:
+        st.session_state.carrinho[produto_id] = {
+            'nome': produto_nome,
+            'preco': produto_preco,
+            'quantidade': quantidade
+        }
+        st.toast(f"✅ {quantidade}x {produto_nome} adicionado(s) ao pedido!")
 
-# --- Corpo Principal da Página ---
-main_container = st.container()
+def remover_do_carrinho(produto_id):
+    if produto_id in st.session_state.carrinho:
+        nome = st.session_state.carrinho[produto_id]['nome']
+        del st.session_state.carrinho[produto_id]
+        st.toast(f"❌ {nome} removido do pedido.")
 
-with main_container:
-    if st.session_state.pedido_enviado:
-        st.balloons()
-        st.success("🎉 Pedido Enviado com Sucesso!", icon="✅")
-        st.info("Obrigado por comprar conosco! Entraremos em contato para confirmar os detalhes.")
-        if st.button("🛍️ Fazer Novo Pedido"): limpar_carrinho()
+# --- Layout do Aplicativo ---
 
-    elif st.session_state.finalizando:
-        st.title("Finalizar Pedido")
-        total = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho)
-        pedido_df = pd.DataFrame(st.session_state.carrinho).rename(columns={'nome': 'Produto', 'quantidade': 'Qtd'})
-        with st.form("Formulario_Finalizacao"):
-            st.text_input("Seu Nome Completo:", key="nome_cliente")
-            st.text_input("Seu WhatsApp ou E-mail:", key="contato_cliente")
-            st.dataframe(pedido_df[['Produto', 'Qtd']], use_container_width=True, hide_index=True)
-            st.markdown(f"### Valor Final: R$ {total:.2f}")
-            if st.form_submit_button("ENVIAR PEDIDO", type="primary"):
-                if st.session_state.nome_cliente and st.session_state.contato_cliente:
-                    if salvar_pedido(st.session_state.nome_cliente, st.session_state.contato_cliente, pedido_df, total): st.rerun()
-                    else: st.error("Falha ao salvar o pedido.")
-                else: st.warning("Por favor, preencha nome e contato.")
-        if st.button("⬅️ Voltar ao Catálogo"): st.session_state.finalizando = False; st.rerun()
+st.set_page_config(
+    page_title="Catálogo Doce&Bella", 
+    layout="wide", 
+    initial_sidebar_state="expanded"
+)
 
-    elif not df_produtos.empty:
-        num_colunas = 4
-        # Em telas pequenas, usa 2 colunas, senão 4
-        if "IS_MOBILE" in st.query_params:
-             num_colunas = 2
+st.title("💖 Catálogo de Pedidos Doce&Bella")
+st.markdown("---")
 
-        cols = st.columns(num_colunas)
-        for index, row in df_produtos.iterrows():
-            with cols[index % num_colunas]:
-                with st.container(border=False):
-                    st.image(row.get('LINKIMAGEM') or "https://placehold.co/400x300/F0F0F0/AAAAAA?text=Sem+imagem", use_container_width=True)
-                    st.markdown(f"**{row.get('NOME', '')}**")
-                    st.markdown(f"R$ {row.get('PRECO', 0.0):.2f}")
-                    with st.popover("Comprar", use_container_width=True):
-                        st.subheader(row.get('NOME'))
-                        st.image(row.get('LINKIMAGEM') or "https://placehold.co/400x300/F0F0F0/AAAAAA?text=Sem+imagem", use_container_width=True)
-                        st.markdown(f"**Preço:** R$ {row.get('PRECO', 0.0):.2f}")
-                        st.markdown(f"**Descrição:** {row.get('DESCRICAOLONGA', 'Sem descrição adicional.')}")
-                        qtd = st.number_input("Quantidade:", 1, key=f"qty_{row.get('ID')}")
-                        if st.button("Adicionar ao Carrinho", key=f"add_{row.get('ID')}", type="primary"):
-                            adicionar_ao_carrinho(row.get('ID'), row.get('NOME'), row.get('PRECO'), qtd); st.rerun()
+# 1. Carregamento e Filtro
+df_catalogo = carregar_catalogo()
+
+if df_catalogo.empty:
+    st.warning("O catálogo está vazio ou indisponível no momento. Tente novamente mais tarde.")
+    st.stop()
+    
+# 2. Exibição do Catálogo em Grade (e-commerce style)
+st.subheader("Nossos Produtos Disponíveis")
+
+cols = st.columns(3) # Grade de 3 colunas
+carrinho_vazio = not st.session_state.carrinho
+
+for i, (prod_id, row) in enumerate(df_catalogo.iterrows()):
+    col = cols[i % 3]
+    
+    with col:
+        with st.container(border=True):
+            
+            # Título e Preço
+            st.markdown(f"**{row['NOME']}**", unsafe_allow_html=True)
+            st.markdown(f"<h3 style='color: #E91E63;'>R$ {row['PRECO']:.2f}</h3>", unsafe_allow_html=True)
+
+            # Imagem
+            if row['LINKIMAGEM']:
+                st.image(row['LINKIMAGEM'], use_column_width="always")
+            else:
+                st.markdown("*(Sem Imagem)*")
+            
+            # Descrição Curta
+            st.caption(row['DESCRICAOCURTA'])
+            
+            # --- Zoom do Produto e Adicionar ao Pedido (st.popover) ---
+            with st.popover("✨ Detalhes e Pedido"):
+                st.markdown(f"### {row['NOME']}")
+                
+                # Descrição Longa
+                st.markdown(row['DESCRICAOLONGA'])
+                st.markdown("---")
+                
+                # Formulário para Quantidade
+                quantidade = st.number_input(
+                    "Quantidade:", 
+                    min_value=1, 
+                    step=1, 
+                    key=f'qtd_{prod_id}', 
+                    value=1
+                )
+                
+                if st.button("➕ Adicionar ao Pedido", key=f'add_{prod_id}', use_container_width=True):
+                    adicionar_ao_carrinho(
+                        prod_id, 
+                        quantidade, 
+                        row['NOME'], 
+                        row['PRECO']
+                    )
+                    # Força o fechamento do popover (opcional, mas melhora a UX)
+                    # st.rerun() 
+
+
+# 3. Carrinho de Compras (Sidebar Flutuante)
+total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
+num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
+
+with st.sidebar:
+    st.header("🛒 Seu Pedido")
+    
+    if carrinho_vazio:
+        st.info("Seu carrinho está vazio. Adicione itens do catálogo!")
     else:
-        st.info("Nenhum produto disponível no momento. Volte em breve!")
+        st.metric(label="Total de Itens", value=f"{num_itens} unidade(s)")
+        st.metric(label="Valor Total", value=f"R$ {total_acumulado:.2f}")
+        st.markdown("---")
+        
+        st.subheader("Itens no Carrinho")
+        
+        # Tabela simples de itens
+        for prod_id, item in st.session_state.carrinho.items():
+            col_nome, col_qtd, col_remover = st.columns([3, 1.5, 1])
+            col_nome.write(f"*{item['nome']}*")
+            col_qtd.write(f"**{item['quantidade']}x**")
+            if col_remover.button("Remover", key=f'rem_{prod_id}', type='primary', help=f"Remover {item['nome']}"):
+                remover_do_carrinho(prod_id)
+                st.rerun()
+                
+        st.markdown("---")
+        
+        # 4. Finalização de Pedido
+        st.subheader("Finalizar Pedido")
+        with st.form("form_finalizar_pedido", clear_on_submit=True):
+            nome = st.text_input("Seu Nome Completo:", key='nome_cliente')
+            contato = st.text_input("Seu Contato (WhatsApp/E-mail):", key='contato_cliente')
+            
+            st.markdown(f"**Total a Pagar: R$ {total_acumulado:.2f}** (Pagamento será combinado após o envio.)")
+            
+            submitted = st.form_submit_button("✅ Enviar Pedido", type="primary")
+            
+            if submitted:
+                if not nome or not contato:
+                    st.error("Por favor, preencha seu nome e contato para finalizar.")
+                else:
+                    # Preparar o relatório em texto/JSON
+                    detalhes_pedido = {
+                        "total": total_acumulado,
+                        "itens": [
+                            {
+                                "id": int(prod_id),
+                                "nome": item['nome'],
+                                "preco": item['preco'],
+                                "qtd": item['quantidade'],
+                                "subtotal": item['preco'] * item['quantidade']
+                            } for prod_id, item in st.session_state.carrinho.items()
+                        ]
+                    }
+                    
+                    if salvar_pedido(nome, contato, total_acumulado, json.dumps(detalhes_pedido)):
+                        st.success("🎉 Pedido enviado com sucesso! Entraremos em contato para combinar o pagamento e a entrega.")
+                        st.session_state.carrinho = {} # Limpa o carrinho
+                        st.rerun()
 
-# --- Carrinho Flutuante (Renderizado por último) ---
-total_itens = sum(item['quantidade'] for item in st.session_state.carrinho)
-if not st.session_state.finalizando and not st.session_state.pedido_enviado:
-    st.markdown(f'<div data-badge="{total_itens if total_itens > 0 else ""}"></div>', unsafe_allow_html=True)
-    with st.popover("🛒", use_container_width=False):
-        st.header("Meu Carrinho")
-        if not st.session_state.carrinho: st.write("Seu carrinho está vazio.")
-        else:
-            total_valor = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho)
-            for item in st.session_state.carrinho:
-                c1, c2 = st.columns([0.8, 0.2])
-                c1.text(f"{item['quantidade']}x {item['nome']}")
-                if c2.button("🗑️", key=f"del_{item['id']}"): remover_do_carrinho(item['id']); st.rerun()
-            st.markdown(f"**Total:** R$ {total_valor:.2f}")
-            if st.button("Finalizar Pedido", type="primary"): st.session_state.finalizando = True; st.rerun()
+
+# NOTA: O arquivo admin_app.py deve ser criado separadamente,
+# usando o mesmo st.connection para acessar ambas as planilhas.
