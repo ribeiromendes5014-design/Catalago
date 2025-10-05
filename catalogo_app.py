@@ -211,36 +211,73 @@ st_autorefresh(interval=60000, key="auto_refresh_catalogo")
 # --- CABEÇALHO ---
 col_logo, col_titulo = st.columns([0.1, 5]); col_logo.markdown("<h3>💖</h3>", unsafe_allow_html=True); col_titulo.title("Catálogo de Pedidos Doce&Bella")
 
-# --- BARRA ROSA (PESQUISA E CARRINHO) (Inalterado) ---
+# --- BARRA ROSA (PESQUISA E CARRINHO) (COM MELHORIA DE LEITURA) ---
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
+
 st.markdown("<div class='pink-bar-container'><div class='pink-bar-content'>", unsafe_allow_html=True)
 col_pesquisa, col_carrinho = st.columns([5, 1])
+
 with col_pesquisa:
     st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
+
 with col_carrinho:
-    st.markdown(f"""<div class='cart-badge-button' onclick='document.querySelector("[data-testid=\"stPopover\"] > div:first-child > button").click();'>🛒 SEU PEDIDO<span class='cart-count'>{num_itens}</span></div>""", unsafe_allow_html=True)
-    with st.popover(" ", use_container_width=False):
+    # Este HTML/CSS cria o botão rosa "SEU PEDIDO" com o contador de itens.
+    # O comando 'onclick' simula o clique no popover invisível do Streamlit.
+    custom_cart_button = f"""
+        <div class='cart-badge-button' onclick='document.querySelector("[data-testid=\"stPopover\"] > div:first-child > button").click();'>
+            🛒 SEU PEDIDO
+            <span class='cart-count'>{num_itens}</span>
+        </div>
+    """
+    st.markdown(custom_cart_button, unsafe_allow_html=True)
+
+    # Este é o componente do Streamlit que cria a janela pop-up.
+    # O botão real dele é escondido com CSS, e o nosso botão personalizado acima o aciona.
+    with st.popover(" ", use_container_width=False, help="Clique para ver os itens e finalizar o pedido"):
+
         st.header("🛒 Detalhes do Pedido")
-        if carrinho_vazio: st.info("Seu carrinho está vazio.")
+
+        if carrinho_vazio:
+            st.info("Seu carrinho está vazio.")
         else:
-            st.markdown(f"<h3 style='color: #E91E63;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
+            # Mostra o total
+            st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
             st.markdown("---")
+
+            # Lista os itens no carrinho
             for prod_id, item in list(st.session_state.carrinho.items()):
-                c1,c2,c3,c4=st.columns([3,1.5,2,1]);c1.write(f"*{item['nome']}*");c2.markdown(f"**{item['quantidade']}x**");c3.markdown(f"R$ {item['preco']*item['quantidade']:.2f}")
-                if c4.button("X", key=f'rem_{prod_id}_popover'): remover_do_carrinho(prod_id); st.rerun()
+                c1, c2, c3, c4 = st.columns([3, 1.5, 2, 1])
+                c1.write(f"*{item['nome']}*")
+                c2.markdown(f"**{item['quantidade']}x**")
+                c3.markdown(f"R$ {item['preco']*item['quantidade']:.2f}")
+                if c4.button("X", key=f'rem_{prod_id}_popover'):
+                    remover_do_carrinho(prod_id)
+                    st.rerun()
+
             st.markdown("---")
+
+            # Formulário para finalizar o pedido
             with st.form("form_finalizar_pedido", clear_on_submit=True):
                 st.subheader("Finalizar Pedido")
-                nome=st.text_input("Seu Nome Completo:");contato=st.text_input("Seu Contato (WhatsApp/E-mail):")
+                nome = st.text_input("Seu Nome Completo:")
+                contato = st.text_input("Seu Contato (WhatsApp/E-mail):")
+                
                 if st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True):
                     if nome and contato:
-                        detalhes={"total":total_acumulado,"itens":[{"id":int(k),"nome":v['nome'],"preco":v['preco'],"quantidade":v['quantidade']} for k,v in st.session_state.carrinho.items()]}
-                        if salvar_pedido(nome,contato,total_acumulado,json.dumps(detalhes,ensure_ascii=False)):
-                            st.balloons();st.success("🎉 Pedido enviado!");st.session_state.carrinho={};st.rerun()
-                        else:st.error("Falha ao salvar o pedido.")
-                    else:st.warning("Preencha seu nome e contato.")
+                        detalhes = {"total": total_acumulado, "itens": [{"id": int(k), "nome": v['nome'], "preco": v['preco'], "quantidade": v['quantidade']} for k, v in st.session_state.carrinho.items()]}
+                        
+                        if salvar_pedido(nome, contato, total_acumulado, json.dumps(detalhes, ensure_ascii=False)):
+                            st.balloons()
+                            st.success("🎉 Pedido enviado com sucesso!")
+                            st.session_state.carrinho = {}
+                            st.rerun()
+                        else:
+                            st.error("Falha ao salvar o pedido.")
+                    else:
+                        st.warning("Preencha seu nome e contato.")
+
 st.markdown("</div></div>", unsafe_allow_html=True)
 
 
@@ -248,7 +285,7 @@ st.markdown("</div></div>", unsafe_allow_html=True)
 df_catalogo = carregar_catalogo()
 
 # --------------------------------------------------------------------------
-# --- NOVO LAYOUT PRINCIPAL (COM AS CORREÇÕES) ---
+# --- LAYOUT PRINCIPAL (COM AS CORREÇÕES ANTERIORES) ---
 # --------------------------------------------------------------------------
 
 if df_catalogo.empty:
@@ -257,20 +294,18 @@ else:
     # --- SEÇÃO: OS MAIS QUERIDINHOS (AGORA SÓ APARECE SE HOUVER DADOS) ---
     df_mais_vendidos = carregar_mais_vendidos(df_catalogo, top_n=4)
 
-    # A verificação é feita ANTES de desenhar qualquer coisa na tela
     if not df_mais_vendidos.empty:
         st.markdown(f"<div class='section-title-container'><img src='{URL_MAIS_VENDIDOS}' class='section-title-image'></div>", unsafe_allow_html=True)
         cols = st.columns(4)
         for i, (prod_id, row) in enumerate(df_mais_vendidos.iterrows()):
             with cols[i % 4]:
-                # Usamos o 'ID' real do produto que veio da junção dos dataframes
                 render_product_card(row['ID'], row, key_prefix='vendido')
         st.markdown("<hr>", unsafe_allow_html=True)
 
-    # --- SEÇÃO: NOSSAS OFERTAS (AGORA SÓ APARECE SE HOUVER PROMOÇÕES) ---
+    # --- SEÇÃO: NOSSAS OFERTAS (SÓ APARECE SE HOUVER PROMOÇÕES) ---
     df_ofertas = df_catalogo[pd.notna(df_catalogo['PRECO_PROMOCIONAL']) & (df_catalogo['PRECO_FINAL'] < df_catalogo['PRECO'])]
     
-    if not df_ofertas.empty: # <--- MUDANÇA AQUI: Só renderiza se houver ofertas
+    if not df_ofertas.empty: 
         st.markdown(f"<div class='section-title-container'><img src='{URL_OFERTAS}' class='section-title-image'></div>", unsafe_allow_html=True)
         
         cols = st.columns(4)
@@ -278,7 +313,7 @@ else:
             with cols[i % 4]:
                 render_product_card(prod_id, row, key_prefix='oferta')
         
-        st.markdown("<hr>", unsafe_allow_html=True) # <--- MUDANÇA AQUI: A linha também é condicional
+        st.markdown("<hr>", unsafe_allow_html=True)
 
     # --- SEÇÃO: CATÁLOGO COMPLETO ---
     st.subheader("🛍️ Catálogo Completo")
