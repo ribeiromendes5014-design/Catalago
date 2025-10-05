@@ -13,12 +13,11 @@ from collections import defaultdict
 SHEET_NAME_CATALOGO = "produtos"
 SHEET_NAME_PEDIDOS = "pedidos"
 SHEET_NAME_PROMOCOES = "promocoes"
-BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
+BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-na-zvan-i-ya-3.jpg'
 
 # --- URLs DAS IMAGENS DE TÍTULO ---
 URL_MAIS_VENDIDOS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-queridinhos1.png"
 URL_OFERTAS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-oferta.png"
-# REMOVIDO: URL_ICONE_OFERTAS que estava causando a imagem quebrada.
 
 
 # Inicialização do Carrinho de Compras
@@ -145,16 +144,58 @@ def remover_do_carrinho(produto_id):
         del st.session_state.carrinho[produto_id]
         st.toast(f"❌ {nome} removido.", icon="🗑️")
 
-def render_product_image(link_imagem):
-    placeholder_html = """<div class="product-image-container"><span class="placeholder-text">Sem Imagem</span></div>"""
+def render_product_image_html(link_imagem):
+    placeholder_html = """<div class="product-image-container-html"><span class="placeholder-text">Sem Imagem</span></div>"""
     if link_imagem and str(link_imagem).strip().startswith('http'):
-        st.markdown(f'<div class="product-image-container"><img src="{link_imagem}"></div>', unsafe_allow_html=True)
-    else:
-        st.markdown(placeholder_html, unsafe_allow_html=True)
+        return f'<div class="product-image-container-html"><img src="{link_imagem}"></div>'
+    return placeholder_html
 
-def render_product_card(prod_id, row, key_prefix):
+def get_product_card_html(prod_id, row):
+    """Gera o HTML para um card de produto, sem botões Streamlit."""
+    img_html = render_product_image_html(row.get('LINKIMAGEM'))
+    preco_final = row['PRECO_FINAL']
+    preco_original = row['PRECO']
+    is_promotion = pd.notna(row.get('PRECO_PROMOCIONAL')) and preco_final < preco_original
+
+    promo_badge = f"""<span class="promo-badge">🔥 PROMOÇÃO</span>""" if is_promotion else ""
+    
+    if is_promotion:
+        price_html = f"""<div class="price-container"><span class='price-original'>R$ {preco_original:.2f}</span><h4 class='price-promo'>R$ {preco_final:.2f}</h4></div>"""
+    else:
+        price_html = f"<h4 class='price-normal'>R$ {preco_final:.2f}</h4>"
+
+    # Adicionamos um placeholder para o botão "Adicionar" (pois botões Streamlit não funcionam aqui)
+    button_html = f"""<button class='add-to-cart-placeholder' disabled>Ver Detalhes</button>"""
+    
+    # NOTE: Foi mantido o "container" do Streamlit com borda, mas o conteúdo é HTML puro.
+    # O expander de detalhes é perdido no HTML puro.
+    
+    card_html = f"""
+    <div class="product-card-html">
+        {img_html}
+        {promo_badge}
+        <strong>{row['NOME']}</strong>
+        <p class="product-short-desc">{row.get('DESCRICAOCURTA', '')}</p>
+        <div class="card-footer">
+            {price_html}
+            <a href="#" class="add-to-cart-link">Detalhes</a>
+        </div>
+    </div>
+    """
+    return card_html
+
+
+def render_product_card_with_streamlit_buttons(prod_id, row, key_prefix):
+    """Renderiza o card com colunas e botões funcionais do Streamlit."""
     with st.container(border=True):
-        render_product_image(row.get('LINKIMAGEM'))
+        # A função render_product_image agora está definida para Markdown
+        placeholder_html = """<div class="product-image-container"><span class="placeholder-text">Sem Imagem</span></div>"""
+        link_imagem = row.get('LINKIMAGEM')
+        if link_imagem and str(link_imagem).strip().startswith('http'):
+            st.markdown(f'<div class="product-image-container"><img src="{link_imagem}"></div>', unsafe_allow_html=True)
+        else:
+            st.markdown(placeholder_html, unsafe_allow_html=True)
+
         preco_final = row['PRECO_FINAL']
         preco_original = row['PRECO']
         is_promotion = pd.notna(row.get('PRECO_PROMOCIONAL')) and preco_final < preco_original
@@ -178,10 +219,11 @@ def render_product_card(prod_id, row, key_prefix):
             if st.button("➕ Adicionar", key=f'{key_prefix}_{prod_id}', use_container_width=True):
                 adicionar_ao_carrinho(prod_id, row['NOME'], preco_final); st.rerun()
 
+
 # --- Layout do Aplicativo ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS ---
+# --- CSS (Adicionado CSS para o Carrossel) ---
 st.markdown(f"""
 <style>
     .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}); background-size: cover; background-attachment: fixed; }}
@@ -192,8 +234,20 @@ st.markdown(f"""
     .cart-badge-button {{ background-color: #C2185B; color: white; border-radius: 12px; padding: 8px 15px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; transition: background-color 0.3s; display: inline-flex; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-width: 150px; justify-content: center; }}
     .cart-badge-button:hover {{ background-color: #E91E63; }}
     .cart-count {{ background-color: white; color: #E91E63; border-radius: 50%; padding: 2px 7px; margin-left: 8px; font-size: 14px; line-height: 1; }}
+
+    /* Estilos para cards de produtos Streamlit (Mais Vendidos/Ofertas) */
     .product-image-container {{ height: 220px; display: flex; align-items: center; justify-content: center; margin-bottom: 1rem; overflow: hidden; }}
     .product-image-container img {{ max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }}
+    
+    /* Estilos para cards de produtos HTML (Carrossel) */
+    .product-image-container-html {{ height: 150px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.5rem; overflow: hidden; }}
+    .product-image-container-html img {{ max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }}
+    .product-card-html {{ border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin: 5px; min-width: 200px; max-width: 200px; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }}
+    .product-short-desc {{ font-size: 0.8rem; color: #666; height: 30px; overflow: hidden; }}
+    .card-footer {{ display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }}
+    .add-to-cart-link {{ background-color: #C2185B; color: white; padding: 5px 10px; border-radius: 5px; text-decoration: none; font-size: 0.9rem; }}
+
+
     .placeholder-text {{ color: #a0a0a0; font-size: 1.1rem; font-weight: bold; }}
     .promo-badge {{ background-color: #D32F2F; color: white; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: inline-block;}}
     .price-container {{ line-height: 1.2; }}
@@ -202,6 +256,18 @@ st.markdown(f"""
     .price-normal {{ color: #880E4F; margin:0; line-height:2.5; }}
     .section-title-container {{ text-align: center; margin-top: 2rem; margin-bottom: 1.5rem; }}
     .section-title-image {{ max-width: 300px; }}
+
+    /* ESTILOS DO CARROSSEL */
+    .carousel-outer-container {{
+        overflow-x: scroll; /* Ativa a rolagem horizontal */
+        padding-bottom: 20px; /* Espaço para a barra de rolagem não cortar o conteúdo */
+        margin-top: 15px;
+    }}
+    .product-wrapper {{
+        display: flex; /* Garante que os itens fiquem lado a lado */
+        flex-direction: row;
+        width: max-content; /* Permite que a div cresça para o lado */
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -211,7 +277,7 @@ st_autorefresh(interval=60000, key="auto_refresh_catalogo")
 # --- CABEÇALHO ---
 col_logo, col_titulo = st.columns([0.1, 5]); col_logo.markdown("<h3>💖</h3>", unsafe_allow_html=True); col_titulo.title("Catálogo de Pedidos Doce&Bella")
 
-# --- BARRA ROSA (PESQUISA E CARRINHO) (COM MELHORIA DE LEITURA) ---
+# --- BARRA ROSA (PESQUISA E CARRINHO) ---
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
@@ -223,8 +289,7 @@ with col_pesquisa:
     st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
 
 with col_carrinho:
-    # Este HTML/CSS cria o botão rosa "SEU PEDIDO" com o contador de itens.
-    # O comando 'onclick' simula o clique no popover invisível do Streamlit.
+    # Cria o botão personalizado que aciona o popover
     custom_cart_button = f"""
         <div class='cart-badge-button' onclick='document.querySelector("[data-testid=\"stPopover\"] > div:first-child > button").click();'>
             🛒 SEU PEDIDO
@@ -233,8 +298,6 @@ with col_carrinho:
     """
     st.markdown(custom_cart_button, unsafe_allow_html=True)
 
-    # Este é o componente do Streamlit que cria a janela pop-up.
-    # O botão real dele é escondido com CSS, e o nosso botão personalizado acima o aciona.
     with st.popover(" ", use_container_width=False, help="Clique para ver os itens e finalizar o pedido"):
 
         st.header("🛒 Detalhes do Pedido")
@@ -285,13 +348,13 @@ st.markdown("</div></div>", unsafe_allow_html=True)
 df_catalogo = carregar_catalogo()
 
 # --------------------------------------------------------------------------
-# --- LAYOUT PRINCIPAL (COM AS CORREÇÕES ANTERIORES) ---
+# --- LAYOUT PRINCIPAL ---
 # --------------------------------------------------------------------------
 
 if df_catalogo.empty:
     st.warning("O catálogo de produtos não pôde ser carregado. Verifique a planilha.")
 else:
-    # --- SEÇÃO: OS MAIS QUERIDINHOS (AGORA SÓ APARECE SE HOUVER DADOS) ---
+    # --- SEÇÃO: OS MAIS QUERIDINHOS (COM BOTÕES FUNCIONAIS) ---
     df_mais_vendidos = carregar_mais_vendidos(df_catalogo, top_n=4)
 
     if not df_mais_vendidos.empty:
@@ -299,10 +362,10 @@ else:
         cols = st.columns(4)
         for i, (prod_id, row) in enumerate(df_mais_vendidos.iterrows()):
             with cols[i % 4]:
-                render_product_card(row['ID'], row, key_prefix='vendido')
+                render_product_card_with_streamlit_buttons(row['ID'], row, key_prefix='vendido')
         st.markdown("<hr>", unsafe_allow_html=True)
 
-    # --- SEÇÃO: NOSSAS OFERTAS (SÓ APARECE SE HOUVER PROMOÇÕES) ---
+    # --- SEÇÃO: NOSSAS OFERTAS (COM BOTÕES FUNCIONAIS) ---
     df_ofertas = df_catalogo[pd.notna(df_catalogo['PRECO_PROMOCIONAL']) & (df_catalogo['PRECO_FINAL'] < df_catalogo['PRECO'])]
     
     if not df_ofertas.empty: 
@@ -311,13 +374,14 @@ else:
         cols = st.columns(4)
         for i, (prod_id, row) in enumerate(df_ofertas.iterrows()):
             with cols[i % 4]:
-                render_product_card(prod_id, row, key_prefix='oferta')
+                render_product_card_with_streamlit_buttons(prod_id, row, key_prefix='oferta')
         
         st.markdown("<hr>", unsafe_allow_html=True)
 
-    # --- SEÇÃO: CATÁLOGO COMPLETO ---
+    # --- SEÇÃO: CATÁLOGO COMPLETO (AGORA EM CARROSSEL) ---
     st.subheader("🛍️ Catálogo Completo")
     termo = st.session_state.get('termo_pesquisa_barra', '').lower()
+    
     if termo:
         df_filtrado = df_catalogo[df_catalogo.apply(lambda row: termo in str(row['NOME']).lower() or termo in str(row['DESCRICAOLONGA']).lower(), axis=1)]
     else:
@@ -326,7 +390,17 @@ else:
     if df_filtrado.empty:
         st.info(f"Nenhum produto encontrado com o termo '{termo}'.")
     else:
-        cols = st.columns(4)
-        for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
-            with cols[i % 4]:
-                render_product_card(prod_id, row, key_prefix='catalogo')
+        # 1. Gera o HTML de todos os cards
+        html_cards_catalogo = [get_product_card_html(prod_id, row) for prod_id, row in df_filtrado.iterrows()]
+
+        # 2. Renderiza o carrossel usando o HTML gerado
+        st.markdown(f"""
+            <div class="carousel-outer-container">
+                <div class="product-wrapper">
+                    {''.join(html_cards_catalogo)}
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # 3. Informa sobre a limitação do carrossel injetado
+        st.caption("✨ Role a barra abaixo para ver todos os produtos. Clique em 'Detalhes' para mais informações (funcionalidade completa de 'Adicionar' está nas seções acima).")
