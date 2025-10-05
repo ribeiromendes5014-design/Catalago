@@ -15,18 +15,17 @@ SHEET_NAME_PEDIDOS = "pedidos"
 SHEET_NAME_PROMOCOES = "promocoes"
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
 
-# --- URLs DAS IMAGENS DE TÍTULO (FORNECIDAS POR VOCÊ) ---
+# --- URLs DAS IMAGENS DE TÍTULO ---
 URL_MAIS_VENDIDOS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-queridinhos1.png"
 URL_OFERTAS = "https://d1a9qnv764bsoo.cloudfront.net/stores/002/838/949/rte/mid-oferta.png"
-# Adicionei um ícone similar ao da sua imagem para a seção de ofertas
-URL_ICONE_OFERTAS = 'https://i.ibb.co/9v2p1sP/icone-ofertas.png'
+# REMOVIDO: URL_ICONE_OFERTAS que estava causando a imagem quebrada.
 
 
 # Inicialização do Carrinho de Compras
 if 'carrinho' not in st.session_state:
     st.session_state.carrinho = {}
 
-# --- Funções de Conexão e Carregamento de Dados ---
+# --- Funções de Conexão e Carregamento de Dados (sem alterações) ---
 
 def get_gspread_client():
     """Cria um cliente GSpread autenticado."""
@@ -53,7 +52,6 @@ def carregar_catalogo():
     """Carrega o catálogo, aplica as promoções e prepara o DataFrame."""
     try:
         sh = get_gspread_client()
-        # Carrega dados dos produtos
         worksheet_produtos = sh.worksheet(SHEET_NAME_CATALOGO)
         data_produtos = worksheet_produtos.get_all_values()
         df_produtos = pd.DataFrame(data_produtos[1:], columns=data_produtos[0])
@@ -62,7 +60,6 @@ def carregar_catalogo():
         df_produtos = df_produtos[df_produtos['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
         df_produtos.set_index('ID', inplace=True)
 
-        # Carrega dados das promoções
         try:
             worksheet_promocoes = sh.worksheet(SHEET_NAME_PROMOCOES)
             data_promocoes = worksheet_promocoes.get_all_values()
@@ -74,7 +71,6 @@ def carregar_catalogo():
         except gspread.exceptions.WorksheetNotFound:
             df_promocoes = pd.DataFrame(columns=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
 
-        # Junta produtos e promoções
         if not df_promocoes.empty:
             df_final = pd.merge(df_produtos, df_promocoes, left_index=True, right_on='ID_PRODUTO', how='left')
             df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO'])
@@ -87,8 +83,7 @@ def carregar_catalogo():
         st.error(f"Ocorreu um erro ao carregar o catálogo: {e}")
         return pd.DataFrame()
 
-# --- NOVA FUNÇÃO ---
-@st.cache_data(ttl=300) # Cache de 5 minutos para os mais vendidos
+@st.cache_data(ttl=300)
 def carregar_mais_vendidos(df_catalogo, top_n=4):
     """Lê a planilha de pedidos, calcula os produtos mais vendidos e retorna um DataFrame com os detalhes."""
     try:
@@ -100,16 +95,14 @@ def carregar_mais_vendidos(df_catalogo, top_n=4):
             return pd.DataFrame()
 
         vendas = defaultdict(int)
-        # Pula o cabeçalho (pedidos[1:]) e processa os pedidos
         for linha in pedidos[1:]:
             try:
-                # O JSON com os itens está na 5ª coluna (índice 4)
                 itens_json = linha[4]
                 dados_pedido = json.loads(itens_json)
                 for item in dados_pedido.get('itens', []):
-                    vendas[item['id']] += item.get('quantidade', 1) # Usa 'quantidade'
+                    vendas[item['id']] += item.get('quantidade', 1)
             except (IndexError, json.JSONDecodeError):
-                continue # Pula linhas mal formatadas
+                continue
         
         if not vendas:
             return pd.DataFrame()
@@ -117,13 +110,11 @@ def carregar_mais_vendidos(df_catalogo, top_n=4):
         df_vendas = pd.DataFrame(list(vendas.items()), columns=['ID', 'QTD_VENDIDA']).astype({'ID': 'int64'})
         df_vendas = df_vendas.sort_values(by='QTD_VENDIDA', ascending=False)
         
-        # Junta com o catálogo para obter os detalhes dos produtos
         df_mais_vendidos = pd.merge(df_vendas, df_catalogo, left_on='ID', right_index=True)
         
         return df_mais_vendidos.head(top_n)
     except gspread.exceptions.WorksheetNotFound:
-        st.warning(f"Aba de '{SHEET_NAME_PEDIDOS}' não encontrada para calcular os mais vendidos.")
-        return pd.DataFrame()
+        return pd.DataFrame() # Retorna vazio se a aba não existe, para não mostrar erro
     except Exception as e:
         st.error(f"Erro ao calcular os mais vendidos: {e}")
         return pd.DataFrame()
@@ -131,7 +122,6 @@ def carregar_mais_vendidos(df_catalogo, top_n=4):
 
 # --- Funções do Aplicativo (sem grandes alterações) ---
 def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
-    # (função inalterada)
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_PEDIDOS)
@@ -143,7 +133,6 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
         return False
 
 def adicionar_ao_carrinho(produto_id, produto_nome, produto_preco):
-    # (função inalterada)
     if produto_id in st.session_state.carrinho:
         st.session_state.carrinho[produto_id]['quantidade'] += 1
     else:
@@ -151,14 +140,12 @@ def adicionar_ao_carrinho(produto_id, produto_nome, produto_preco):
     st.toast(f"✅ {produto_nome} adicionado!", icon="🛍️"); time.sleep(0.1)
 
 def remover_do_carrinho(produto_id):
-    # (função inalterada)
     if produto_id in st.session_state.carrinho:
         nome = st.session_state.carrinho[produto_id]['nome']
         del st.session_state.carrinho[produto_id]
         st.toast(f"❌ {nome} removido.", icon="🗑️")
 
 def render_product_image(link_imagem):
-    # (função inalterada)
     placeholder_html = """<div class="product-image-container"><span class="placeholder-text">Sem Imagem</span></div>"""
     if link_imagem and str(link_imagem).strip().startswith('http'):
         st.markdown(f'<div class="product-image-container"><img src="{link_imagem}"></div>', unsafe_allow_html=True)
@@ -166,7 +153,6 @@ def render_product_image(link_imagem):
         st.markdown(placeholder_html, unsafe_allow_html=True)
 
 def render_product_card(prod_id, row, key_prefix):
-    # (função inalterada)
     with st.container(border=True):
         render_product_image(row.get('LINKIMAGEM'))
         preco_final = row['PRECO_FINAL']
@@ -198,17 +184,14 @@ st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sid
 # --- CSS ---
 st.markdown(f"""
 <style>
-    /* ... Estilos gerais ... */
     .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}); background-size: cover; background-attachment: fixed; }}
     div.block-container {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 10px; padding: 2rem; margin-top: 1rem; }}
-    /* ... Estilos da barra rosa e carrinho (inalterados) ... */
     .pink-bar-container {{ background-color: #E91E63; padding: 20px 0; width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
     .pink-bar-content {{ width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; }}
     div[data-testid="stPopover"] > div:first-child > button {{ display: none; }}
     .cart-badge-button {{ background-color: #C2185B; color: white; border-radius: 12px; padding: 8px 15px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; transition: background-color 0.3s; display: inline-flex; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-width: 150px; justify-content: center; }}
     .cart-badge-button:hover {{ background-color: #E91E63; }}
     .cart-count {{ background-color: white; color: #E91E63; border-radius: 50%; padding: 2px 7px; margin-left: 8px; font-size: 14px; line-height: 1; }}
-    /* ... Estilos do card de produto ... */
     .product-image-container {{ height: 220px; display: flex; align-items: center; justify-content: center; margin-bottom: 1rem; overflow: hidden; }}
     .product-image-container img {{ max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }}
     .placeholder-text {{ color: #a0a0a0; font-size: 1.1rem; font-weight: bold; }}
@@ -219,7 +202,6 @@ st.markdown(f"""
     .price-normal {{ color: #880E4F; margin:0; line-height:2.5; }}
     .section-title-container {{ text-align: center; margin-top: 2rem; margin-bottom: 1.5rem; }}
     .section-title-image {{ max-width: 300px; }}
-    .section-icon-image {{ max-width: 80px; margin-bottom: 1rem; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -229,8 +211,7 @@ st_autorefresh(interval=60000, key="auto_refresh_catalogo")
 # --- CABEÇALHO ---
 col_logo, col_titulo = st.columns([0.1, 5]); col_logo.markdown("<h3>💖</h3>", unsafe_allow_html=True); col_titulo.title("Catálogo de Pedidos Doce&Bella")
 
-# --- BARRA ROSA (PESQUISA E CARRINHO) ---
-# (Seção inalterada)
+# --- BARRA ROSA (PESQUISA E CARRINHO) (Inalterado) ---
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
@@ -267,28 +248,28 @@ st.markdown("</div></div>", unsafe_allow_html=True)
 df_catalogo = carregar_catalogo()
 
 # --------------------------------------------------------------------------
-# --- NOVO LAYOUT PRINCIPAL ---
+# --- NOVO LAYOUT PRINCIPAL (COM AS CORREÇÕES) ---
 # --------------------------------------------------------------------------
 
 if df_catalogo.empty:
     st.warning("O catálogo de produtos não pôde ser carregado. Verifique a planilha.")
 else:
-    # --- SEÇÃO: OS MAIS QUERIDINHOS ---
-    st.markdown(f"<div class='section-title-container'><img src='{URL_MAIS_VENDIDOS}' class='section-title-image'></div>", unsafe_allow_html=True)
+    # --- SEÇÃO: OS MAIS QUERIDINHOS (AGORA SÓ APARECE SE HOUVER DADOS) ---
     df_mais_vendidos = carregar_mais_vendidos(df_catalogo, top_n=4)
 
-    if df_mais_vendidos.empty:
-        st.info("Não há dados de vendas suficientes para determinar os produtos mais vendidos.")
-    else:
+    # A verificação é feita ANTES de desenhar qualquer coisa na tela
+    if not df_mais_vendidos.empty:
+        st.markdown(f"<div class='section-title-container'><img src='{URL_MAIS_VENDIDOS}' class='section-title-image'></div>", unsafe_allow_html=True)
         cols = st.columns(4)
         for i, (prod_id, row) in enumerate(df_mais_vendidos.iterrows()):
             with cols[i % 4]:
+                # Usamos o 'ID' real do produto que veio da junção dos dataframes
                 render_product_card(row['ID'], row, key_prefix='vendido')
+        st.markdown("<hr>", unsafe_allow_html=True)
 
-    st.markdown("<hr>", unsafe_allow_html=True)
-
-    # --- SEÇÃO: NOSSAS OFERTAS ---
-    st.markdown(f"<div class='section-title-container'><img src='{URL_ICONE_OFERTAS}' class='section-icon-image'><img src='{URL_OFERTAS}' class='section-title-image'></div>", unsafe_allow_html=True)
+    # --- SEÇÃO: NOSSAS OFERTAS (COM A IMAGEM CORRIGIDA) ---
+    # Removido o ícone que estava quebrado
+    st.markdown(f"<div class='section-title-container'><img src='{URL_OFERTAS}' class='section-title-image'></div>", unsafe_allow_html=True)
     df_ofertas = df_catalogo[pd.notna(df_catalogo['PRECO_PROMOCIONAL']) & (df_catalogo['PRECO_FINAL'] < df_catalogo['PRECO'])]
     
     if df_ofertas.empty:
