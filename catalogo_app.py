@@ -145,8 +145,10 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 
 # --- CABEÇALHO ---
 col_logo, col_titulo = st.columns([0.1, 5])
-with col_logo: st.markdown("<h3>💖</h3>", unsafe_allow_html=True)
-with col_titulo: st.title("Catálogo de Pedidos Doce&Bella")
+with col_logo:
+    st.markdown("<h3>💖</h3>", unsafe_allow_html=True)
+with col_titulo:
+    st.title("Catálogo de Pedidos Doce&Bella")
 
 # --- BARRA ROSA (PESQUISA E CARRINHO) ---
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
@@ -154,8 +156,10 @@ num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values(
 
 st.markdown("<div class='pink-bar-container'><div class='pink-bar-content'>", unsafe_allow_html=True)
 col_pesquisa, col_carrinho = st.columns([5, 1])
+
 with col_pesquisa:
     st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
+
 with col_carrinho:
     st.markdown(f"""
         <div class='cart-badge-button' onclick='document.querySelector("[data-testid=\"stPopover\"] > div:first-child > button").click();'>
@@ -172,19 +176,28 @@ with col_carrinho:
             for prod_id, item in list(st.session_state.carrinho.items()):
                 c1,c2,c3,c4 = st.columns([3,1.5,2,1])
                 c1.write(f"*{item['nome']}*"); c2.markdown(f"**{item['quantidade']}x**"); c3.markdown(f"R$ {item['preco']*item['quantidade']:.2f}")
-                if c4.button("X", key=f'rem_{prod_id}_popover'): remover_do_carrinho(prod_id); st.rerun()
+                if c4.button("X", key=f'rem_{prod_id}_popover'):
+                    remover_do_carrinho(prod_id)
+                    st.rerun()
             st.markdown("---")
             with st.form("form_finalizar_pedido", clear_on_submit=True):
-                st.subheader("Finalizar Pedido"); nome = st.text_input("Seu Nome Completo:"); contato = st.text_input("Seu Contato (WhatsApp/E-mail):")
+                st.subheader("Finalizar Pedido")
+                nome = st.text_input("Seu Nome Completo:")
+                contato = st.text_input("Seu Contato (WhatsApp/E-mail):")
                 if st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True):
                     if nome and contato:
                         detalhes = {"total": total_acumulado, "itens": [
                             {"id": int(k), **v} for k, v in st.session_state.carrinho.items()
                         ]}
                         if salvar_pedido(nome, contato, total_acumulado, json.dumps(detalhes, ensure_ascii=False)):
-                            st.balloons(); st.success("🎉 Pedido enviado com sucesso!"); st.session_state.carrinho = {}; st.rerun()
-                        else: st.error("Falha ao salvar o pedido.")
-                    else: st.warning("Preencha seu nome e contato.")
+                            st.balloons()
+                            st.success("🎉 Pedido enviado com sucesso!")
+                            st.session_state.carrinho = {}
+                            st.rerun()
+                        else:
+                            st.error("Falha ao salvar o pedido.")
+                    else:
+                        st.warning("Preencha seu nome e contato.")
 st.markdown("</div></div>", unsafe_allow_html=True)
 
 # --- SEÇÃO DE PRODUTOS ---
@@ -194,8 +207,10 @@ df_catalogo = carregar_catalogo()
 def render_product_card(prod_id, row, key_prefix):
     with st.container(border=True):
         render_product_image(row.get('LINKIMAGEM'))
-        st.markdown(f"**{row['NOME']}**"); st.caption(row.get('DESCRICAOCURTA', ''))
-        with st.expander("Ver detalhes"): st.markdown(row.get('DESCRICAOLONGA', 'Sem descrição detalhada.'))
+        st.markdown(f"**{row['NOME']}**")
+        st.caption(row.get('DESCRICAOCURTA', ''))
+        with st.expander("Ver detalhes"):
+            st.markdown(row.get('DESCRICAOLONGA', 'Sem descrição detalhada.'))
         col_preco, col_botao = st.columns([2, 2])
         col_preco.markdown(f"<h4 style='color: #880E4F; margin:0; line-height:2.5;'>R$ {row['PRECO']:.2f}</h4>", unsafe_allow_html=True)
         if col_botao.button("➕ Adicionar", key=f'{key_prefix}_{prod_id}', use_container_width=True):
@@ -209,9 +224,13 @@ if termo:
     df_filtrado = df_catalogo[df_catalogo.apply(lambda r: termo in str(r['NOME']).lower() or termo in str(r['DESCRICAOLONGA']).lower(), axis=1)]
 
 if df_filtrado.empty:
-    st.info(f"Nenhum produto encontrado com o termo '{termo}'.") if termo else st.warning("Catálogo vazio.")
+    if termo:
+        st.info(f"Nenhum produto encontrado com o termo '{termo}'.")
+    else:
+        st.warning("Catálogo vazio ou indisponível no momento.")
 else:
     st.subheader("✨ Nossos Produtos")
     cols = st.columns(4)
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
-        with cols[i % 4]: render_product_card(prod_id, row, key_prefix='prod')
+        with cols[i % 4]:
+            render_product_card(prod_id, row, key_prefix='prod')
