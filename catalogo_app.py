@@ -1,35 +1,43 @@
 import streamlit as st
 import pandas as pd
+import math
+# Precisamos importar a biblioteca gspread-streamlit para a conexão
+from gspread_streamlit import get_worksheet 
 
-# --- Configuração da Página ---
-st.set_page_config(
-    page_title="Catálogo de Produtos | Doce&Bella",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# ... (restante do código: st.set_page_config, etc.) ...
 
 # --- Função de Cache para Carregar os Dados ---
-# Esta função garante que os dados da planilha sejam lidos
-# rapidamente e apenas quando necessário.
-@st.cache_data(ttl=600) # O Streamlit relê a cada 10 minutos (600 segundos)
+# ATENÇÃO: É preciso instalar a biblioteca gspread-streamlit no ambiente (requirements.txt)
+@st.cache_data(ttl=600)
 def load_data():
     try:
-        # AQUI O STREAMLIT SE CONECTA USANDO AS CHAVES SECRETAS
-        conn = st.connection("gsheets", type=st.secrets["gsheets"]["creds"]["type"])
+        # AQUI USAMOS O GET_WORKSHEET DA BIBLIOTECA gspread-streamlit
+        # Ele lê as credenciais do seu secrets.toml automaticamente!
+        worksheet = get_worksheet(
+            spreadsheet_title=None, # Título não é necessário se usar a URL
+            # A URL da planilha vem do seu secrets.toml
+            spreadsheet_url=st.secrets["gsheets"]["sheets_url"],
+            worksheet_name="Sheet1" # O nome da sua primeira aba
+        )
         
-        # Pega os dados da primeira aba da planilha (sheet=0)
-        df = conn.read(spreadsheet=st.secrets["gsheets"]["sheets_url"], 
-                       worksheet="Sheet1") 
+        # Converte a planilha lida para um DataFrame do Pandas
+        df = pd.DataFrame(worksheet.get_all_records())
                        
         # Filtra apenas os produtos que estão 'Disponivel' como 'Sim'
-        df = df[df['DISPONIVEL'].str.lower() == 'sim'].copy()
+        df = df[df['DISPONIVEL'].astype(str).str.lower() == 'sim'].copy()
         
         # Converte o Preço para um formato numérico para cálculos
         df['PRECO'] = pd.to_numeric(df['PRECO'], errors='coerce')
         
+        # Garante que as colunas críticas existam, caso a planilha esteja vazia
+        if df.empty or 'ID' not in df.columns:
+             st.warning("A planilha foi carregada, mas está vazia ou faltando colunas!")
+             return pd.DataFrame()
+             
+        df['ID'] = df['ID'].astype(str)
         return df
     except Exception as e:
-        st.error(f"Erro ao carregar dados da planilha. Verifique a conexão e as credenciais. Detalhe: {e}")
+        # st.error(f"Erro ao carregar dados da planilha. Detalhe: {e}")
         return pd.DataFrame() # Retorna um DataFrame vazio em caso de erro
 
 # Carrega os dados
@@ -60,3 +68,4 @@ else:
 
 
     st.success(f"Catálogo Carregado com Sucesso! Total de {len(df_produtos)} produtos disponíveis.")
+
