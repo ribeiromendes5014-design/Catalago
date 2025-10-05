@@ -10,7 +10,7 @@ import time
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
 SHEET_NAME_PEDIDOS = "pedidos"
-SHEET_NAME_PROMOCOES = "promocoes"
+SHEET_NAME_PROMOCOES = "promoções"
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
 
 
@@ -45,8 +45,8 @@ def get_gspread_client():
         st.error(f"Erro na autenticação do Google Sheets. Verifique o secrets.toml. Detalhe: {e}")
         st.stop()
 
-# CORRIGIDO: Garante que o tipo de dado do ID seja o mesmo da planilha de produtos.
-@st.cache_data(ttl=300)
+# ALTERADO: TTL diminuído para 60 segundos (1 minuto)
+@st.cache_data(ttl=60)
 def carregar_promocoes():
     """Carrega as promoções da aba 'promoções'."""
     try:
@@ -59,7 +59,6 @@ def carregar_promocoes():
         df = pd.DataFrame(data[1:], columns=data[0])
         df_essencial = df[['ID_PRODUTO', 'PRECO_PROMOCIONAL']].copy()
         df_essencial['PRECO_PROMOCIONAL'] = pd.to_numeric(df_essencial['PRECO_PROMOCIONAL'].str.replace(',', '.'), errors='coerce')
-        # AJUSTE CRÍTICO: Converte o ID para o mesmo tipo 'Int64' da planilha de produtos para garantir o 'match'.
         df_essencial['ID_PRODUTO'] = pd.to_numeric(df_essencial['ID_PRODUTO'], errors='coerce').astype('Int64')
         return df_essencial.dropna(subset=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
     except gspread.exceptions.WorksheetNotFound:
@@ -68,7 +67,8 @@ def carregar_promocoes():
         st.warning(f"Não foi possível carregar as promoções: {e}")
         return pd.DataFrame(columns=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
 
-@st.cache_data(ttl=600)
+# ALTERADO: TTL diminuído para 60 segundos (1 minuto)
+@st.cache_data(ttl=60)
 def carregar_catalogo():
     """Carrega o catálogo, aplica as promoções e prepara o DataFrame."""
     try:
@@ -177,7 +177,6 @@ col_pesquisa, col_carrinho = st.columns([5, 1])
 with col_pesquisa:
     st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
 
-# CORREÇÃO 1: CÓDIGO DO CARRINHO RESTAURADO EXATAMENTE COMO VOCÊ PEDIU
 with col_carrinho:
     custom_cart_button = f"""
         <div class='cart-badge-button' onclick='document.querySelector("[data-testid=\"stPopover\"] > div:first-child > button").click();'>
@@ -266,4 +265,3 @@ else:
     cols = st.columns(4)
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
         with cols[i % 4]: render_product_card(prod_id, row, key_prefix='prod')
-
