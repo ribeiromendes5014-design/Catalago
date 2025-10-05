@@ -180,7 +180,7 @@ def load_data():
 
         df['DISPONIVEL'] = df['DISPONIVEL'].apply(_guess_yes)
         df = df[df['DISPONIVEL'] == True].copy()
-        df['PRECO'] = pd.to_numeric(df['PRECO'], errors='coerce').fillna(0) # Converte para número, erro vira 0
+        df['PRECO'] = pd.to_numeric(df['PRECO'], errors='coerce').fillna(0)
         df['ID'] = df['ID'].astype(str)
 
         for optional in ['LINKIMAGEM', 'DESCRICAOCURTA', 'DESCRICAOLONGA']:
@@ -193,7 +193,6 @@ def load_data():
         st.error(f"Erro Crítico de Conexão. ❌ Verifique se o e-mail da Service Account está como 'Editor' na Planilha e se a aba se chama 'produtos'. Detalhe: {e}")
         return pd.DataFrame(), None
 
-# Carrega os dados e o objeto cliente (que será usado para salvar pedidos)
 df_produtos, gsheets_client = load_data()
 
 # --- 4. Função para Salvar o Pedido ---
@@ -261,35 +260,34 @@ elif not df_produtos.empty:
     st.title("💖 Nossos Produtos")
     st.markdown("---")
     
-    # Define o número de colunas que você quer no catálogo
     num_colunas = 4
     cols = st.columns(num_colunas)
     
-    # Itera sobre os produtos e os distribui nas colunas
     for index, row in df_produtos.iterrows():
         col = cols[index % num_colunas]
         
         with col:
-            img = row.get('LINKIMAGEM', '')
-            
-            if img:
-                # CORREÇÃO: Usamos 'width' para forçar um tamanho fixo na imagem
-                st.image(img, width=200) 
-            else:
-                st.image("https://placehold.co/400x300/F0F0F0/AAAAAA?text=Sem+imagem", width=200)
+            # Container com borda para cada produto, para um visual mais limpo
+            with st.container(border=True):
+                img = row.get('LINKIMAGEM', '')
+                
+                if img:
+                    st.image(img, width=200) 
+                else:
+                    st.image("https://placehold.co/400x300/F0F0F0/AAAAAA?text=Sem+imagem", width=200)
 
-            st.markdown(f"**{row.get('NOME', '')}**")
-            st.markdown(f"R$ {row.get('PRECO', 0.0):.2f}")
-            st.caption(row.get('DESCRICAOCURTA', ''))
+                st.markdown(f"**{row.get('NOME', '')}**")
+                st.markdown(f"R$ {row.get('PRECO', 0.0):.2f}")
+                st.caption(row.get('DESCRICAOCURTA', ''))
 
-            with st.popover("Ver Detalhes/Adicionar", use_container_width=True):
-                st.subheader(row.get('NOME', ''))
-                st.markdown(f"**Preço:** R$ {row.get('PRECO', 0.0):.2f}")
-                st.markdown(f"**Descrição:** {row.get('DESCRICAOLONGA', '')}")
-                quantidade = st.number_input("Quantidade:", min_value=1, value=1, step=1, key=f"qty_{row.get('ID')}")
-                if st.button(f"➕ Adicionar ao Pedido", key=f"add_{row.get('ID')}", type="primary"):
-                    adicionar_ao_carrinho(row.get('ID'), row.get('NOME'), row.get('PRECO'), quantidade)
-                    st.rerun()
+                with st.popover("Ver Detalhes/Adicionar", use_container_width=True):
+                    st.subheader(row.get('NOME', ''))
+                    st.markdown(f"**Preço:** R$ {row.get('PRECO', 0.0):.2f}")
+                    st.markdown(f"**Descrição:** {row.get('DESCRICAOLONGA', '')}")
+                    quantidade = st.number_input("Quantidade:", min_value=1, value=1, step=1, key=f"qty_{row.get('ID')}")
+                    if st.button(f"➕ Adicionar ao Pedido", key=f"add_{row.get('ID')}", type="primary"):
+                        adicionar_ao_carrinho(row.get('ID'), row.get('NOME'), row.get('PRECO'), quantidade)
+                        st.rerun()
 
 # --- ÍCONE DO CARRINHO FLUTUANTE (DEVE SER O ÚLTIMO ELEMENTO) ---
 total_itens = sum(item['quantidade'] for item in st.session_state.carrinho)
