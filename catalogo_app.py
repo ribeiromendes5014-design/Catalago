@@ -9,7 +9,7 @@ from io import StringIO
 import time
 
 # --- Configurações de Dados ---
-SHEET_NAME_CATALOGO = "produtos"
+SHEET_NAME_CATALOGO = "PRODUTOS" # CORRIGIDO: Nome da sua aba de produtos
 SHEET_NAME_PEDIDOS = "PEDIDOS"
 
 # Inicialização do Carrinho de Compras e Estado
@@ -51,7 +51,7 @@ def get_gspread_client():
         
 @st.cache_data(ttl=600) # Recarrega a cada 10 minutos
 def carregar_catalogo():
-    """Carrega o catálogo de produtos (aba CATALOGO) e prepara o DataFrame."""
+    """Carrega o catálogo de produtos (aba PRODUTOS) e prepara o DataFrame."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_CATALOGO)
@@ -72,7 +72,7 @@ def carregar_catalogo():
         return df_filtrado.set_index('ID')
     except Exception as e:
         st.error(f"Erro ao carregar o catálogo: {e}")
-        st.error("Dica: Verifique se o nome da aba da planilha está correto: 'CATALOGO'")
+        st.error("Dica: Verifique se o nome da aba da planilha está correto: 'PRODUTOS'")
         return pd.DataFrame()
 
 def salvar_pedido(nome_cliente: str, contato_cliente: str, valor_total: float, itens_json: str):
@@ -107,9 +107,8 @@ def adicionar_ao_carrinho(produto_id, quantidade, produto_nome, produto_preco):
             'preco': produto_preco,
             'quantidade': quantidade
         }
-        # Adicionamos um pequeno atraso para que o toast apareça antes do possível rerun
         st.toast(f"✅ {quantidade}x {produto_nome} adicionado(s) ao pedido!", icon="🛍️")
-        time.sleep(0.1) # Pausa rápida
+        time.sleep(0.1) # Pausa rápida para o toast aparecer
 
 def remover_do_carrinho(produto_id):
     if produto_id in st.session_state.carrinho:
@@ -122,7 +121,8 @@ def remover_do_carrinho(produto_id):
 st.set_page_config(
     page_title="Catálogo Doce&Bella", 
     layout="wide", 
-    initial_sidebar_state="expanded"
+    # Define a barra lateral para ser recolhida, focando no popover flutuante
+    initial_sidebar_state="collapsed" 
 )
 
 st.title("💖 Catálogo de Pedidos Doce&Bella")
@@ -135,7 +135,80 @@ if df_catalogo.empty:
     st.warning("O catálogo está vazio ou indisponível no momento. Tente novamente mais tarde.")
     st.stop()
     
-# 2. Exibição do Catálogo em Grade
+# --- Lógica do Carrinho Flutuante (Popover) no Topo ---
+
+total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
+num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
+carrinho_vazio = not st.session_state.carrinho
+
+# O Popover simula o botão flutuante e contém o carrinho e a finalização
+with st.popover(f"🛒 Seu Pedido ({num_itens}) - R$ {total_acumulado:.2f}", use_container_width=False):
+    st.header("🛒 Detalhes do Seu Pedido")
+
+    if carrinho_vazio:
+        st.info("Seu carrinho está vazio. Adicione itens do catálogo!")
+    else:
+        # Visualização e remoção de itens
+        for prod_id, item in st.session_state.carrinho.items():
+            st.markdown("---")
+            col_nome, col_qtd, col_preco, col_remover = st.columns([3, 1.5, 2, 1])
+            
+            col_nome.write(f"*{item['nome']}*")
+            col_qtd.markdown(f"**{item['quantidade']}x**")
+            col_preco.markdown(f"R$ {item['preco'] * item['quantidade']:.2f}")
+
+            # Botão de remoção
+            if col_remover.button("X", key=f'rem_{prod_id}_popover', help=f"Remover {item['nome']}"):
+                remover_do_carrinho(prod_id)
+                st.rerun()
+                
+        st.markdown("---")
+        
+        # Total
+        st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
+
+        # 2. Finalização de Pedido
+        st.subheader("Finalizar Pedido")
+        with st.form("form_finalizar_pedido_popover", clear_on_submit=True):
+            # As chaves 'popover' garantem que não conflitem com nenhum outro lugar
+            nome = st.text_input("Seu Nome Completo:", key='nome_cliente_popover')
+            contato = st.text_input("Seu Contato (WhatsApp/E-mail):", key='contato_cliente_popover')
+            
+            st.info("O pagamento será combinado após o envio.")
+            
+            submitted = st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True)
+            
+            if submitted:
+                if not nome or not contato:
+                    st.error("Por favor, preencha seu nome e contato para finalizar.")
+                else:
+                    # Preparar o relatório em JSON
+                    detalhes_pedido = {
+                        "total": total_acumulado,
+                        "itens": [
+                            {
+                                "id": int(prod_id),
+                                "nome": item['nome'],
+                                "preco": item['preco'],
+                                "qtd": item['quantidade'],
+                                "subtotal": item['preco'] * item['quantidade']
+                            } for prod_id, item in st.session_state.carrinho.items()
+                        ]
+                    }
+                    
+                    if salvar_pedido(nome, contato, total_acumulado, json.dumps(detalhes_pedido)):
+                        st.balloons() # Efeito visual de sucesso
+                        st.success("🎉 Pedido enviado com sucesso! Entraremos em contato em breve para combinar o pagamento e a entrega.")
+                        st.session_state.carrinho = {} # Limpa o carrinho
+                        st.rerun()
+                    else:
+                        st.error("Falha ao salvar o pedido. Tente novamente.")
+
+
+# --- Exibição do Catálogo em Grade ---
+
+st.subheader("Nossos Produtos Disponíveis")
+
 cols_per_row = 3 # Define a grade de 3 colunas
 cols = st.columns(cols_per_row) 
 
@@ -188,72 +261,4 @@ for i, (prod_id, row) in enumerate(df_catalogo.iterrows()):
                         row['NOME'], 
                         row['PRECO']
                     )
-                    st.rerun() # Recarrega para atualizar a sidebar
-
-
-# 3. Carrinho de Compras (Sidebar Flutuante)
-total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
-num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
-carrinho_vazio = not st.session_state.carrinho
-
-with st.sidebar:
-    st.header("🛒 Seu Pedido")
-    
-    if carrinho_vazio:
-        st.info("Seu carrinho está vazio. Adicione itens do catálogo!")
-    else:
-        # Métricas visíveis
-        st.metric(label="Total de Itens", value=f"{num_itens} unidade(s)")
-        st.markdown(f"<h2 style='color: #E91E63;'>R$ {total_acumulado:.2f}</h2>", unsafe_allow_html=True)
-        st.markdown("---")
-        
-        st.subheader("Itens no Pedido")
-        
-        # Visualização e remoção de itens
-        for prod_id, item in st.session_state.carrinho.items():
-            col_nome, col_qtd, col_remover = st.columns([3, 1.5, 1])
-            col_nome.write(f"*{item['nome']}*")
-            col_qtd.write(f"**{item['quantidade']}x**")
-            # Botão de remoção
-            if col_remover.button("Remover", key=f'rem_{prod_id}', type='secondary', help=f"Remover {item['nome']}"):
-                remover_do_carrinho(prod_id)
-                st.rerun()
-                
-        st.markdown("---")
-        
-        # 4. Finalização de Pedido
-        st.subheader("Finalizar Pedido")
-        with st.form("form_finalizar_pedido", clear_on_submit=True):
-            nome = st.text_input("Seu Nome Completo:", key='nome_cliente')
-            contato = st.text_input("Seu Contato (WhatsApp/E-mail):", key='contato_cliente')
-            
-            st.info(f"O valor total do pedido é de **R$ {total_acumulado:.2f}**. O pagamento será combinado após o envio.")
-            
-            submitted = st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True)
-            
-            if submitted:
-                if not nome or not contato:
-                    st.error("Por favor, preencha seu nome e contato para finalizar.")
-                else:
-                    # Preparar o relatório em JSON
-                    detalhes_pedido = {
-                        "total": total_acumulado,
-                        "itens": [
-                            {
-                                "id": int(prod_id),
-                                "nome": item['nome'],
-                                "preco": item['preco'],
-                                "qtd": item['quantidade'],
-                                "subtotal": item['preco'] * item['quantidade']
-                            } for prod_id, item in st.session_state.carrinho.items()
-                        ]
-                    }
-                    
-                    if salvar_pedido(nome, contato, total_acumulado, json.dumps(detalhes_pedido)):
-                        st.balloons() # Efeito visual de sucesso
-                        st.success("🎉 Pedido enviado com sucesso! Entraremos em contato em breve para combinar o pagamento e a entrega.")
-                        st.session_state.carrinho = {} # Limpa o carrinho
-                        st.rerun()
-                    else:
-                        st.error("Falha ao salvar o pedido. Tente novamente.")
-
+                    st.rerun() # Recarrega para atualizar o popover flutuante
