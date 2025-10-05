@@ -4,6 +4,7 @@ import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import json
+from datetime import datetime
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
@@ -12,7 +13,7 @@ SHEET_NAME_PEDIDOS = "pedidos"
 # --- Conexão com Google Sheets (Sem alterações) ---
 @st.cache_resource(ttl=None)
 def get_gspread_client():
-    """Cria um cliente GSpread autenticado usando o service account do st.secrets."""
+    """Cria um cliente GSpread autenticado."""
     try:
         gcp_sa_credentials = {
             "type": st.secrets["gsheets"]["type"], "project_id": st.secrets["gsheets"]["project_id"],
@@ -28,34 +29,56 @@ def get_gspread_client():
         sh = client.open_by_url(st.secrets["gsheets"]["sheet_url"])
         return sh
     except Exception as e:
-        st.error(f"Erro na autenticação com o Google Sheets. Verifique seu `secrets.toml`. Detalhe: {e}")
+        st.error(f"Erro na autenticação com o Google Sheets: {e}")
         st.stop()
 
 @st.cache_data(ttl=60)
 def carregar_dados(sheet_name):
-    """Carrega todos os dados de uma aba específica."""
+    """Carrega dados de uma aba, garantindo que a coluna STATUS exista."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(sheet_name)
         data = worksheet.get_all_values()
         if len(data) < 2:
-             return pd.DataFrame()
+            return pd.DataFrame()
+        
         df = pd.DataFrame(data[1:], columns=data[0])
+        
+        # Garante que a coluna STATUS exista na tabela de pedidos
+        if sheet_name == SHEET_NAME_PEDIDOS and 'STATUS' not in df.columns:
+            df['STATUS'] = ''
         
         if sheet_name == SHEET_NAME_CATALOGO and 'ID' in df.columns:
             df['ID'] = pd.to_numeric(df['ID'], errors='coerce')
-
+        
         return df
     except gspread.exceptions.WorksheetNotFound:
-        st.error(f"Erro: A aba '{sheet_name}' não foi encontrada na sua planilha.")
+        st.error(f"Erro: A aba '{sheet_name}' não foi encontrada.")
         return pd.DataFrame()
     except Exception as e:
         st.error(f"Ocorreu um erro ao carregar os dados: {e}")
         return pd.DataFrame()
 
+def atualizar_status_pedido(id_pedido, novo_status="Finalizado"):
+    """Encontra um pedido pelo ID e atualiza seu status na planilha."""
+    try:
+        sh = get_gspread_client()
+        worksheet = sh.worksheet(SHEET_NAME_PEDIDOS)
+        # Encontra a célula que contém o ID do pedido
+        cell = worksheet.find(id_pedido, in_column=1)
+        if cell:
+            # Assume que a coluna STATUS é a 7ª (G)
+            # Você pode precisar ajustar o 'G' se a sua coluna for outra
+            worksheet.update_acell(f'G{cell.row}', novo_status)
+            st.cache_data.clear()
+            return True
+        return False
+    except Exception as e:
+        st.error(f"Erro ao atualizar o status do pedido: {e}")
+        return False
+
 # --- Funções de Produto (Sem alterações) ---
 def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponivel):
-    """Adiciona uma nova linha de produto na planilha."""
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_CATALOGO)
@@ -67,11 +90,7 @@ def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponiv
         else:
             novo_id = 1
 
-        nova_linha = [
-            novo_id, nome, str(preco).replace('.', ','),
-            desc_curta, desc_longa, link_imagem, disponivel
-        ]
-        
+        nova_linha = [novo_id, nome, str(preco).replace('.', ','), desc_curta, desc_longa, link_imagem, disponivel]
         worksheet.append_row(nova_linha, value_input_option='USER_ENTERED')
         st.cache_data.clear()
         return True
@@ -94,61 +113,92 @@ with tab_pedidos:
         st.cache_data.clear()
         st.rerun()
 
-    df_pedidos = carregar_dados(SHEET_NAME_PEDIDOS)
+    df_pedidos_raw = carregar_dados(SHEET_NAME_PEDIDOS)
     df_catalogo = carregar_dados(SHEET_NAME_CATALOGO)
 
-    if df_pedidos.empty:
+    if df_pedidos_raw.empty:
         st.info("Nenhum pedido foi encontrado na planilha.")
     else:
-        df_pedidos = df_pedidos.iloc[::-1]
+        df_pedidos_raw['DATA_HORA'] = pd.to_datetime(df_pedidos_raw['DATA_HORA'], errors='coerce')
+        
+        # --- FILTROS ---
+        st.subheader("🔍 Filtrar Pedidos")
+        col_filtro1, col_filtro2 = st.columns(2)
+        with col_filtro1:
+            data_filtro = st.date_input("Filtrar por data:")
+        with col_filtro2:
+            texto_filtro = st.text_input("Buscar por cliente ou produto:", placeholder="Digite o nome do cliente ou do produto")
 
-        for index, pedido in df_pedidos.iterrows():
-            titulo_expander = f"Pedido de **{pedido['NOME_CLIENTE']}** - {pedido['DATA_HORA']} - Total: R$ {pedido['VALOR_TOTAL']}"
-            
-            with st.expander(titulo_expander):
-                st.markdown(f"**Contato do Cliente:** `{pedido['CONTATO_CLIENTE']}`")
-                st.markdown("---")
-                
-                try:
-                    detalhes_pedido = json.loads(pedido['ITENS_PEDIDO'])
-                    itens = detalhes_pedido.get('itens', [])
+        df_filtrado = df_pedidos_raw.copy()
 
-                    if not itens:
-                        st.warning("Não foi possível encontrar os itens neste pedido.")
-                        continue
+        # Aplica filtro de data
+        if data_filtro:
+            df_filtrado = df_filtrado[df_filtrado['DATA_HORA'].dt.date == data_filtro]
 
-                    st.subheader("Itens do Pedido:")
+        # Aplica filtro de texto
+        if texto_filtro.strip():
+            texto_filtro = texto_filtro.lower()
+            # Filtra por nome do cliente OU por item no pedido
+            df_filtrado = df_filtrado[
+                df_filtrado['NOME_CLIENTE'].str.lower().str.contains(texto_filtro) |
+                df_filtrado['ITENS_PEDIDO'].str.lower().str.contains(texto_filtro)
+            ]
+        
+        st.markdown("---")
+
+        # --- SEPARAÇÃO DE PEDIDOS ---
+        pedidos_pendentes = df_filtrado[df_filtrado['STATUS'] != 'Finalizado']
+        pedidos_finalizados = df_filtrado[df_filtrado['STATUS'] == 'Finalizado']
+
+        # Exibe Pedidos Pendentes
+        st.header("⏳ Pedidos Pendentes")
+        if pedidos_pendentes.empty:
+            st.info("Nenhum pedido pendente encontrado (com os filtros aplicados).")
+        else:
+            for index, pedido in pedidos_pendentes.iloc[::-1].iterrows():
+                titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M')} - Total: R$ {pedido['VALOR_TOTAL']}"
+                with st.expander(titulo):
+                    st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID do Pedido:** `{pedido['ID_PEDIDO']}`")
                     
-                    for item in itens:
-                        link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
-                        if not df_catalogo.empty:
-                            produto_no_catalogo = df_catalogo[df_catalogo['ID'] == item['id']]
-                            if not produto_no_catalogo.empty:
-                                link_imagem = produto_no_catalogo.iloc[0]['LINKIMAGEM']
-
-                        col_img, col_detalhes = st.columns([1, 4])
-
-                        with col_img:
-                            if link_imagem:
-                                st.image(link_imagem, width=100)
-                        
-                        with col_detalhes:
-                            # --- ESTA É A LINHA CORRIGIDA ---
-                            # Tenta pegar 'qtd', se não der, pega 'quantidade'. Se não tiver nenhum, usa 0.
-                            quantidade = item.get('qtd', item.get('quantidade', 0))
+                    if st.button("✅ Finalizar Pedido", key=f"finalizar_{pedido['ID_PEDIDO']}"):
+                        if atualizar_status_pedido(pedido['ID_PEDIDO']):
+                            st.success(f"Pedido {pedido['ID_PEDIDO']} finalizado com sucesso!")
+                            st.rerun()
+                        else:
+                            st.error("Não foi possível finalizar o pedido.")
+                    
+                    st.markdown("---")
+                    
+                    try:
+                        detalhes_pedido = json.loads(pedido['ITENS_PEDIDO'])
+                        for item in detalhes_pedido.get('itens', []):
+                            # ... (lógica de exibição dos itens, sem alterações)
+                            link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
+                            if not df_catalogo.empty:
+                                produto_no_catalogo = df_catalogo[df_catalogo['ID'] == item['id']]
+                                if not produto_no_catalogo.empty:
+                                    link_imagem = produto_no_catalogo.iloc[0]['LINKIMAGEM']
                             
-                            st.markdown(f"**Produto:** {item['nome']}")
-                            st.markdown(f"**Quantidade:** {quantidade}")
-                            st.markdown(f"**Preço Unitário:** R$ {item.get('preco', 0):.2f}")
-                            st.markdown(f"**Subtotal:** R$ {item.get('subtotal', 0):.2f}")
-                        
-                        st.markdown("---")
+                            col_img, col_detalhes = st.columns([1, 4])
+                            with col_img:
+                                if link_imagem: st.image(link_imagem, width=100)
+                            with col_detalhes:
+                                quantidade = item.get('qtd', item.get('quantidade', 0))
+                                st.markdown(f"**Produto:** {item['nome']}")
+                                st.markdown(f"**Quantidade:** {quantidade}")
+                                st.markdown(f"**Preço Unitário:** R$ {item.get('preco', 0):.2f}")
+                                st.markdown(f"**Subtotal:** R$ {item.get('subtotal', 0):.2f}")
+                            st.markdown("---")
+                    except Exception as e:
+                        st.error(f"Erro ao processar itens do pedido: {e}")
 
-                except json.JSONDecodeError:
-                    st.error("O formato dos itens do pedido está inválido e não pôde ser lido.")
-                    st.write("Conteúdo original:", pedido['ITENS_PEDIDO'])
-                except Exception as e:
-                    st.error(f"Ocorreu um erro inesperado ao processar os itens: {e}")
+        # Exibe Pedidos Finalizados
+        st.header("✅ Pedidos Finalizados")
+        if pedidos_finalizados.empty:
+            st.info("Nenhum pedido finalizado encontrado (com os filtros aplicados).")
+        else:
+             # Exibe a tabela de finalizados de forma mais simples
+             st.dataframe(pedidos_finalizados[['DATA_HORA', 'NOME_CLIENTE', 'VALOR_TOTAL', 'ITENS_PEDIDO']], use_container_width=True)
 
 
 # --- ABA DE PRODUTOS (Sem alterações) ---
@@ -158,30 +208,25 @@ with tab_produtos:
     with st.form("form_novo_produto", clear_on_submit=True):
         st.subheader("Cadastrar Novo Produto")
         col1, col2 = st.columns(2)
-        
         with col1:
             nome_prod = st.text_input("Nome do Produto*")
             preco_prod = st.number_input("Preço (R$)*", min_value=0.0, format="%.2f", step=0.50)
             link_imagem_prod = st.text_input("URL da Imagem do Produto")
-            
         with col2:
             desc_curta_prod = st.text_input("Descrição Curta (Ex: Sabor chocolate, 250g)")
             desc_longa_prod = st.text_area("Descrição Longa/Detalhada")
             disponivel_prod = st.selectbox("Disponível para venda?", ("Sim", "Não"))
-
-        submitted = st.form_submit_button("Cadastrar Produto")
-        if submitted:
+        if st.form_submit_button("Cadastrar Produto"):
             if not nome_prod or preco_prod <= 0:
-                st.warning("Por favor, preencha pelo menos o Nome e o Preço do produto.")
+                st.warning("Preencha pelo menos o Nome e o Preço.")
             else:
                 if adicionar_produto(nome_prod, preco_prod, desc_curta_prod, desc_longa_prod, link_imagem_prod, disponivel_prod):
                     st.success("Produto cadastrado com sucesso!")
                     st.rerun()
                 else:
                     st.error("Falha ao cadastrar o produto.")
-
+    
     st.markdown("---")
-
     st.subheader("Catálogo Atual")
     if st.button("Recarregar Catálogo"):
         st.cache_data.clear()
