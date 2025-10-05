@@ -134,7 +134,7 @@ div[data-testid="stPopover"] > div:first-child > button {{ display: none; }}
 div[data-testid="stButton"] > button {{ background-color: #E91E63; color: white; border-radius: 10px; border: 1px solid #C2185B; font-weight: bold; }}
 div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: white; border: 1px solid #E91E63; }}
 
-/* --- NOVO CSS PARA CONTROLAR A IMAGEM --- */
+/* CSS PARA CONTROLAR A IMAGEM */
 .product-image-container {{
     height: 220px; /* Define uma altura fixa para a caixa da imagem */
     display: flex;
@@ -144,10 +144,10 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
     overflow: hidden;
 }}
 .product-image-container img {{
-    max-height: 100%; /* Garante que a imagem não ultrapasse a altura da caixa */
-    max-width: 100%; /* Garante que a imagem não ultrapasse a largura da caixa */
+    max-height: 100%;
+    max-width: 100%;
     object-fit: contain; /* Faz a imagem caber inteira, sem cortar */
-    border-radius: 8px; /* Bordas arredondadas na imagem */
+    border-radius: 8px;
 }}
 </style>
 """, unsafe_allow_html=True)
@@ -220,6 +220,8 @@ if df_filtrado.empty:
     else: st.warning("O catálogo está vazio ou indisponível no momento.")
 else:
     st.subheader("✨ Nossos Produtos")
-    cols = st.columns(3)
+    # --- ALTERAÇÃO APLICADA AQUI ---
+    cols = st.columns(4) # Aumentado para 4 colunas
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
-        with cols[i % 3]: render_product_card(prod_id, row, key_prefix='prod')
+        # E AQUI
+        with cols[i % 4]: render_product_card(prod_id, row, key_prefix='prod')
