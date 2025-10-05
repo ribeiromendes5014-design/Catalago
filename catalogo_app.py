@@ -146,6 +146,30 @@ def remover_do_carrinho(produto_id):
         del st.session_state.carrinho[produto_id]
         st.toast(f"❌ {nome} removido.", icon="🗑️")
 
+def render_product_image_html(link_imagem):
+    """Gera o HTML para a imagem do produto (para carrossel)."""
+    placeholder_html = """<div class="product-image-container-html"><span class="placeholder-text">Sem Imagem</span></div>"""
+    if link_imagem and str(link_imagem).strip().startswith('http'):
+        return f'<div class="product-image-container-html"><img src="{link_imagem}"></div>'
+    return placeholder_html
+
+def get_product_card_html_for_carousel(prod_id, row):
+    """Gera o HTML simplificado para um card (para carrossel), sem funções Streamlit."""
+    img_html = render_product_image_html(row.get('LINKIMAGEM'))
+    preco_final = row['PRECO_FINAL']
+    
+    # Este HTML é estilizado para parecer um card Streamlit, mas sem interatividade.
+    card_html = f"""
+    <div class="carousel-item-html">
+        {img_html}
+        <strong>{row['NOME']}</strong>
+        <div class="price-container">
+            <h4 class='price-normal'>R$ {preco_final:.2f}</h4>
+        </div>
+        <a href="#catalogo-completo" class="carousel-detail-link">Ver Detalhes</a>
+    </div>
+    """
+    return card_html
 
 def render_product_card_with_streamlit_buttons(prod_id, row, key_prefix):
     """Renderiza o card com st.container, st.expander e botões funcionais - LAYOUT UNIFICADO."""
@@ -186,9 +210,10 @@ def render_product_card_with_streamlit_buttons(prod_id, row, key_prefix):
 # --- Layout do Aplicativo ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS PRINCIPAL ---
-STREAMLIT_CSS = f"""
+# --- CSS PRINCIPAL E CARROSSEL CSS (TUDO JUNTO) ---
+CSS_GERAL = f"""
 <style>
+    /* Estilos Streamlit e Globais */
     .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}); background-size: cover; background-attachment: fixed; }}
     div.block-container {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 10px; padding: 2rem; margin-top: 1rem; }}
     .pink-bar-container {{ background-color: #E91E63; padding: 20px 0; width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
@@ -197,6 +222,8 @@ STREAMLIT_CSS = f"""
     .cart-badge-button {{ background-color: #C2185B; color: white; border-radius: 12px; padding: 8px 15px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; transition: background-color 0.3s; display: inline-flex; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-width: 150px; justify-content: center; }}
     .cart-badge-button:hover {{ background-color: #E91E63; }}
     .cart-count {{ background-color: white; color: #E91E63; border-radius: 50%; padding: 2px 7px; margin-left: 8px; font-size: 14px; line-height: 1; }}
+    
+    /* Estilos de Card Streamlit */
     .product-image-container {{ height: 220px; display: flex; align-items: center; justify-content: center; margin-bottom: 1rem; overflow: hidden; }}
     .product-image-container img {{ max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }}
     .placeholder-text {{ color: #a0a0a0; font-size: 1.1rem; font-weight: bold; }}
@@ -219,9 +246,53 @@ STREAMLIT_CSS = f"""
         background-color: transparent !important; 
         border: none !important; 
     }}
+    
+    /* ESTILOS DO CARROSSEL - HTML INJETADO */
+    .carousel-outer-container {
+        overflow-x: scroll; 
+        padding-bottom: 20px; 
+        margin-top: 15px;
+    }
+    .product-wrapper {
+        display: flex; 
+        flex-direction: row;
+        width: max-content; 
+    }
+    .carousel-item-html { 
+        border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin: 5px 10px 5px 0; 
+        min-width: 220px; max-width: 220px; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        text-align: center;
+        height: 250px; /* Altura fixa para todos os cards no carrossel */
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+    .product-image-container-html { 
+        height: 120px; 
+        display: flex; align-items: center; justify-content: center; 
+        margin-bottom: 0.5rem; overflow: hidden; background-color: #f7f7f7; border-radius: 8px; 
+    }
+    .product-image-container-html img { 
+        max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; 
+    }
+    .carousel-detail-link {
+        display: block;
+        background-color: #C2185B;
+        color: white;
+        padding: 5px;
+        border-radius: 5px;
+        text-decoration: none;
+        margin-top: 10px;
+        font-weight: bold;
+    }
+    h4.price-normal {
+        color: #880E4F !important;
+        margin: 5px 0 !important;
+        line-height: 1.2 !important;
+    }
 </style>
 """
-st.markdown(STREAMLIT_CSS, unsafe_allow_html=True)
+st.markdown(CSS_GERAL, unsafe_allow_html=True)
 
 
 # --- ATUALIZAÇÃO AUTOMÁTICA ---
@@ -297,13 +368,14 @@ st.markdown("</div></div>", unsafe_allow_html=True)
 df_catalogo = carregar_catalogo()
 
 # --------------------------------------------------------------------------
-# --- LAYOUT PRINCIPAL (TODAS AS SEÇÕES UNIFICADAS) ---
+# --- LAYOUT PRINCIPAL ---
 # --------------------------------------------------------------------------
 
 if df_catalogo.empty:
     st.warning("O catálogo de produtos não pôde ser carregado. Verifique a planilha.")
 else:
-    # --- SEÇÃO: OS MAIS QUERIDINHOS (UNIFICADO) ---
+    # --- SEÇÃO: OS MAIS QUERIDINHOS (UNIFICADO - SEM CARROSSEL) ---
+    # Mantemos o layout de grid aqui para garantir a funcionalidade.
     df_mais_vendidos = carregar_mais_vendidos(df_catalogo, top_n=4)
 
     if not df_mais_vendidos.empty:
@@ -312,11 +384,11 @@ else:
         cols = st.columns(4)
         for i, (prod_id, row) in enumerate(df_mais_vendidos.iterrows()):
             with cols[i % 4]:
-                render_product_card_with_streamlit_buttons(row['ID'], row, key_prefix='vendido') # USA O LAYOUT UNIFICADO
+                render_product_card_with_streamlit_buttons(row['ID'], row, key_prefix='vendido')
         
         st.markdown("<hr>", unsafe_allow_html=True)
 
-    # --- SEÇÃO: NOSSAS OFERTAS (UNIFICADO) ---
+    # --- SEÇÃO: NOSSAS OFERTAS (UNIFICADO - SEM CARROSSEL) ---
     df_ofertas = df_catalogo[pd.notna(df_catalogo['PRECO_PROMOCIONAL']) & (df_catalogo['PRECO_FINAL'] < df_catalogo['PRECO'])]
     
     if not df_ofertas.empty: 
@@ -325,11 +397,13 @@ else:
         cols = st.columns(4)
         for i, (prod_id, row) in enumerate(df_ofertas.iterrows()):
             with cols[i % 4]:
-                render_product_card_with_streamlit_buttons(prod_id, row, key_prefix='oferta') # USA O LAYOUT UNIFICADO
+                render_product_card_with_streamlit_buttons(prod_id, row, key_prefix='oferta')
         
         st.markdown("<hr>", unsafe_allow_html=True)
 
-    # --- SEÇÃO: CATÁLOGO COMPLETO (UNIFICADO) ---
+    # ==============================================================================
+    # --- SEÇÃO: CATÁLOGO COMPLETO (AGORA EM CARROSSEL VISUAL COM ROLAGEM LATERAL) ---
+    # ==============================================================================
     st.subheader("🛍️ Catálogo Completo")
     termo = st.session_state.get('termo_pesquisa_barra', '').lower()
     
@@ -341,8 +415,16 @@ else:
     if df_filtrado.empty:
         st.info(f"Nenhum produto encontrado com o termo '{termo}'.")
     else:
-        # Layout de colunas para garantir que o st.expander e os botões funcionem
-        cols = st.columns(4)
-        for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
-            with cols[i % 4]:
-                render_product_card_with_streamlit_buttons(prod_id, row, key_prefix='catalogo') # USA O LAYOUT UNIFICADO
+        # 1. Gera o HTML dos cards (sem botões funcionais/expander)
+        html_cards_catalogo = [get_product_card_html_for_carousel(prod_id, row) for prod_id, row in df_filtrado.iterrows()]
+
+        # 2. Renderiza o carrossel (rolagem lateral)
+        st.markdown(f"""
+            <div class="carousel-outer-container">
+                <div class="product-wrapper">
+                    {''.join(html_cards_catalogo)}
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        st.caption("✨ Role a barra abaixo (ou deslize a tela) para ver todos os produtos.")
