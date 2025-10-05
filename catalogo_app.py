@@ -74,7 +74,7 @@ def load_data():
         
         # *** LINHA CRÍTICA (135): SUBSTITUA "Sheet1" PELO NOME EXATO DA SUA ABA DE PRODUTOS ***
         # Se o erro persistir, o nome da aba AQUI deve ser a causa!
-        worksheet = spreadsheet.worksheet("produtos") 
+        worksheet = spreadsheet.worksheet("ok, vamos começar com passo a passo ate o sistema...") 
         
         # 4. CONVERTER PARA DATAFRAME
         df = pd.DataFrame(worksheet.get_all_records())
@@ -248,4 +248,5 @@ elif not df_produtos.empty:
                     adicionar_ao_carrinho(row['ID'], row['NOME'], row['PRECO'], quantidade)
                     st.success(f"{quantidade}x {row['NOME']} adicionado(s)!")
                     st.experimental_rerun() # Atualiza a sidebar para mostrar o carrinho
+
 
