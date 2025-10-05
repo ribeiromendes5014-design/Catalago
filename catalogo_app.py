@@ -146,30 +146,6 @@ def remover_do_carrinho(produto_id):
         del st.session_state.carrinho[produto_id]
         st.toast(f"❌ {nome} removido.", icon="🗑️")
 
-def render_product_image_html(link_imagem):
-    """Gera o HTML para a imagem do produto (para carrossel)."""
-    placeholder_html = """<div class="product-image-container-html"><span class="placeholder-text">Sem Imagem</span></div>"""
-    if link_imagem and str(link_imagem).strip().startswith('http'):
-        return f'<div class="product-image-container-html"><img src="{link_imagem}"></div>'
-    return placeholder_html
-
-def get_product_card_html_for_carousel(prod_id, row):
-    """Gera o HTML simplificado para um card (para carrossel), com estilo Streamlit-like."""
-    img_html = render_product_image_html(row.get('LINKIMAGEM'))
-    preco_final = row['PRECO_FINAL']
-    
-    # Este HTML é estilizado para parecer um card Streamlit, mas sem interatividade.
-    card_html = f"""
-    <div class="carousel-item-html">
-        {img_html}
-        <strong>{row['NOME']}</strong>
-        <div class="price-container">
-            <h4 class='price-normal'>R$ {preco_final:.2f}</h4>
-        </div>
-    </div>
-    """
-    return card_html
-
 
 def render_product_card_with_streamlit_buttons(prod_id, row, key_prefix):
     """Renderiza o card com st.container, st.expander e botões funcionais - LAYOUT UNIFICADO."""
@@ -247,43 +223,6 @@ STREAMLIT_CSS = f"""
 """
 st.markdown(STREAMLIT_CSS, unsafe_allow_html=True)
 
-# --- CSS DO CARROSSEL (PARA INJEÇÃO VIA components.html) ---
-CAROUSEL_CSS = """
-<style>
-    /* Estilos para cards de produtos HTML (Carrossel) */
-    .product-image-container-html { 
-        height: 100px; /* Reduzido para caber no carrossel */
-        display: flex; align-items: center; justify-content: center; 
-        margin-bottom: 0.5rem; overflow: hidden; background-color: #f7f7f7; border-radius: 8px; 
-    }
-    .product-image-container-html img { 
-        max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; 
-    }
-    .carousel-item-html { 
-        border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin: 5px 10px 5px 0; 
-        min-width: 150px; max-width: 150px; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        text-align: center;
-        height: 200px; /* Altura fixa para todos os cards */
-    }
-    .price-container { line-height: 1.2; margin-top: 5px; }
-    
-    /* ESTILOS DO CARROSSEL */
-    .carousel-outer-container {
-        overflow-x: scroll; 
-        padding-bottom: 20px; 
-        margin-top: 15px;
-    }
-    .product-wrapper {
-        display: flex; 
-        flex-direction: row;
-        width: max-content; 
-    }
-    h4.price-normal {
-        color: #880E4F !important;
-    }
-</style>
-"""
-
 
 # --- ATUALIZAÇÃO AUTOMÁTICA ---
 st_autorefresh(interval=60000, key="auto_refresh_catalogo")
@@ -358,49 +297,26 @@ st.markdown("</div></div>", unsafe_allow_html=True)
 df_catalogo = carregar_catalogo()
 
 # --------------------------------------------------------------------------
-# --- LAYOUT PRINCIPAL ---
+# --- LAYOUT PRINCIPAL (TODAS AS SEÇÕES UNIFICADAS) ---
 # --------------------------------------------------------------------------
 
 if df_catalogo.empty:
     st.warning("O catálogo de produtos não pôde ser carregado. Verifique a planilha.")
 else:
-    # --- SEÇÃO: OS MAIS QUERIDINHOS (CARROSSEL VISUAL + BOTÕES FUNCIONAIS) ---
-    df_mais_vendidos = carregar_mais_vendidos(df_catalogo, top_n=8)
+    # --- SEÇÃO: OS MAIS QUERIDINHOS (UNIFICADO) ---
+    df_mais_vendidos = carregar_mais_vendidos(df_catalogo, top_n=4)
 
     if not df_mais_vendidos.empty:
         st.markdown(f"<div class='section-title-container'><img src='{URL_MAIS_VENDIDOS}' class='section-title-image'></div>", unsafe_allow_html=True)
         
-        # 1. CARROSSEL VISUAL (components.html)
-        html_cards_vendidos = [get_product_card_html_for_carousel(row['ID'], row) for prod_id, row in df_mais_vendidos.iterrows()]
-        CAROUSEL_VENDIDOS_HTML = f"""
-            <html>
-            <head>
-                {CAROUSEL_CSS}
-            </head>
-            <body>
-                <div class="carousel-outer-container">
-                    <div class="product-wrapper">
-                        {''.join(html_cards_vendidos)}
-                    </div>
-                </div>
-            </body>
-            </html>
-        """
-        components.html(CAROUSEL_VENDIDOS_HTML, height=250)
-        
-        # 2. BOTÕES E EXPANDER FUNCIONAIS (st.columns - mantendo o layout unificado)
-        # Usamos apenas os 4 melhores (ou mais, dependendo do design) para os botões visíveis,
-        # para evitar uma rolagem vertical muito longa.
-        st.subheader("Produtos em Destaque:")
         cols = st.columns(4)
-        for i, (prod_id, row) in enumerate(df_mais_vendidos.head(4).iterrows()): 
+        for i, (prod_id, row) in enumerate(df_mais_vendidos.iterrows()):
             with cols[i % 4]:
-                # Renderizamos o card completo (com imagem, expander e botão)
-                render_product_card_with_streamlit_buttons(row['ID'], row, key_prefix='vendido_funcional')
-
+                render_product_card_with_streamlit_buttons(row['ID'], row, key_prefix='vendido') # USA O LAYOUT UNIFICADO
+        
         st.markdown("<hr>", unsafe_allow_html=True)
 
-    # --- SEÇÃO: NOSSAS OFERTAS (LAYOUT UNIFICADO) ---
+    # --- SEÇÃO: NOSSAS OFERTAS (UNIFICADO) ---
     df_ofertas = df_catalogo[pd.notna(df_catalogo['PRECO_PROMOCIONAL']) & (df_catalogo['PRECO_FINAL'] < df_catalogo['PRECO'])]
     
     if not df_ofertas.empty: 
@@ -409,11 +325,11 @@ else:
         cols = st.columns(4)
         for i, (prod_id, row) in enumerate(df_ofertas.iterrows()):
             with cols[i % 4]:
-                render_product_card_with_streamlit_buttons(prod_id, row, key_prefix='oferta')
+                render_product_card_with_streamlit_buttons(prod_id, row, key_prefix='oferta') # USA O LAYOUT UNIFICADO
         
         st.markdown("<hr>", unsafe_allow_html=True)
 
-    # --- SEÇÃO: CATÁLOGO COMPLETO (LAYOUT UNIFICADO) ---
+    # --- SEÇÃO: CATÁLOGO COMPLETO (UNIFICADO) ---
     st.subheader("🛍️ Catálogo Completo")
     termo = st.session_state.get('termo_pesquisa_barra', '').lower()
     
@@ -429,4 +345,4 @@ else:
         cols = st.columns(4)
         for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
             with cols[i % 4]:
-                render_product_card_with_streamlit_buttons(prod_id, row, key_prefix='catalogo')
+                render_product_card_with_streamlit_buttons(prod_id, row, key_prefix='catalogo') # USA O LAYOUT UNIFICADO
