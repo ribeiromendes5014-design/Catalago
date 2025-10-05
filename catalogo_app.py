@@ -102,7 +102,7 @@ def load_data():
         # tentativa 1: usar aba exatamente "Produtos" (conforme ajuste do usuário)
         worksheet = None
         try:
-            worksheet = spreadsheet.worksheet("Produtos")
+            worksheet = spreadsheet.worksheet("produtos")
         except Exception:
             # fallback: usar primeira aba
             try:
@@ -431,3 +431,4 @@ elif not df_produtos.empty:
                     adicionar_ao_carrinho(produto_id, nome_prod, preco_prod, quantidade)
                     st.success(f"{quantidade}x {nome_prod} adicionado(s)!")
                     st.experimental_rerun() # Atualiza a sidebar para mostrar o carrinho
+
