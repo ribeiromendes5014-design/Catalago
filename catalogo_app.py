@@ -65,7 +65,7 @@ def load_data():
         # O escopo define as permissões que a Service Account terá
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         
-        # CORREÇÃO CRÍTICA: Usamos from_json_keyfile_dict que é a função universal
+        # CORREÇÃO DEFINITIVA: from_json_keyfile_dict lida corretamente com o dicionário JSON
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
         client = gspread.authorize(creds)
         
@@ -86,6 +86,7 @@ def load_data():
         
     except Exception as e:
         # Mensagem de erro mais clara em caso de falha de autenticação/conexão
+        # Esta mensagem está mostrando o erro real de autenticação do Google
         st.error(f"Erro Crítico de Conexão. ❌ Verifique se o e-mail da Service Account está como 'Editor' na Planilha e se o secrets.toml está correto. Detalhe: {e}")
         return pd.DataFrame(), None # Retorna DataFrame vazio e cliente None
         
@@ -107,6 +108,7 @@ def salvar_pedido(nome_cliente, contato_cliente, pedido_df, total):
     relatorio += f"\nVALOR TOTAL: R$ {total:.2f}"
     
     # 2. Aqui a lógica real de SALVAR NA PLANILHA DE PEDIDOS ou ENVIAR E-MAIL viria.
+    # Ex: gsheets_client.open_by_url(PLANILHA_PEDIDOS_URL).worksheet('Pedidos').append_row([nome_cliente, contato_cliente, total, relatorio])
     
     # 3. Define o status como enviado
     st.session_state.pedido_enviado = True
@@ -115,7 +117,8 @@ def salvar_pedido(nome_cliente, contato_cliente, pedido_df, total):
 
 # --- 5. Sidebar (O Botão Flutuante de Pedido) ---
 with st.sidebar:
-    st.image("https://placehold.co/200x50/F06292/ffffff?text=Doce&Bella", use_column_width=True) # Logo Placeholder
+    # ATUALIZAÇÃO: use_container_width é o parâmetro recomendado
+    st.image("https://placehold.co/200x50/F06292/ffffff?text=Doce&Bella", use_container_width=True) # Logo Placeholder
     st.header("🛒 Seu Pedido")
     st.markdown("---")
     
@@ -209,7 +212,8 @@ elif not df_produtos.empty:
         
         with col:
             # 7.1. Exibição do Card
-            st.image(row['LINKIMAGEM'], use_column_width=True)
+            # ATUALIZAÇÃO: use_container_width é o parâmetro recomendado
+            st.image(row['LINKIMAGEM'], use_container_width=True)
             st.markdown(f"**{row['NOME']}**")
             st.markdown(f"R$ {row['PRECO']:.2f}")
             st.caption(row['DESCRICAOCURTA'])
