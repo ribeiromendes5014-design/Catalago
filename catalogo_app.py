@@ -47,7 +47,7 @@ def get_gspread_client():
         st.error(f"Erro na autenticação do Google Sheets: {e}")
         st.stop()
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=5)
 def carregar_catalogo():
     """Carrega o catálogo, aplica as promoções e prepara o DataFrame."""
     try:
@@ -297,3 +297,4 @@ else:
         for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
             with cols[i % 4]:
                 render_product_card(prod_id, row, key_prefix='catalogo')
+
