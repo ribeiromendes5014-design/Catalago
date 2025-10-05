@@ -119,7 +119,6 @@ st.set_page_config(
 st.markdown(f"""
 <style>
 /* 1. BACKGROUND PERSONALIZADO */
-/* Adicionado !important para forçar a substituição do fundo Streamlit */
 .stApp {{
     background-image: url({BACKGROUND_IMAGE_URL}) !important;
     background-size: cover !important;
@@ -128,9 +127,8 @@ st.markdown(f"""
 }}
 
 /* Cor de Fundo para o conteúdo principal ficar legível */
-/* Aumentado a transparência para ver mais o fundo */
 div.block-container {{
-    background-color: rgba(255, 255, 255, 0.95); /* Fundo branco semi-transparente */
+    background-color: rgba(255, 255, 255, 0.95);
     border-radius: 10px;
     padding: 2rem;
     margin-top: 1rem;
@@ -138,20 +136,34 @@ div.block-container {{
 
 /* Fundo para o Container do Catálogo */
 .stContainer, [data-testid="stHorizontalBlock"] {{
-    background-color: rgba(255, 255, 255, 0.95); /* Fundo branco semi-transparente */
+    background-color: rgba(255, 255, 255, 0.95);
     border-radius: 10px;
     padding: 10px;
 }}
 
+/* 2. BARRA ROSA DO CABEÇALHO */
+.pink-bar {{
+    background-color: #E91E63; /* Cor primária Doce&Bella */
+    height: 50px; /* Altura da barra */
+    width: 100%;
+    margin-bottom: 20px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+}}
+.pink-bar .stTextInput {{
+    background-color: white; /* Fundo branco para a pesquisa */
+    border-radius: 5px;
+}}
 
-/* 2. ESTILO DO CARRINHO (Mantido) */
-/* Esconde o botão padrão do popover */
+/* 3. ESTILO DO CARRINHO (Mantido) */
 div[data-testid="stPopover"] > div:first-child > button {{
     display: none;
 }}
 
 .cart-badge-button {{
-    background-color: #E91E63; 
+    background-color: #C2185B; /* Um pouco mais escuro para contrastar com a barra */
     color: white;
     border-radius: 12px; 
     padding: 8px 15px; 
@@ -168,7 +180,7 @@ div[data-testid="stPopover"] > div:first-child > button {{
 }}
 
 .cart-badge-button:hover {{
-    background-color: #C2185B; 
+    background-color: #E91E63; 
 }}
 
 .cart-count {{
@@ -184,21 +196,35 @@ div[data-testid="stPopover"] > div:first-child > button {{
 """, unsafe_allow_html=True)
 
 
-# --- 1. CABEÇALHO DO APLICATIVO (Título + Carrinho Customizado) ---
+# --- 1. CABEÇALHO PRINCIPAL (Título) ---
 
-col_titulo, col_carrinho = st.columns([4, 1])
+st.title("💖 Catálogo de Pedidos Doce&Bella")
 
-with col_titulo:
-    st.title("💖 Catálogo de Pedidos Doce&Bella")
 
-# 2. Lógica do Carrinho Customizado (Badge)
+# --- 2. BARRA ROSA (PESQUISA E CARRINHO) ---
 
+# Usa um container com a classe CSS 'pink-bar' para aplicar o fundo rosa
+st.markdown("<div class='pink-bar'>", unsafe_allow_html=True)
+
+# Colunas dentro da barra rosa: 1 para o espaço, 3 para Pesquisa, 1 para Carrinho
+col_spacer, col_pesquisa, col_carrinho = st.columns([1, 4, 2])
+
+# LÓGICA DE PESQUISA
+with col_pesquisa:
+    # A barra de pesquisa deve ser criada aqui
+    termo_pesquisa = st.text_input("🔍 Buscar produtos por Nome ou Descrição:", 
+                                   key='termo_pesquisa', 
+                                   label_visibility="collapsed", # Esconde o label para parecer mais clean
+                                   placeholder="Buscar produtos...")
+
+# LÓGICA DO CARRINHO
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
 
 with col_carrinho:
-    st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True) 
+    # Espaçamento para alinhar com a barra de pesquisa
+    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
     
     custom_cart_button = f"""
         <div class='cart-badge-button' onclick='document.querySelector("[data-testid=\"stPopover\"] > div:first-child > button").click();'>
@@ -264,14 +290,11 @@ with col_carrinho:
                         else:
                             st.error("Falha ao salvar o pedido. Tente novamente.")
 
-# --- BARRA DE PESQUISA (Filtra o Catálogo Geral) ---
-
-st.markdown("---")
-termo_pesquisa = st.text_input("🔍 Buscar produtos por Nome ou Descrição:", key='termo_pesquisa')
-st.markdown("---")
+st.markdown("</div>", unsafe_allow_html=True) # Fecha a div da barra rosa
 
 
 # --- 3. SEÇÃO DE PRODUTOS EM DESTAQUE ---
+st.markdown("---")
 
 df_catalogo = carregar_catalogo()
 
@@ -308,7 +331,7 @@ st.subheader("🛍️ Todos os Produtos")
 
 df_geral = df_catalogo.copy()
 
-# Lógica de Filtragem
+# Lógica de Filtragem (agora baseada no termo_pesquisa global)
 if termo_pesquisa:
     termo = termo_pesquisa.lower()
     df_geral = df_geral[
