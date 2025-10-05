@@ -247,7 +247,7 @@ CSS_GERAL = f"""
         border: none !important; 
     }}
     
-    /* ESTILOS DO CARROSSEL - HTML INJETADO */
+    /* ESTILOS DO CARROSSEL - HTML INJETADO (APLICADO SOMENTE AO CATÁLOGO COMPLETO) */
     .carousel-outer-container {
         overflow-x: scroll; 
         padding-bottom: 20px; 
@@ -262,7 +262,7 @@ CSS_GERAL = f"""
         border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin: 5px 10px 5px 0; 
         min-width: 220px; max-width: 220px; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         text-align: center;
-        height: 250px; /* Altura fixa para todos os cards no carrossel */
+        height: 250px; 
         display: flex;
         flex-direction: column;
         justify-content: space-between;
@@ -374,8 +374,7 @@ df_catalogo = carregar_catalogo()
 if df_catalogo.empty:
     st.warning("O catálogo de produtos não pôde ser carregado. Verifique a planilha.")
 else:
-    # --- SEÇÃO: OS MAIS QUERIDINHOS (UNIFICADO - SEM CARROSSEL) ---
-    # Mantemos o layout de grid aqui para garantir a funcionalidade.
+    # --- SEÇÃO: OS MAIS QUERIDINHOS (GRID FUNCIONAL) ---
     df_mais_vendidos = carregar_mais_vendidos(df_catalogo, top_n=4)
 
     if not df_mais_vendidos.empty:
@@ -384,11 +383,11 @@ else:
         cols = st.columns(4)
         for i, (prod_id, row) in enumerate(df_mais_vendidos.iterrows()):
             with cols[i % 4]:
-                render_product_card_with_streamlit_buttons(row['ID'], row, key_prefix='vendido')
+                render_product_card_with_streamlit_buttons(row['ID'], row, key_prefix='vendido') 
         
         st.markdown("<hr>", unsafe_allow_html=True)
 
-    # --- SEÇÃO: NOSSAS OFERTAS (UNIFICADO - SEM CARROSSEL) ---
+    # --- SEÇÃO: NOSSAS OFERTAS (GRID FUNCIONAL) ---
     df_ofertas = df_catalogo[pd.notna(df_catalogo['PRECO_PROMOCIONAL']) & (df_catalogo['PRECO_FINAL'] < df_catalogo['PRECO'])]
     
     if not df_ofertas.empty: 
@@ -397,12 +396,12 @@ else:
         cols = st.columns(4)
         for i, (prod_id, row) in enumerate(df_ofertas.iterrows()):
             with cols[i % 4]:
-                render_product_card_with_streamlit_buttons(prod_id, row, key_prefix='oferta')
+                render_product_card_with_streamlit_buttons(prod_id, row, key_prefix='oferta') 
         
         st.markdown("<hr>", unsafe_allow_html=True)
 
     # ==============================================================================
-    # --- SEÇÃO: CATÁLOGO COMPLETO (AGORA EM CARROSSEL VISUAL COM ROLAGEM LATERAL) ---
+    # --- SEÇÃO: CATÁLOGO COMPLETO (CARROSSEL VISUAL) ---
     # ==============================================================================
     st.subheader("🛍️ Catálogo Completo")
     termo = st.session_state.get('termo_pesquisa_barra', '').lower()
@@ -427,4 +426,4 @@ else:
             </div>
         """, unsafe_allow_html=True)
         
-        st.caption("✨ Role a barra abaixo (ou deslize a tela) para ver todos os produtos.")
+        st.caption("✨ Role a barra abaixo (ou deslize a tela) para ver todos os produtos. Use a barra de pesquisa para encontrar e adicionar produtos.")
