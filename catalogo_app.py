@@ -3,27 +3,32 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import json
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import time
 from streamlit_autorefresh import st_autorefresh
+import requests 
 
+# --- Bibliotecas do Google Sheets Mantidas para SALVAMENTO ---
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
-# --- Configurações de Dados ---
-SHEET_NAME_CATALOGO = "produtos"
-SHEET_NAME_PEDIDOS = "pedidos"
-SHEET_NAME_PROMOCOES = "promocoes"
+# --- Variáveis de Configuração ---
+GITHUB_REPO_URL = "https://raw.githubusercontent.com/ribeiromendes5014-design/Catalago/main/"
+# Fontes de Leitura
+SHEET_NAME_CATALOGO_CSV = "produtos.csv" 
+SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
+# Fonte de Escrita (Google Sheets)
+SHEET_NAME_PEDIDOS = "pedidos" 
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
 
 
 # Inicialização do Carrinho de Compras e Estado
 if 'carrinho' not in st.session_state:
-    st.session_state.carrinho = {}  # {id_produto: {'nome': str, 'preco': float, 'quantidade': int}}
+    st.session_state.carrinho = {} 
 
-# --- Funções de Conexão GSpread ---
+# --- Funções de Conexão GSpread (APENAS PARA ESCRITA) ---
 
 def get_gspread_client():
-    """Cria um cliente GSpread autenticado usando o service account do st.secrets."""
+    """Cria um cliente GSpread autenticado (necessário para salvar pedidos)."""
     try:
         gcp_sa_credentials = {
             "type": st.secrets["gsheets"]["type"],
@@ -43,69 +48,102 @@ def get_gspread_client():
         sh = client.open_by_url(st.secrets["gsheets"]["sheet_url"])
         return sh
     except Exception as e:
-        st.error(f"Erro na autenticação do Google Sheets. Verifique o secrets.toml. Detalhe: {e}")
+        st.error(f"Erro na autenticação do Google Sheets (Salvar Pedido). Detalhe: {e}")
         st.stop()
+
+
+# --- Funções de Conexão GITHUB (LEITURA COM TOKEN) ---
+
+def get_data_from_github(file_name):
+    """Faz a requisição HTTP para obter o conteúdo RAW do CSV do GitHub, usando Token."""
+    file_url = f"{GITHUB_REPO_URL}{file_name}"
+    
+    # NOVO: Adiciona o cabeçalho de autorização com o Token do GitHub
+    headers = {
+        "Authorization": f"token {st.secrets['github']['token']}",
+        "Accept": "application/vnd.github.v3.raw"
+    }
+
+    try:
+        response = requests.get(file_url, headers=headers)
+        response.raise_for_status() 
+        
+        # O Pandas pode ler o conteúdo de texto retornado
+        from io import StringIO
+        csv_data = StringIO(response.text)
+        return pd.read_csv(csv_data, sep=',', encoding='utf-8') 
+
+    except requests.exceptions.HTTPError as e:
+        if response.status_code == 404:
+            st.error(f"Erro 404: Arquivo '{file_name}' não encontrado no repositório.")
+        elif response.status_code == 403:
+             st.error(f"Erro 403 (Limite de Taxa): O Token do GitHub está ativo, mas o limite foi atingido. Tente novamente em 1 minuto. Detalhe: {response.text}")
+        else:
+            st.error(f"Erro ao acessar o GitHub. Status {response.status_code}: {e}")
+        return None
+    except KeyError:
+        st.error("Erro de Token: Verifique se a chave 'token' está configurada corretamente na seção '[github]' do secrets.toml.")
+        return None
+    except Exception as e:
+        st.error(f"Ocorreu um erro ao carregar o arquivo '{file_name}': {e}")
+        return None
+
 
 @st.cache_data(ttl=5)
 def carregar_promocoes():
-    """Carrega as promoções da aba 'promoções'."""
-    try:
-        sh = get_gspread_client()
-        worksheet = sh.worksheet(SHEET_NAME_PROMOCOES)
-        data = worksheet.get_all_values()
-        if not data or len(data) < 2:
-            return pd.DataFrame(columns=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
+    """Carrega as promoções do 'promocoes.csv' do GitHub."""
+    df = get_data_from_github(SHEET_NAME_PROMOCOES_CSV)
+    if df is None or df.empty:
+        return pd.DataFrame(columns=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
 
-        df = pd.DataFrame(data[1:], columns=data[0])
-        df_essencial = df[['ID_PRODUTO', 'PRECO_PROMOCIONAL']].copy()
-        df_essencial['PRECO_PROMOCIONAL'] = pd.to_numeric(df_essencial['PRECO_PROMOCIONAL'].str.replace(',', '.'), errors='coerce')
-        df_essencial['ID_PRODUTO'] = pd.to_numeric(df_essencial['ID_PRODUTO'], errors='coerce').astype('Int64')
-        return df_essencial.dropna(subset=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
-    except gspread.exceptions.WorksheetNotFound:
-        return pd.DataFrame(columns=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
-    except Exception as e:
-        st.warning(f"Não foi possível carregar as promoções: {e}")
-        return pd.DataFrame(columns=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
+    # Padronização de Colunas
+    df.columns = [col.upper().replace(' ', '_') for col in df.columns]
+    
+    df_essencial = df[['ID_PRODUTO', 'PRECO_PROMOCIONAL']].copy()
+    df_essencial['PRECO_PROMOCIONAL'] = pd.to_numeric(df_essencial['PRECO_PROMOCIONAL'].astype(str).str.replace(',', '.'), errors='coerce')
+    df_essencial['ID_PRODUTO'] = pd.to_numeric(df_essencial['ID_PRODUTO'], errors='coerce').astype('Int64')
+    return df_essencial.dropna(subset=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
+
 
 @st.cache_data(ttl=5)
 def carregar_catalogo():
-    """Carrega o catálogo, aplica as promoções e prepara o DataFrame."""
-    try:
-        sh = get_gspread_client()
-        worksheet = sh.worksheet(SHEET_NAME_CATALOGO)
-        data = worksheet.get_all_values()
-        if not data or len(data) < 2:
-            return pd.DataFrame()
-
-        df_produtos = pd.DataFrame(data[1:], columns=data[0])
-        df_produtos['PRECO'] = pd.to_numeric(df_produtos['PRECO'].str.replace(',', '.'), errors='coerce').fillna(0.0)
-        df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
-        df_produtos = df_produtos[df_produtos['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
-        df_produtos.set_index('ID', inplace=True)
-        
-        df_promocoes = carregar_promocoes()
-        
-        if not df_promocoes.empty:
-            df_final = pd.merge(df_produtos, df_promocoes, left_index=True, right_on='ID_PRODUTO', how='left')
-            df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO'])
-        else:
-            df_final = df_produtos
-            df_final['PRECO_FINAL'] = df_final['PRECO']
-            df_final['PRECO_PROMOCIONAL'] = None 
-
-        return df_final
-
-    except gspread.exceptions.WorksheetNotFound:
-        st.error(f"Erro: A aba '{SHEET_NAME_CATALOGO}' não foi encontrada na planilha.")
+    """Carrega o catálogo do 'produtos.csv' do GitHub, aplica as promoções e prepara o DataFrame."""
+    df_produtos = get_data_from_github(SHEET_NAME_CATALOGO_CSV)
+    
+    if df_produtos is None or df_produtos.empty:
+        st.warning("Catálogo indisponível. Verifique o arquivo 'produtos.csv' no GitHub.")
         return pd.DataFrame()
-    except Exception as e:
-        st.error(f"Ocorreu um erro ao carregar o catálogo: {e}")
-        return pd.DataFrame()
+    
+    # Padroniza nomes de colunas
+    df_produtos.columns = [col.upper().replace(' ', '_') for col in df_produtos.columns]
+
+    # Tratamento dos dados 
+    df_produtos['PRECO'] = pd.to_numeric(df_produtos['PRECO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
+    df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
+    
+    # Filtra e define o índice
+    df_produtos = df_produtos[df_produtos['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
+    df_produtos.set_index('ID', inplace=True)
+    
+    df_promocoes = carregar_promocoes()
+    
+    # Aplica Promoções (Lógica original de merge)
+    if not df_promocoes.empty:
+        df_final = pd.merge(df_produtos.reset_index(), df_promocoes, left_on='ID', right_on='ID_PRODUTO', how='left').set_index('ID')
+        df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO'])
+    else:
+        df_final = df_produtos
+        df_final['PRECO_FINAL'] = df_final['PRECO']
+        df_final['PRECO_PROMOCIONAL'] = None 
+
+    return df_final.reset_index()
 
 
-# --- Funções do Aplicativo ---
+# --- Funções do Aplicativo (SALVAR PEDIDO NO SHEETS) ---
 
 def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
+    """Salva o pedido na aba 'pedidos' do Google Sheets usando gspread."""
+    # MANTIDO: Escrita no Sheets é mais simples e confiável para transações.
     try:
         sh = get_gspread_client()
         worksheet = sh.worksheet(SHEET_NAME_PEDIDOS)
@@ -113,8 +151,10 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
         worksheet.append_row(novo_registro)
         return True
     except Exception as e:
-        st.error(f"Erro ao salvar o pedido: {e}")
+        st.error(f"Erro ao salvar o pedido no Google Sheets: {e}")
         return False
+        
+# --- Resto do código (adicionar/remover carrinho, layout e renderização) PERMANECE O MESMO ---
 
 def adicionar_ao_carrinho(produto_id, produto_nome, produto_preco):
     if produto_id in st.session_state.carrinho:
@@ -140,7 +180,7 @@ def render_product_image(link_imagem):
 # --- Layout do Aplicativo ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS ---
+# --- CSS (MANTIDO) ---
 st.markdown(f"""
 <style>
 .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
@@ -160,7 +200,7 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 
 
 # --- ATUALIZAÇÃO AUTOMÁTICA ---
-st_autorefresh(interval=5000, key="auto_refresh_catalogo") # Atualiza a cada 5 segundos
+st_autorefresh(interval=5000, key="auto_refresh_catalogo")
 
 
 # --- CABEÇALHO ---
@@ -203,7 +243,7 @@ with col_carrinho:
                         detalhes={"total":total_acumulado,"itens":[{"id":int(k),"nome":v['nome'],"preco":v['preco'],"quantidade":v['quantidade']} for k,v in st.session_state.carrinho.items()]}
                         if salvar_pedido(nome,contato,total_acumulado,json.dumps(detalhes,ensure_ascii=False)):
                             st.balloons();st.success("🎉 Pedido enviado com sucesso!");st.session_state.carrinho={};st.rerun()
-                        else:st.error("Falha ao salvar o pedido.")
+                        # else: o erro é exibido dentro de salvar_pedido()
                     else:st.warning("Preencha seu nome e contato.")
 st.markdown("</div></div>", unsafe_allow_html=True)
 
@@ -212,7 +252,7 @@ st.markdown("---")
 df_catalogo = carregar_catalogo()
 
 # --------------------------------------------------------------------------
-# A ÚNICA ALTERAÇÃO FOI FEITA NA FUNÇÃO ABAIXO
+# FUNÇÃO render_product_card (MANTIDA)
 # --------------------------------------------------------------------------
 def render_product_card(prod_id, row, key_prefix):
     """Renderiza um card de produto, incluindo um selo de promoção se aplicável."""
@@ -275,5 +315,6 @@ else:
     st.subheader("✨ Nossos Produtos")
     cols = st.columns(4)
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
+        product_id = row['ID'] 
         with cols[i % 4]: 
-            render_product_card(prod_id, row, key_prefix='prod')
+            render_product_card(product_id, row, key_prefix='prod')
