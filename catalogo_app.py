@@ -51,7 +51,7 @@ def get_data_from_github(file_name):
     Lê o conteúdo de um CSV do GitHub diretamente via API (sem cache da CDN).
     Garante que sempre trará a versão mais recente do arquivo.
     """
-    # CORREÇÃO FINAL DO ESCOPO: Usa GITHUB_BASE_API que é global e já contém o repositório
+    # CORREÇÃO DO NAMEERROR: Usa GITHUB_BASE_API que é global e já contém o DATA_REPO_NAME
     api_url = f"{GITHUB_BASE_API}{file_name}?ref={BRANCH}"
     
     try:
@@ -65,7 +65,6 @@ def get_data_from_github(file_name):
         
         # 1. VERIFICAÇÃO DO STATUS HTTP
         if response.status_code == 404:
-            # AQUI USAMOS DATA_REPO_NAME NO ERRO, MAS ELE VAI CONTER O VALOR CORRETO AGORA
             st.error(f"Erro 404: Arquivo '{file_name}' não encontrado no repositório '{DATA_REPO_NAME}' na branch '{BRANCH}'. Verifique o nome do arquivo/branch/repo.")
             return None
         
@@ -425,7 +424,8 @@ def render_product_card(prod_id, row, key_prefix):
                 st.markdown(f"<h4 style='color: #880E4F; margin:0; line-height:2.5;'>R$ {preco_final:.2f}</h4>", unsafe_allow_html=True)
                 
         with col_botao:
-            if st.button("➕ Adicionar", key=f'{key_prefix}_{prod_id}', use_container_width=True):
+            # CORREÇÃO DA CHAVE DUPLICADA: Usa o key_prefix já único (prod_i) para o botão
+            if st.button("➕ Adicionar", key=key_prefix, use_container_width=True):
                 adicionar_ao_carrinho(prod_id, row['NOME'], preco_final)
                 st.rerun()
 
@@ -448,4 +448,5 @@ else:
     for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
         product_id = row['ID'] 
         with cols[i % 4]: 
-            render_product_card(product_id, row, key_prefix='prod')
+            # CORREÇÃO DA CHAVE DUPLICADA: A chave agora inclui o índice 'i' para garantir exclusividade
+            render_product_card(product_id, row, key_prefix=f'prod_{i}')
