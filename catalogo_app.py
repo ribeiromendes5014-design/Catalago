@@ -211,11 +211,15 @@ def render_product_card_with_streamlit_buttons(prod_id, row, key_prefix):
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
 # --- CSS PRINCIPAL E CARROSSEL CSS (TUDO JUNTO) ---
-# A estrutura de aspas triplas e a tag <style> garante que o Python ignore o CSS.
+# Usa .format() para permitir variável BACKGROUND_IMAGE_URL sem quebrar o CSS
 CSS_GERAL = """
 <style>
     /* Estilos Streamlit e Globais */
-    .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}); background-size: cover; background-attachment: fixed; }}
+    .stApp {{ 
+        background-image: url({bg}); 
+        background-size: cover; 
+        background-attachment: fixed; 
+    }}
     div.block-container {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 10px; padding: 2rem; margin-top: 1rem; }}
     .pink-bar-container {{ background-color: #E91E63; padding: 20px 0; width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
     .pink-bar-content {{ width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; }}
@@ -249,17 +253,17 @@ CSS_GERAL = """
     }}
     
     /* ESTILOS DO CARROSSEL - HTML INJETADO (APLICADO SOMENTE AO CATÁLOGO COMPLETO) */
-    .carousel-outer-container {
+    .carousel-outer-container {{
         overflow-x: scroll; 
         padding-bottom: 20px; 
         margin-top: 15px;
-    }
-    .product-wrapper {
+    }}
+    .product-wrapper {{
         display: flex; 
         flex-direction: row;
         width: max-content; 
-    }
-    .carousel-item-html { 
+    }}
+    .carousel-item-html {{ 
         border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin: 5px 10px 5px 0; 
         min-width: 220px; max-width: 220px; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         text-align: center;
@@ -267,16 +271,16 @@ CSS_GERAL = """
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-    }
-    .product-image-container-html { 
+    }}
+    .product-image-container-html {{ 
         height: 120px; 
         display: flex; align-items: center; justify-content: center; 
         margin-bottom: 0.5rem; overflow: hidden; background-color: #f7f7f7; border-radius: 8px; 
-    }
-    .product-image-container-html img { 
+    }}
+    .product-image-container-html img {{ 
         max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; 
-    }
-    .carousel-detail-link {
+    }}
+    .carousel-detail-link {{
         display: block;
         background-color: #C2185B;
         color: white;
@@ -285,25 +289,17 @@ CSS_GERAL = """
         text-decoration: none;
         margin-top: 10px;
         font-weight: bold;
-    }
-    h4.price-normal {
+    }}
+    h4.price-normal {{
         color: #880E4F !important;
         margin: 5px 0 !important;
         line-height: 1.2 !important;
-    }
-</style>
-CSS_GERAL = """
-<style>
-    .stApp {{ 
-        background-image: url({bg}); 
-        background-size: cover; 
-        background-attachment: fixed; 
     }}
-    /* o restante do seu CSS fica igual */
 </style>
 """.format(bg=BACKGROUND_IMAGE_URL)
 
 st.markdown(CSS_GERAL, unsafe_allow_html=True)
+
 
 
 # --- ATUALIZAÇÃO AUTOMÁTICA ---
@@ -438,5 +434,6 @@ else:
         """, unsafe_allow_html=True)
         
         st.caption("✨ Role a barra abaixo (ou deslize a tela) para ver todos os produtos. Use a barra de pesquisa para encontrar e adicionar produtos.")
+
 
 
