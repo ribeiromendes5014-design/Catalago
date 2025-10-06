@@ -1,5 +1,16 @@
 # catalogo_app.py
 import streamlit as st
+
+# Esconde botões de menu, footer e cabeçalho do Streamlit
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}     /* Esconde menu do canto superior direito */
+    footer {visibility: hidden;}        /* Esconde o 'Made with Streamlit' */
+    header {visibility: hidden;}        /* Esconde o cabeçalho padrão */
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 import pandas as pd
 from datetime import datetime
 import json
@@ -37,7 +48,7 @@ def get_github_headers(content_type='json'):
     }
     # Para interações com a API de Conteúdo (leitura de SHA, escrita)
     if content_type == 'json':
-        headers["Accept"] = "application/vnd.github.com"
+        headers["Accept"] = "application/vnd.github.v3+json"
     
     return headers
 
@@ -54,7 +65,7 @@ def get_data_from_github(file_name):
         # Autenticação com token do secrets
         headers = {
             "Authorization": f"token {GITHUB_TOKEN}",
-            "Accept": "application/vnd.github.com"
+            "Accept": "application/vnd.github.v3+json"
         }
 
         response = requests.get(api_url, headers=headers)
@@ -111,6 +122,7 @@ def carregar_catalogo():
     
     df_produtos.columns = [col.upper().replace(' ', '_') for col in df_produtos.columns]
 
+    # <<< MUDANÇA AQUI: Removendo a referência à coluna CATEGORIA se ela não existe mais. >>>
     # O código abaixo verifica se o DF tem as colunas essenciais antes de prosseguir
     colunas_essenciais = ['PRECO', 'ID', 'DISPONIVEL', 'NOME']
     for col in colunas_essenciais:
@@ -217,15 +229,10 @@ def render_product_image(link_imagem):
         st.markdown(placeholder_html, unsafe_allow_html=True)
 
 
-# --- Layout do Aplicativo ---
+# --- Layout do Aplicativo (MANTIDO) ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
-# --------------------------------------------------------------------------
-# CONFIGURAÇÃO DE OCULTAÇÃO (MANTIDA, mas o CSS é mais agressivo)
-st.set_option('client.toolbarMode', 'viewer')
-# --------------------------------------------------------------------------
-
-# --- CSS (ATUALIZADO PARA OCULTAR OS ELEMENTOS DE UI) ---
+# --- CSS (MANTIDO) ---
 st.markdown(f"""
 <style>
 .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
@@ -240,33 +247,6 @@ div[data-testid="stButton"] > button {{ background-color: #E91E63; color: white;
 div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: white; border: 1px solid #E91E63; }}
 .product-image-container {{ height: 220px; display: flex; align-items: center; justify-content: center; margin-bottom: 1rem; overflow: hidden; }}
 .product-image-container img {{ max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }}
-
-/* ------------------------------------------------ */
-/* CSS AGRESSIVO PARA OCULTAR ELEMENTOS DO STREAMLIT */
-/* ------------------------------------------------ */
-
-/* Oculta o menu de três pontos no canto superior direito e o ícone do GitHub */
-div[data-testid="stToolbar"],
-div[data-testid="stDeployButton"],
-div[data-testid="stHeader"] > header,
-#MainMenu { 
-    display: none !important; 
-    visibility: hidden !important;
-    height: 0px !important;
-}
-
-/* Oculta o rodapé (log e "Made with Streamlit") */
-footer { 
-    visibility: hidden !important; 
-    height: 0px !important;
-}
-
-/* Oculta especificamente o botão de três pontos e o botão 'Fork' */
-button[data-testid="baseButton-header"],
-div[data-testid="stDecoration"] { 
-    display: none !important; 
-    visibility: hidden !important; 
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -347,7 +327,7 @@ def render_product_card(prod_id, row, key_prefix):
             """, unsafe_allow_html=True)
         
         st.markdown(f"**{row['NOME']}**")
-        st.caption(row.get('DESCRICAOLONGA', ''))
+        st.caption(row.get('DESCRICAOCURTA', ''))
         
         with st.expander("Ver detalhes"): 
             st.markdown(row.get('DESCRICAOLONGA', 'Sem descrição detalhada.'))
