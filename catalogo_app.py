@@ -16,18 +16,11 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 REPO_NAME = os.environ.get("REPO_NAME")
 BRANCH = os.environ.get("BRANCH")
 
-# Teste opcional (pode remover depois)
+# Teste opcional (remova depois)
 st.write("Repo:", REPO_NAME)
 st.write("Branch:", BRANCH)
 st.write("Token:", bool(GITHUB_TOKEN))  # mostra apenas se o token existe (True/False))
 
-
-
-# --- Variáveis de Configuração (CORRIGIDO PARA O RENDER) ---
-# As variáveis são lidas diretamente das Variáveis de Ambiente (Environment Variables)
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-REPO_NAME = os.environ.get("REPO_NAME")
-BRANCH = os.environ.get("BRANCH")
 
 # URLs da API (MANTIDO)
 GITHUB_BASE_API = f"https://api.github.com/repos/{REPO_NAME}/contents/"
@@ -417,6 +410,7 @@ else:
         product_id = row['ID'] 
         with cols[i % 4]: 
             render_product_card(product_id, row, key_prefix='prod')
+
 
 
 
