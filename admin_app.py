@@ -531,7 +531,7 @@ with tab_pedidos:
                                 st.session_state['data_version'] += 1 
                                 st.rerun() 
                             else: st.error("Falha ao excluir o pedido.")
-                    st.markdown("---"); exibir_itens_pedido(pedido['ID_PEDIDO'], pedido['ITENS_PEDIDO'], df_catalogo_pedidos)
+                    st.markdown("---"); exibir_itens_pedido(pedido['ID_PEDIDO'], pedido['itens_json'], df_catalogo_pedidos)
 
 
 with tab_produtos:
@@ -735,6 +735,7 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
 
 
