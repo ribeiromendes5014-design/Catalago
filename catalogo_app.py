@@ -105,6 +105,7 @@ def get_data_from_github(file_name):
 
 
 @st.cache_data(ttl=5)
+@st.cache_data(ttl=5)
 def carregar_promocoes():
     """Carrega as promoções do 'promocoes.csv' do GitHub. (MANTIDO)"""
     df = get_data_from_github(SHEET_NAME_PROMOCOES_CSV)
@@ -117,7 +118,14 @@ def carregar_promocoes():
     if 'ID' in df.columns:
         df.rename(columns={'ID': 'ID_PRODUTO'}, inplace=True)
         
-    df_essencial = df[['ID_PRODUTO', 'PRECO_PROMOCIONAL']].copy()
+    # --- NOVO: Tratamento para PRECO_PROMOCIONAL ---
+    # Se o preço promocional tiver um nome diferente, corrija-o aqui.
+    if 'PRECO' in df.columns and 'PRECO_PROMOCIONAL' not in df.columns:
+        # Se você usa 'PRECO' no CSV de promoções para o valor promocional
+        df.rename(columns={'PRECO': 'PRECO_PROMOCIONAL'}, inplace=True)
+    # --- FIM NOVO: Tratamento para PRECO_PROMOCIONAL ---
+        
+    df_essencial = df[['ID_PRODUTO', 'PRECO_PROMOCIONAL']].copy() # LINHA 123
     df_essencial['PRECO_PROMOCIONAL'] = pd.to_numeric(df_essencial['PRECO_PROMOCIONAL'].astype(str).str.replace(',', '.'), errors='coerce')
     df_essencial['ID_PRODUTO'] = pd.to_numeric(df_essencial['ID_PRODUTO'], errors='coerce').astype('Int64')
     return df_essencial.dropna(subset=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
@@ -453,3 +461,4 @@ else:
         with cols[i % 4]: 
             # Chama a função com a chave única
             render_product_card(product_id, row, key_prefix=unique_key)
+
