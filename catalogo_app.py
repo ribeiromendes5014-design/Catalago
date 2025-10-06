@@ -11,15 +11,14 @@ from io import StringIO
 import os # <--- ADICIONADO PARA LER VARIÁVEIS DO RENDER
 
 
-# --- Variáveis de Configuração (CORRIGIDO PARA O RENDER) ---
-# As variáveis são lidas diretamente das Variáveis de Ambiente (Environment Variables)
+# --- Variáveis de Configuração (CORREÇÃO DE FALLBACK PARA 'NONE') ---
+# Prioriza DATA_REPO_NAME, mas usa REPO_NAME como fallback (se o Render estiver mal configurado)
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 
-# NOVO: Repositório de Dados (Deve ser definido como DATA_REPO_NAME no Render)
-DATA_REPO_NAME = os.environ.get("DATA_REPO_NAME") 
+DATA_REPO_NAME = os.environ.get("DATA_REPO_NAME", os.environ.get("REPO_NAME")) 
 BRANCH = os.environ.get("BRANCH")
 
-# URLs da API (AGORA APONTA PARA DATA_REPO_NAME)
+# URLs da API (AGORA APONTA PARA DATA_REPO_NAME/REPO_NAME)
 GITHUB_BASE_API = f"https://api.github.com/repos/{DATA_REPO_NAME}/contents/"
 
 # Fontes de Dados (CSV no GitHub)
@@ -52,7 +51,7 @@ def get_data_from_github(file_name):
     Lê o conteúdo de um CSV do GitHub diretamente via API (sem cache da CDN).
     Garante que sempre trará a versão mais recente do arquivo.
     """
-    # CORREÇÃO DO NAMEERROR: Usa GITHUB_BASE_API que é global e já contém o DATA_REPO_NAME
+    # CORREÇÃO FINAL DO ESCOPO: Usa GITHUB_BASE_API que é global e já contém o repositório
     api_url = f"{GITHUB_BASE_API}{file_name}?ref={BRANCH}"
     
     try:
@@ -66,6 +65,7 @@ def get_data_from_github(file_name):
         
         # 1. VERIFICAÇÃO DO STATUS HTTP
         if response.status_code == 404:
+            # AQUI USAMOS DATA_REPO_NAME NO ERRO, MAS ELE VAI CONTER O VALOR CORRETO AGORA
             st.error(f"Erro 404: Arquivo '{file_name}' não encontrado no repositório '{DATA_REPO_NAME}' na branch '{BRANCH}'. Verifique o nome do arquivo/branch/repo.")
             return None
         
