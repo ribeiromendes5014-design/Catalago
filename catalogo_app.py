@@ -1,12 +1,14 @@
 # catalogo_app.py
 import streamlit as st
 
-# Esconde botões de menu, footer e cabeçalho do Streamlit
+# Esconde menus, rodapé, cabeçalho e logo do Streamlit
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}     /* Esconde menu do canto superior direito */
-    footer {visibility: hidden;}        /* Esconde o 'Made with Streamlit' */
-    header {visibility: hidden;}        /* Esconde o cabeçalho padrão */
+    footer {visibility: hidden;}        /* Esconde rodapé padrão */
+    header {visibility: hidden;}        /* Esconde cabeçalho */
+    .stAppDeployButton {display: none;} /* Esconde botão de deploy (logo vermelho) */
+    .viewerBadge_link__1S137 {display: none;} /* Esconde ícone flutuante (coroinha) */
     </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
