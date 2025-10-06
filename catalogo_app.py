@@ -54,7 +54,7 @@ def get_data_from_github(file_name):
         # Autenticação com token do secrets
         headers = {
             "Authorization": f"token {GITHUB_TOKEN}",
-            "Accept": "application/vnd.github.v3+json"
+            "Accept": "application/vnd.github.com.v3.raw"
         }
 
         response = requests.get(api_url, headers=headers)
@@ -221,15 +221,19 @@ def render_product_image(link_imagem):
 # --- Layout do Aplicativo (MANTIDO) ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS (CORRIGIDO) ---
+# --- CSS (COM TODAS AS REGRAS DE OCULTAÇÃO) ---
 st.markdown(f"""
 <style>
-/* 1. Oculta menu, footer, e toolbar */
+/* REGRAS DE OCULTAÇÃO DE ELEMENTOS PADRÃO DO STREAMLIT */
+/* 1. Oculta menu, footer, e sidebar */
 #MainMenu {{visibility: hidden;}}
 footer {{visibility: hidden;}}
+[data-testid="stSidebar"] {{visibility: hidden; width: 0 !important;}}
+
+/* 2. Oculta a toolbar (menu de 3 pontos e deploy do topo) */
 [data-testid="stToolbar"] {{display: none !important; height: 0 !important;}}
 
-/* 2. Oculta botões e links externos do Streamlit (compartilhar, deploy, etc.) */
+/* 3. Oculta botões e links externos do Streamlit (compartilhar, deploy, etc.) */
 a[href*="streamlit.io"],
 a[href*="share.streamlit.io"],
 a[href*="discuss.streamlit.io"],
@@ -247,11 +251,15 @@ a[data-testid="stAppDeployButton"],
     width: 0 !important;
 }}
 
+/* 4. Oculta o botão padrão do popover (usado para o carrinho) */
+div[data-testid="stPopover"] > div:first-child > button {{ display: none; }}
+
+
+/* OUTROS ESTILOS DE LAYOUT (MANTIDOS) */
 .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
 div.block-container {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 10px; padding: 2rem; margin-top: 1rem; }}
 .pink-bar-container {{ background-color: #E91E63; padding: 20px 0; width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
 .pink-bar-content {{ width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; }}
-div[data-testid="stPopover"] > div:first-child > button {{ display: none; }}
 .cart-badge-button {{ background-color: #C2185B; color: white; border-radius: 12px; padding: 8px 15px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; transition: background-color 0.3s; display: inline-flex; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-width: 150px; justify-content: center; }}
 .cart-badge-button:hover {{ background-color: #E91E63; }}
 .cart-count {{ background-color: white; color: #E91E63; border-radius: 50%; padding: 2px 7px; margin-left: 8px; font-size: 14px; line-height: 1; }}
@@ -281,6 +289,7 @@ with col_pesquisa:
     st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
 
 with col_carrinho:
+    # Este botão aciona o popover (que tem o botão padrão oculto pelo CSS)
     custom_cart_button = f"""
         <div class='cart-badge-button' onclick='document.querySelector("[data-testid=\"stPopover\"] > div:first-child > button").click();'>
             🛒 SEU PEDIDO
