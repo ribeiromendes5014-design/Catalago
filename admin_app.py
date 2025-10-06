@@ -512,7 +512,11 @@ with tab_produtos:
                     st.markdown(f"**{produto.get('NOME', 'N/A')}** (ID: {produto.get('ID', 'N/A')})")
                     st.markdown(f"**Preço:** R$ {produto.get('PRECO', 'N/A')}")
                     with st.popover("📝 Editar"):
-                        with st.form(f"edit_form_{produto.get('ID', index)}", clear_on_submit=True):
+                        # --- CORREÇÃO DA CHAVE DO FORMULÁRIO ---
+                        # Garante que a chave é única usando ID do produto (ou índice) E o índice de iteração
+                        form_key = f"edit_form_{produto.get('ID', index)}_{index}" 
+                        
+                        with st.form(form_key, clear_on_submit=True):
                             st.markdown(f"Editando: **{produto.get('NOME', 'N/A')}**")
                             preco_val_str = str(produto.get('PRECO', '0')).replace(',','.')
                             try:
@@ -600,7 +604,10 @@ with tab_promocoes:
                 st.caption(f"Status: {promo.get('STATUS', 'N/A')} | ID da Promoção: {promo.get('ID_PROMOCAO', 'N/A')}")
                 
                 with st.popover("📝 Editar Promoção"):
-                    with st.form(f"edit_promo_{promo.get('ID_PROMOCAO', index)}", clear_on_submit=True):
+                    # --- CORREÇÃO DA CHAVE DO FORMULÁRIO DE PROMOÇÃO ---
+                    promo_form_key = f"edit_promo_{promo.get('ID_PROMOCAO', index)}_{index}_tab_promo"
+                    
+                    with st.form(promo_form_key, clear_on_submit=True):
                         st.markdown(f"Editando: **{promo.get('NOME_PRODUTO', 'N/A')}**")
                         
                         preco_promo_val_str = str(promo.get('PRECO_PROMOCIONAL', '0')).replace(',','.')
