@@ -1,3 +1,4 @@
 Coluna,ID,NOME,PRECO,DESCRICAOCURTA,DESCRICAOLONGA,LINKIMAGEM,DISPONIVEL
-1,101,Bolo de Chocolate,15.00,"Bolo simples de chocolate.", "Bolo caseiro de chocolate com cobertura de brigadeiro.", https://exemplo.com/bolo_choc.jpg, sim
-2,102,Torta de Morango,25.50,"Torta fresca com morangos.", "Massa crocante com creme de confeiteiro e morangos frescos.", https://exemplo.com/torta_mor.jpg, sim
+1,101,Mini Bolo de Cenoura,12.50,"Miniatura fofa e deliciosa.","Massa de cenoura aerada com cobertura artesanal de brigadeiro cremoso.",https://i.ibb.co/seuarquivo1.jpg,sim
+2,102,Torta de Limão,28.00,"Torta tradicional e ácida.","Torta gelada de limão com base de biscoito e merengue tostado.",https://i.ibb.co/seuarquivo2.jpg,sim
+3,103,Brownie Clássico,8.50,"Brownie macio com nozes.", "Receita americana, centro macio e casquinha crocante. Contém nozes.",,sim
