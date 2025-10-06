@@ -45,37 +45,45 @@ def get_github_headers(content_type='json'):
 # Adicionada tolerância a erros no CSV usando 'engine="python"' e 'on_bad_lines="warn"'
 def get_data_from_github(file_name):
     """
-    Faz a requisição HTTP para obter o conteúdo RAW do CSV do GitHub.
-    Usa a URL pública (raw.githubusercontent.com) sem Token de leitura.
-    
-    ATENÇÃO: Adicionei 'engine="python"' e 'on_bad_lines="warn"' ao pd.read_csv
-    para aumentar a tolerância a erros de tokenização que estavam ocorrendo.
+    Lê o conteúdo de um CSV do GitHub diretamente via API (sem cache da CDN).
+    Garante que sempre trará a versão mais recente do arquivo.
     """
-    # URL completa, usando o REPO_NAME e BRANCH
-    file_url = f"https://raw.githubusercontent.com/{REPO_NAME}/{BRANCH}/{file_name}"
+    api_url = f"https://api.github.com/repos/{REPO_NAME}/contents/{file_name}?ref={BRANCH}"
     
     try:
-        # Requisição pública (sem o header 'Authorization')
-        response = requests.get(file_url) 
-        response.raise_for_status() 
-        
-        # Lê o conteúdo de texto retornado
-        csv_data = StringIO(response.text)
-        
-        # <<< MUDANÇA AQUI: Adiciona argumentos para tolerância a CSVs malformados >>>
-        # 'engine="python"' é mais lento, mas mais robusto para erros de tokenização.
-        # 'on_bad_lines="warn"' avisa sobre linhas com problemas em vez de falhar.
-        return pd.read_csv(csv_data, sep=',', encoding='utf-8', engine="python", on_bad_lines="warn") 
+        # Autenticação com token do secrets
+        headers = {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+
+        response = requests.get(api_url, headers=headers)
+        response.raise_for_status()
+
+        data = response.json()
+        if "content" not in data:
+            st.error(f"O campo 'content' não foi encontrado na resposta da API. Verifique se o arquivo {file_name} existe na branch '{BRANCH}'.")
+            st.json(data)
+            return None
+
+        # Decodifica o conteúdo base64 retornado pela API
+        content = base64.b64decode(data["content"]).decode("utf-8")
+        csv_data = StringIO(content)
+
+        # Lê o CSV e trata erros de formatação
+        df = pd.read_csv(csv_data, sep=",", encoding="utf-8", engine="python", on_bad_lines="warn")
+
+        # Normaliza nomes de colunas (boa prática)
+        df.columns = [col.strip().upper() for col in df.columns]
+        return df
 
     except requests.exceptions.HTTPError as e:
-        if response.status_code == 404:
-            st.error(f"Erro 404: Arquivo '{file_name}' não encontrado. Verifique se o nome do arquivo/repo está 100% correto.")
-        else:
-            st.error(f"Erro ao acessar o GitHub. Status {response.status_code}. URL: {file_url}. Detalhe: {e}")
+        st.error(f"Erro HTTP ao acessar '{file_name}' via API ({response.status_code}). URL: {api_url}")
         return None
     except Exception as e:
-        st.error(f"Ocorreu um erro na leitura do CSV: {e}")
+        st.error(f"Erro ao carregar '{file_name}' via API do GitHub: {e}")
         return None
+
 
 @st.cache_data(ttl=5)
 def carregar_promocoes():
@@ -352,4 +360,5 @@ else:
         product_id = row['ID'] 
         with cols[i % 4]: 
             render_product_card(product_id, row, key_prefix='prod')
+
 
