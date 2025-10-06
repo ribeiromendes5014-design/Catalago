@@ -187,16 +187,22 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
     porcentagem de itens separados.
     """
     try:
-        # --- CORREÇÃO: Garante que o valor não é nulo/float e é uma string ---
+        # 1. TRATA VALORES NULOS E GARANTE STRING
         if pd.isna(pedido_json) or not str(pedido_json).strip():
             detalhes_pedido = {'itens': []} # Cria um objeto vazio
             st.warning(f"O pedido {id_pedido} não possui itens válidos para exibir.")
         else:
-            # Converte para string antes de carregar o JSON
-            detalhes_pedido = json.loads(str(pedido_json))
+            json_str = str(pedido_json)
+            
+            # 2. CORREÇÃO PARA FORMATO CSV ESCAPADO (substitui "" por ")
+            # Esta linha resolve o problema de aspas duplas duplas
+            json_str_limpo = json_str.replace('""', '"') 
+            
+            detalhes_pedido = json.loads(json_str_limpo)
             
         itens = detalhes_pedido.get('itens', [])
         total_itens = len(itens)
+        itens_separados = 0
         
         # Cria um estado de sessão para o progresso do pedido, se ainda não existir
         key_progress = f'pedido_{id_pedido}_itens_separados'
@@ -636,4 +642,5 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
