@@ -259,6 +259,12 @@ def atualizar_promocao(id_promocao, preco_promocional, data_inicio, data_fim, st
 # --- LAYOUT DO APP ---
 st.set_page_config(page_title="Admin Doce&Bella", layout="wide")
 st.title("⭐ Painel de Administração | Doce&Bella")
+
+# --- ATUALIZAÇÃO AUTOMÁTICA A CADA 60 SEGUNDOS ---
+from streamlit_autorefresh import st_autorefresh
+st_autorefresh(interval=60000, key="auto_update_github")
+
+# --- TABS DO SISTEMA ---
 tab_pedidos, tab_produtos, tab_promocoes = st.tabs(["Pedidos", "Produtos", "🔥 Promoções"])
 
 with tab_pedidos:
@@ -437,4 +443,5 @@ with tab_promocoes:
                     if excluir_promocao(promo['ID_PROMOCAO']):
                         st.success("Promoção excluída!"); st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
