@@ -203,9 +203,9 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
         content_base64 = file_data.get('content', '')
         
         if not content_base64:
-             current_content = novo_cabecalho
+            current_content = novo_cabecalho
         else:
-             current_content = base64.b64decode(content_base64).decode('utf-8')
+            current_content = base64.b64decode(content_base64).decode('utf-8')
 
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 404:
@@ -219,24 +219,35 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
         st.error(f"Erro na decodificação ou leitura do arquivo 'pedidos.csv'. Detalhe: {e}")
         return False
 
+    # --- Cria o novo registro ---
     timestamp = int(datetime.now().timestamp())
     data_hora = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     id_pedido = timestamp
     status = "NOVO"
     link_imagem = ""
-    itens_pedido_vazio = ""
-    
+
+    # Gera um resumo legível dos itens (ex: "2x Caneca Floral; 1x Vela")
+    try:
+        itens_data = json.loads(itens_json)
+        resumo_itens = "; ".join([f"{i['quantidade']}x {i['nome']}" for i in itens_data.get('itens', [])])
+    except Exception:
+        resumo_itens = "Erro ao gerar resumo"
+
+    # Escapa o JSON para manter compatibilidade com CSV
     escaped_itens_json = itens_json.replace('"', '""')
-    
-    novo_registro = f'\n"{id_pedido}","{data_hora}","{nome_cliente}","{contato_cliente}","{itens_pedido_vazio}","{valor_total:.2f}","{link_imagem}","{status}","{escaped_itens_json}"'
-    
+
+    novo_registro = (
+        f'\n"{id_pedido}","{data_hora}","{nome_cliente}","{contato_cliente}",'
+        f'"{resumo_itens}","{valor_total:.2f}","{link_imagem}","{status}","{escaped_itens_json}"'
+    )
+
     if current_content.strip() and current_content.strip() != novo_cabecalho:
         new_content = current_content.strip() + novo_registro
     else:
         new_content = novo_cabecalho + novo_registro
-    
+
     encoded_content = base64.b64encode(new_content.encode('utf-8')).decode('utf-8')
-    
+
     commit_data = {
         "message": f"PEDIDO: Novo pedido de {nome_cliente} em {datetime.now().strftime('%Y-%m-%d %H:%M')}",
         "content": encoded_content,
@@ -244,7 +255,7 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
     }
     if current_sha:
         commit_data["sha"] = current_sha
-    
+
     headers_put = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json"
@@ -255,7 +266,8 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
         response_put.raise_for_status()
         return True
     except requests.exceptions.HTTPError as e:
-        st.error(f"Erro ao salvar o pedido (Commit no GitHub). Status {e.response.status_code}. Verifique as permissões 'repo' do seu PAT. Detalhe: {e.response.text}")
+        st.error(f"Erro ao salvar o pedido (Commit no GitHub). Status {e.response.status_code}. "
+                 f"Verifique as permissões 'repo' do seu PAT. Detalhe: {e.response.text}")
         return False
     except Exception as e:
         st.error(f"Erro desconhecido ao enviar o pedido: {e}")
@@ -453,3 +465,4 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
