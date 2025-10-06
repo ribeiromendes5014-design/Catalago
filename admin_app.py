@@ -512,7 +512,7 @@ with tab_produtos:
                     st.markdown(f"**{produto.get('NOME', 'N/A')}** (ID: {produto.get('ID', 'N/A')})")
                     st.markdown(f"**Preço:** R$ {produto.get('PRECO', 'N/A')}")
                     with st.popover("📝 Editar"):
-                        # --- CORREÇÃO DA CHAVE DO FORMULÁRIO (FEITA NA CORREÇÃO ANTERIOR) ---
+                        # --- CORREÇÃO DA CHAVE DO FORMULÁRIO ---
                         form_key = f"edit_form_{produto.get('ID', index)}_{index}" 
                         
                         with st.form(form_key, clear_on_submit=True):
@@ -569,6 +569,10 @@ with tab_promocoes:
         if df_catalogo_promo.empty:
             st.warning("Cadastre produtos antes de criar uma promoção.")
         else:
+            # --- CORREÇÃO APLICADA AQUI (KeyError: 'PRECO') ---
+            df_catalogo_promo.columns = df_catalogo_promo.columns.str.upper()
+            # ----------------------------------------------------
+            
             with st.form("form_nova_promocao", clear_on_submit=True):
                 df_catalogo_promo['PRECO_FLOAT'] = pd.to_numeric(df_catalogo_promo['PRECO'].astype(str).str.replace(',', '.'), errors='coerce') 
                 opcoes_produtos = {f"{row['NOME']} (R$ {row['PRECO_FLOAT']:.2f})": row['ID'] for _, row in df_catalogo_promo.dropna(subset=['PRECO_FLOAT', 'ID']).iterrows()}
