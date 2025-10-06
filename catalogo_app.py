@@ -154,21 +154,29 @@ def render_product_image_html(link_imagem):
     return placeholder_html
 
 def get_product_card_html_for_carousel(prod_id, row):
-    """Gera o HTML simplificado para um card (para carrossel), sem funções Streamlit."""
-    img_html = render_product_image_html(row.get('LINKIMAGEM'))
+    """Gera o HTML padronizado para o carrossel (mesmo estilo dos cards Streamlit)."""
     preco_final = row['PRECO_FINAL']
-    
-    # Este HTML é estilizado para parecer um card Streamlit, mas sem interatividade.
-    card_html = f"""
+    preco_original = row['PRECO']
+    is_promotion = pd.notna(row.get('PRECO_PROMOCIONAL')) and preco_final < preco_original
+
+    img_html = render_product_image_html(row.get('LINKIMAGEM'))
+    promo_badge = '<span class="promo-badge">🔥 PROMOÇÃO</span>' if is_promotion else ''
+
+    if is_promotion:
+        preco_html = f"<div class='price-container'><span class='price-original'>R$ {preco_original:.2f}</span><h4 class='price-promo'>R$ {preco_final:.2f}</h4></div>"
+    else:
+        preco_html = f"<h4 class='price-normal'>R$ {preco_final:.2f}</h4>"
+
+    return f"""
     <div class="carousel-item-html">
         {img_html}
+        {promo_badge}
         <strong>{row['NOME']}</strong>
-        <div class="price-container">
-            <h4 class='price-normal'>R$ {preco_final:.2f}</h4>
-        </div>
-        <a href="#catalogo-completo" class="carousel-detail-link">Ver Detalhes</a>
+        {preco_html}
+        <a href="#" class="carousel-detail-link">Ver Detalhes</a>
     </div>
     """
+
     return card_html
 
 def render_product_card_with_streamlit_buttons(prod_id, row, key_prefix):
@@ -443,6 +451,7 @@ else:
     for prod_id, row in df_filtrado.iterrows():
         render_product_card_with_streamlit_buttons(prod_id, row, key_prefix='catalogo')
     st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 
