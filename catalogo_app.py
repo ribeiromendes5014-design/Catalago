@@ -8,14 +8,12 @@ from streamlit_autorefresh import st_autorefresh
 import requests 
 import base64 
 from io import StringIO 
-import os # <--- ADICIONADO PARA LER VARIÁVEIS DO RENDER
+import os 
 
 
 # --- Variáveis de Configuração (CORREÇÃO DE FALLBACK PARA 'NONE') ---
-# Prioriza DATA_REPO_NAME, mas usa REPO_NAME como fallback (se o Render estiver mal configurado)
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 
-# Corrigido para garantir que sempre tenha um valor, seja de DATA_REPO_NAME ou REPO_NAME
 DATA_REPO_NAME = os.environ.get("DATA_REPO_NAME", os.environ.get("REPO_NAME")) 
 BRANCH = os.environ.get("BRANCH")
 
@@ -111,25 +109,26 @@ def carregar_promocoes():
     
     # Retorna DataFrame vazio se a leitura falhar
     if df is None or df.empty:
-        return pd.DataFrame(columns=['ID_PRODUTO', 'DESCONTO']) # Ajustado para DESCONTO
+        # CORREÇÃO: Usar 'DESCONTO' para o DataFrame de retorno
+        return pd.DataFrame(columns=['ID_PRODUTO', 'DESCONTO']) 
 
     # Padroniza todas as colunas para MAIÚSCULAS e substitui espaços por _
     df.columns = [col.upper().replace(' ', '_') for col in df.columns]
     
-    # 1. Renomeia IDPRODUTO (do seu CSV) para ID_PRODUTO (esperado pelo merge)
+    # CORREÇÃO: Renomeia IDPRODUTO (do seu CSV) para ID_PRODUTO 
     if 'IDPRODUTO' in df.columns:
         df.rename(columns={'IDPRODUTO': 'ID_PRODUTO'}, inplace=True)
     # Se você usou ID no CSV para o ID do produto, renomeie também (como fallback)
     elif 'ID' in df.columns:
-         df.rename(columns={'ID': 'ID_PRODUTO'}, inplace=True)
+         df.rename(columns={'ID': 'ID_PROUTO'}, inplace=True)
          
-    # 2. Verifica se a coluna de desconto (DESCONTO) existe
+    # Verifica se a coluna de desconto (DESCONTO) existe
     if 'DESCONTO' not in df.columns:
         st.error("Coluna 'Desconto' (DESCONTO) não encontrada no promocoes.csv. Verifique o cabeçalho.")
         return pd.DataFrame(columns=['ID_PRODUTO', 'DESCONTO'])
         
-    # Seleciona as colunas essenciais: ID do Produto e o Desconto (agora em vez de PRECO_PROMOCIONAL)
-    df_essencial = df[['ID_PRODUTO', 'DESCONTO']].copy()
+    # CORREÇÃO: Seleciona DESCONTO no lugar de PRECO_PROMOCIONAL
+    df_essencial = df[['ID_PRODUTO', 'DESCONTO']].copy() 
     
     # Converte ID_PRODUTO e DESCONTO para numérico
     df_essencial['DESCONTO'] = pd.to_numeric(df_essencial['DESCONTO'].astype(str).str.replace(',', '.'), errors='coerce')
@@ -191,34 +190,32 @@ def carregar_catalogo():
     df_promocoes = carregar_promocoes()
     
     if not df_promocoes.empty:
-        # Merge baseado no novo nome da coluna ID_PRODUTO
+        # Merge baseado no ID_PRODUTO do catálogo e ID_PRODUTO das promoções
         df_final = pd.merge(df_produtos.reset_index(), df_promocoes, left_on='ID', right_on='ID_PRODUTO', how='left').set_index('ID')
         
-        # O merge adiciona ID_PRODUTO e DESCONTO (em vez de PRECO_PROMOCIONAL)
+        # 1. Cria a coluna PRECO_PROMOCIONAL (necessária para a renderização)
+        df_final['PRECO_PROMOCIONAL'] = None 
         
-        # 1. Cria a coluna PRECO_PROMOCIONAL como NULL por enquanto
-        df_final['PRECO_PROMOCIONAL'] = None # Mantém a coluna para compatibilidade de renderização
+        # 2. Lógica de Cálculo de Preço Final usando a coluna DESCONTO:
         
-        # 2. Calcula o PRECO_FINAL usando a coluna DESCONTO (Ex: 0.10 para 10%)
-        # Se DESCONTO for um valor absoluto, a lógica precisa mudar (e.g. preco - desconto).
-        # Assumindo que DESCONTO é a PORCENTAGEM (ex: 10 ou 0.10):
+        # Converte o desconto para o formato decimal (ex: 10 passa a ser 0.10)
+        df_final['DESCONTO_CALC'] = df_final['DESCONTO'].apply(lambda x: x / 100 if x >= 1 and x <= 100 else x)
         
-        # Se DESCONTO for uma porcentagem, dividimos por 100 se for maior que 1
-        df_final['DESCONTO_CALC'] = df_final['DESCONTO'].apply(lambda x: x / 100 if x > 1 else x)
-        
-        # Calcula o preço final apenas onde o DESCONTO existe (não é NaN)
-        # O preço final é o PRECO (original) * (1 - DESCONTO)
+        # Identifica os produtos em promoção (onde DESCONTO não é NaN)
         is_on_promo = pd.notna(df_final['DESCONTO'])
-        df_final.loc[is_on_on_promo, 'PRECO_FINAL'] = df_final['PRECO'] * (1 - df_final['DESCONTO_CALC'])
+        
+        # Calcula o preço final: Preço Original * (1 - Desconto Decimal)
+        df_final.loc[is_on_promo, 'PRECO_FINAL'] = df_final['PRECO'] * (1 - df_final['DESCONTO_CALC'])
         
         # Para produtos sem promoção, o PRECO_FINAL é o PRECO original
         df_final['PRECO_FINAL'] = df_final['PRECO_FINAL'].fillna(df_final['PRECO'])
         
-        # Marca PRECO_PROMOCIONAL (que é o PRECO_FINAL) apenas se houver desconto
-        df_final.loc[is_on_on_promo, 'PRECO_PROMOCIONAL'] = df_final['PRECO_FINAL']
+        # Define PRECO_PROMOCIONAL com o preço final apenas se houver desconto
+        df_final.loc[is_on_promo, 'PRECO_PROMOCIONAL'] = df_final['PRECO_FINAL']
         
         # Limpa colunas de cálculo temporário
         df_final.drop(columns=['ID_PRODUTO', 'DESCONTO', 'DESCONTO_CALC'], inplace=True, errors='ignore')
+
     else:
         df_final = df_produtos
         df_final['PRECO_FINAL'] = df_final['PRECO']
@@ -434,7 +431,9 @@ def render_product_card(prod_id, row, key_prefix):
         # Define as variáveis de preço e verifica se é uma promoção
         preco_final = row['PRECO_FINAL']
         preco_original = row['PRECO']
-        is_promotion = pd.notna(row.get('PRECO_PROMOCIONAL')) and preco_final < preco_original
+        
+        # A promoção agora é detectada se o PRECO_PROMOCIONAL for diferente de nulo
+        is_promotion = pd.notna(row.get('PRECO_PROMOCIONAL')) 
 
         # --- NOVO: Lógica para exibir o selo de promoção ---
         if is_promotion:
@@ -495,6 +494,3 @@ else:
         with cols[i % 4]: 
             # Chama a função com a chave única
             render_product_card(product_id, row, key_prefix=unique_key)
-
-
-
