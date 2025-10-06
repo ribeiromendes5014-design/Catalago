@@ -105,30 +105,38 @@ def get_data_from_github(file_name):
 
 
 @st.cache_data(ttl=5)
-@st.cache_data(ttl=5)
 def carregar_promocoes():
-    """Carrega as promoções do 'promocoes.csv' do GitHub. (MANTIDO)"""
+    """Carrega as promoções do 'promocoes.csv' do GitHub."""
     df = get_data_from_github(SHEET_NAME_PROMOCOES_CSV)
+    
+    # Retorna DataFrame vazio se a leitura falhar
     if df is None or df.empty:
-        return pd.DataFrame(columns=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
+        return pd.DataFrame(columns=['ID_PRODUTO', 'DESCONTO']) # Ajustado para DESCONTO
 
+    # Padroniza todas as colunas para MAIÚSCULAS e substitui espaços por _
     df.columns = [col.upper().replace(' ', '_') for col in df.columns]
     
-    # Se o ID_PRODUTO estiver como 'ID' no CSV de promoções, renomeie aqui se necessário
-    if 'ID' in df.columns:
-        df.rename(columns={'ID': 'ID_PRODUTO'}, inplace=True)
+    # 1. Renomeia IDPRODUTO (do seu CSV) para ID_PRODUTO (esperado pelo merge)
+    if 'IDPRODUTO' in df.columns:
+        df.rename(columns={'IDPRODUTO': 'ID_PRODUTO'}, inplace=True)
+    # Se você usou ID no CSV para o ID do produto, renomeie também (como fallback)
+    elif 'ID' in df.columns:
+         df.rename(columns={'ID': 'ID_PRODUTO'}, inplace=True)
+         
+    # 2. Verifica se a coluna de desconto (DESCONTO) existe
+    if 'DESCONTO' not in df.columns:
+        st.error("Coluna 'Desconto' (DESCONTO) não encontrada no promocoes.csv. Verifique o cabeçalho.")
+        return pd.DataFrame(columns=['ID_PRODUTO', 'DESCONTO'])
         
-    # --- NOVO: Tratamento para PRECO_PROMOCIONAL ---
-    # Se o preço promocional tiver um nome diferente, corrija-o aqui.
-    if 'PRECO' in df.columns and 'PRECO_PROMOCIONAL' not in df.columns:
-        # Se você usa 'PRECO' no CSV de promoções para o valor promocional
-        df.rename(columns={'PRECO': 'PRECO_PROMOCIONAL'}, inplace=True)
-    # --- FIM NOVO: Tratamento para PRECO_PROMOCIONAL ---
-        
-    df_essencial = df[['ID_PRODUTO', 'PRECO_PROMOCIONAL']].copy() # LINHA 123
-    df_essencial['PRECO_PROMOCIONAL'] = pd.to_numeric(df_essencial['PRECO_PROMOCIONAL'].astype(str).str.replace(',', '.'), errors='coerce')
+    # Seleciona as colunas essenciais: ID do Produto e o Desconto (agora em vez de PRECO_PROMOCIONAL)
+    df_essencial = df[['ID_PRODUTO', 'DESCONTO']].copy()
+    
+    # Converte ID_PRODUTO e DESCONTO para numérico
+    df_essencial['DESCONTO'] = pd.to_numeric(df_essencial['DESCONTO'].astype(str).str.replace(',', '.'), errors='coerce')
     df_essencial['ID_PRODUTO'] = pd.to_numeric(df_essencial['ID_PRODUTO'], errors='coerce').astype('Int64')
-    return df_essencial.dropna(subset=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
+    
+    # Filtra linhas sem ID_PRODUTO ou Desconto válido
+    return df_essencial.dropna(subset=['ID_PRODUTO', 'DESCONTO']).reset_index(drop=True)
 
 
 @st.cache_data(ttl=2)
@@ -461,4 +469,5 @@ else:
         with cols[i % 4]: 
             # Chama a função com a chave única
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
