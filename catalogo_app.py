@@ -1,18 +1,5 @@
 # catalogo_app.py
 import streamlit as st
-
-# Esconde menus, rodapé, cabeçalho e logo do Streamlit
-hide_streamlit_style = """
-    <style>
-    #MainMenu {visibility: hidden;}     /* Esconde menu do canto superior direito */
-    footer {visibility: hidden;}        /* Esconde rodapé padrão */
-    header {visibility: hidden;}        /* Esconde cabeçalho */
-    .stAppDeployButton {display: none;} /* Esconde botão de deploy (logo vermelho) */
-    .viewerBadge_link__1S137 {display: none;} /* Esconde ícone flutuante (coroinha) */
-    </style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
 import pandas as pd
 from datetime import datetime
 import json
@@ -234,9 +221,32 @@ def render_product_image(link_imagem):
 # --- Layout do Aplicativo (MANTIDO) ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS (MANTIDO) ---
+# --- CSS (CORRIGIDO) ---
 st.markdown(f"""
 <style>
+/* 1. Oculta menu, footer, e toolbar */
+#MainMenu {{visibility: hidden;}}
+footer {{visibility: hidden;}}
+[data-testid="stToolbar"] {{display: none !important; height: 0 !important;}}
+
+/* 2. Oculta botões e links externos do Streamlit (compartilhar, deploy, etc.) */
+a[href*="streamlit.io"],
+a[href*="share.streamlit.io"],
+a[href*="discuss.streamlit.io"],
+a[href*="twitter.com/streamlit"],
+a[href*="github.com/streamlit"],
+a[target="_blank"][rel="noopener noreferrer"],
+a[data-testid="stAppDeployButton"],
+[data-testid="stStatusWidget"],
+[data-testid="stDecoration"] {{
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    height: 0 !important;
+    width: 0 !important;
+}}
+
 .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
 div.block-container {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 10px; padding: 2rem; margin-top: 1rem; }}
 .pink-bar-container {{ background-color: #E91E63; padding: 20px 0; width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
