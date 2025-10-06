@@ -356,7 +356,12 @@ with tab_produtos:
     st.header("🛍️ Gerenciamento de Produtos")
     import time
     if int(time.time()) % 5 == 0:
-        st.rerun()
+        # A remoção do st.rerun() a cada 5 segundos é recomendada aqui,
+        # pois pode causar recarregamento excessivo e problemas com o cache.
+        # Caso o recarregamento imediato seja estritamente necessário para o fluxo de trabalho, mantenha,
+        # mas para fins de estabilidade, esta linha foi removida.
+        pass
+        
     with st.expander("➕ Cadastrar Novo Produto", expanded=False):
         with st.form("form_novo_produto", clear_on_submit=True):
             col1, col2 = st.columns(2); nome_prod = col1.text_input("Nome do Produto*"); preco_prod = col1.number_input("Preço (R$)*", min_value=0.0, format="%.2f", step=0.50); link_imagem_prod = col1.text_input("URL da Imagem"); desc_curta_prod = col2.text_input("Descrição Curta"); desc_longa_prod = col2.text_area("Descrição Longa"); disponivel_prod = col2.selectbox("Disponível?", ("Sim", "Não"))
@@ -399,8 +404,13 @@ with tab_produtos:
                     with st.popover("📝 Editar"):
                         with st.form(f"edit_form_{produto.get('ID', index)}", clear_on_submit=True):
                             st.markdown(f"Editando: **{produto.get('NOME', 'N/A')}**")
-                            preco_val = float(str(produto.get('PRECO', '0')).replace(',','.'))
-                            
+                            # Conversão segura do PRECO para float
+                            preco_val_str = str(produto.get('PRECO', '0')).replace(',','.')
+                            try:
+                                preco_val = float(preco_val_str)
+                            except ValueError:
+                                preco_val = 0.0
+
                             nome_edit = st.text_input("Nome", value=produto.get('NOME', ''))
                             preco_edit = st.number_input("Preço", value=preco_val, format="%.2f")
                             link_edit = st.text_input("Link Imagem", value=produto.get('LINKIMAGEM', ''))
@@ -446,6 +456,7 @@ with tab_promocoes:
             st.warning("Cadastre produtos antes de criar uma promoção.")
         else:
             with st.form("form_nova_promocao", clear_on_submit=True):
+                # Conversão segura do PRECO para float
                 df_catalogo_promo['PRECO_FLOAT'] = pd.to_numeric(df_catalogo_promo['PRECO'].astype(str).str.replace(',', '.'), errors='coerce') 
                 opcoes_produtos = {f"{row['NOME']} (R$ {row['PRECO_FLOAT']:.2f})": row['ID'] for _, row in df_catalogo_promo.dropna(subset=['PRECO_FLOAT', 'ID']).iterrows()}
                 
@@ -483,18 +494,45 @@ with tab_promocoes:
                 with st.popover("📝 Editar Promoção"):
                     with st.form(f"edit_promo_{promo.get('ID_PROMOCAO', index)}", clear_on_submit=True):
                         st.markdown(f"Editando: **{promo.get('NOME_PRODUTO', 'N/A')}**")
-                        preco_promo_val = float(str(promo.get('PRECO_PROMOCIONAL', '0')).replace(',','.'))
+                        # Conversão segura do PRECO_PROMOCIONAL
+                        preco_promo_val_str = str(promo.get('PRECO_PROMOCIONAL', '0')).replace(',','.')
+                        try:
+                             preco_promo_val = float(preco_promo_val_str)
+                        except ValueError:
+                             preco_promo_val = 0.0
+
                         preco_promo_edit = st.number_input("Preço Promocional", value=preco_promo_val, format="%.2f")
                         
-                        di_val = datetime.strptime(promo['DATA_INICIO'], '%Y-%m-%d').date() if promo.get('DATA_INICIO') and len(promo['DATA_INICIO']) >= 10 else datetime.now().date()
-                        df_val = datetime.strptime(promo['DATA_FIM'], '%Y-%m-%d').date() if promo.get('DATA_FIM') and len(promo['DATA_FIM']) >= 10 else di_val
+                        # --- CORREÇÃO DO ERRO DE TYPE ERROR AQUI ---
                         
+                        # Garante que DATA_INICIO é uma string válida para parsear
+                        di_val_str = str(promo.get('DATA_INICIO', '')).strip()
+                        if di_val_str and len(di_val_str) >= 10:
+                            di_val = datetime.strptime(di_val_str, '%Y-%m-%d').date()
+                        else:
+                            di_val = datetime.now().date()
+                            
+                        # Garante que DATA_FIM é uma string válida para parsear
+                        df_val_str = str(promo.get('DATA_FIM', '')).strip()
+                        if df_val_str and len(df_val_str) >= 10:
+                            df_val = datetime.strptime(df_val_str, '%Y-%m-%d').date()
+                        else:
+                            df_val = di_val # Se não houver data de fim, usa a data de início
+
                         data_inicio_edit = st.date_input("Data de Início", value=di_val, key=f"di_{promo.get('ID_PROMOCAO', index)}")
                         data_fim_edit = st.date_input("Data de Fim", value=df_val, min_value=data_inicio_edit, key=f"df_{promo.get('ID_PROMOCAO', index)}")
+                        
+                        # --- FIM DA CORREÇÃO ---
+
                         status_edit = st.selectbox("Status", ["Ativa", "Inativa"], index=["Ativa", "Inativa"].index(promo.get('STATUS', 'Ativa')), key=f"st_{promo.get('ID_PROMOCAO', index)}")
                         
                         if st.form_submit_button("Salvar"):
-                            if atualizar_promocao(promo['ID_PROMOCAO'], preco_promo_edit, data_inicio_edit.strftime('%Y-%m-%d'), data_fim_edit.strftime('%Y-%m-%d'), status_edit):
+                            # Ajusta a data de fim para string vazia se for igual à data de início e a original era vazia
+                            data_fim_para_salvar = ""
+                            if df_val_str or data_fim_edit > data_inicio_edit:
+                                data_fim_para_salvar = data_fim_edit.strftime('%Y-%m-%d')
+                                
+                            if atualizar_promocao(promo['ID_PROMOCAO'], preco_promo_edit, data_inicio_edit.strftime('%Y-%m-%d'), data_fim_para_salvar, status_edit):
                                 st.success("Promoção atualizada!")
                                 st.session_state['data_version'] += 1 
                                 st.rerun()
@@ -506,12 +544,3 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
-
-
-
-
-
-
-
-
-
