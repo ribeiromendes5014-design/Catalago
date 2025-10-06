@@ -15,6 +15,7 @@ import os # <--- ADICIONADO PARA LER VARIÁVEIS DO RENDER
 # Prioriza DATA_REPO_NAME, mas usa REPO_NAME como fallback (se o Render estiver mal configurado)
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 
+# Corrigido para garantir que sempre tenha um valor, seja de DATA_REPO_NAME ou REPO_NAME
 DATA_REPO_NAME = os.environ.get("DATA_REPO_NAME", os.environ.get("REPO_NAME")) 
 BRANCH = os.environ.get("BRANCH")
 
@@ -51,7 +52,7 @@ def get_data_from_github(file_name):
     Lê o conteúdo de um CSV do GitHub diretamente via API (sem cache da CDN).
     Garante que sempre trará a versão mais recente do arquivo.
     """
-    # CORREÇÃO DO NAMEERROR: Usa GITHUB_BASE_API que é global e já contém o DATA_REPO_NAME
+    # CORREÇÃO DO NAMEERROR: Usa GITHUB_BASE_API que é global e já contém o repositório
     api_url = f"{GITHUB_BASE_API}{file_name}?ref={BRANCH}"
     
     try:
@@ -445,8 +446,10 @@ if df_filtrado.empty:
 else:
     st.subheader("✨ Nossos Produtos")
     cols = st.columns(4)
-    for i, (prod_id, row) in enumerate(df_filtrado.iterrows()):
+    for i, row in df_filtrado.iterrows():
         product_id = row['ID'] 
+        # CORREÇÃO DA CHAVE DUPLICADA: Cria uma chave única combinando ID e índice
+        unique_key = f'prod_{product_id}_{i}' 
         with cols[i % 4]: 
-            # CORREÇÃO DA CHAVE DUPLICADA: A chave agora inclui o índice 'i' para garantir exclusividade
-            render_product_card(product_id, row, key_prefix=f'prod_{i}')
+            # Chama a função com a chave única
+            render_product_card(product_id, row, key_prefix=unique_key)
