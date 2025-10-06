@@ -2,7 +2,7 @@
 import os
 os.environ["DATA_REPO_NAME"] = "ribeiromendes5014-design/fluxo"
 os.environ["BRANCH"] = "main"
-os.environ["GITHUB_TOKEN"] = "SEU_TOKEN_AQUI"  # (só se o repositório for privado)
+os.environ["GITHUB_TOKEN"] = "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"  # (só se o repositório for privado)
 
 
 import streamlit as st
@@ -495,4 +495,5 @@ else:
         with cols[i % 4]: 
             # Chama a função com a chave única
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
