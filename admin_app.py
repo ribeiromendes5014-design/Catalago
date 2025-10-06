@@ -38,7 +38,7 @@ except KeyError:
 
 # --- Funções Base do GitHub para Leitura e Escrita ---
 
-# Mantemos o cache controlado por versão
+# MANTIDO: Cache controlado por versão (CHAVE para o reload forçado)
 @st.cache_data(ttl=5) 
 def fetch_github_data_v2(sheet_name, version_control):
     """Carrega dados de um CSV do GitHub. O 'version_control' força o reload."""
@@ -277,7 +277,8 @@ st.set_page_config(page_title="Admin Doce&Bella", layout="wide")
 st.title("⭐ Painel de Administração | Doce&Bella")
 
 # --- ATUALIZAÇÃO AUTOMÁTICA A CADA 60 SEGUNDOS ---
-st_autorefresh(interval=60000, key="auto_update_github")
+# Mantido em 60s. O reload principal é forçado pelo data_version.
+st_autorefresh(interval=60000, key="auto_update_github") 
 
 # --- TABS DO SISTEMA ---
 tab_pedidos, tab_produtos, tab_promocoes = st.tabs(["Pedidos", "Produtos", "🔥 Promoções"])
@@ -288,7 +289,6 @@ with tab_pedidos:
     st.header("📋 Pedidos Recebidos"); 
     if st.button("Recarregar Pedidos"): st.rerun() 
     
-    # Chamadas usando a função auxiliar 'carregar_dados' que passa a versão
     df_pedidos_raw = carregar_dados(SHEET_NAME_PEDIDOS); 
     df_catalogo_pedidos = carregar_dados(SHEET_NAME_CATALOGO)
     
@@ -357,7 +357,7 @@ with tab_produtos:
     
     st.markdown("---")
     st.subheader("Catálogo Atual")
-    # Chamada usando a função auxiliar 'carregar_dados' que passa a versão
+    
     df_produtos = carregar_dados(SHEET_NAME_CATALOGO)
     if df_produtos.empty:
         st.warning("Nenhum produto encontrado.")
@@ -410,15 +410,12 @@ with tab_produtos:
                                     st.rerun() 
                                 else: st.error("Falha ao atualizar.")
 
-                    # Lógica de exclusão com atualização imediata (REINTRODUZINDO time.sleep e st.cache_data.clear)
+                    # Lógica de exclusão com atualização imediata (LÓGICA REQUISITADA)
                     if st.button("🗑️ Excluir", key=f"del_{produto.get('ID', index)}", type="primary"):
                         if excluir_produto(produto['ID']):
                             st.success("Produto excluído!")
-                            st.session_state['data_version'] += 1 # A chave que força o reload do cache
-                            # --- BLOCO EXPLICITAMENTE REQUISITADO ---
-                            time.sleep(0.5) 
-                            st.cache_data.clear() 
-                            # --- FIM DO BLOCO EXPLICITAMENTE REQUISITADO ---
+                            st.session_state['data_version'] += 1 # 🔁 Força o reload do cache
+                            time.sleep(0.5)
                             st.rerun()
                         else:
                             st.error("Falha ao excluir.")
@@ -427,7 +424,6 @@ with tab_produtos:
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     with st.expander("➕ Criar Nova Promoção", expanded=False):
-        # Chamada usando a função auxiliar 'carregar_dados' que passa a versão
         df_catalogo_promo = carregar_dados(SHEET_NAME_CATALOGO)
         if df_catalogo_promo.empty:
             st.warning("Cadastre produtos antes de criar uma promoção.")
@@ -457,7 +453,7 @@ with tab_promocoes:
 
     st.markdown("---")
     st.subheader("Promoções Criadas")
-    # Chamada usando a função auxiliar 'carregar_dados' que passa a versão
+    
     df_promocoes = carregar_dados(SHEET_NAME_PROMOCOES)
     if df_promocoes.empty:
         st.info("Nenhuma promoção foi criada ainda.")
