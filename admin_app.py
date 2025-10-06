@@ -335,7 +335,8 @@ with tab_produtos:
                 if not nome_prod or preco_prod <= 0: st.warning("Preencha Nome e Preço.")
                 elif adicionar_produto(nome_prod, preco_prod, desc_curta_prod, desc_longa_prod, link_imagem_prod, disponivel_prod):
                     st.success("Produto cadastrado!")
-                    time.sleep(0.5); st.cache_data.clear(); st.rerun() # Atualização imediata
+                    # CORRIGIDO: Adicionado delay e clear para forçar a atualização visual imediata
+                    time.sleep(0.5); st.cache_data.clear(); st.rerun() 
                 else: st.error("Falha ao cadastrar.")
     
     st.markdown("---")
@@ -392,12 +393,12 @@ with tab_produtos:
                                     time.sleep(0.5); st.cache_data.clear(); st.rerun() # Atualização imediata
                                 else: st.error("Falha ao atualizar.")
 
-                    # Lógica de exclusão com atualização imediata (CONFORME SOLICITADO)
+                    # Lógica de exclusão com atualização imediata
                     if st.button("🗑️ Excluir", key=f"del_{produto.get('ID', index)}", type="primary"):
                         if excluir_produto(produto['ID']):
                             st.success("Produto excluído!")
-                            time.sleep(0.5)  # mostra o sucesso por meio segundo
-                            st.cache_data.clear() # limpa cache de qualquer DataFrame residual
+                            time.sleep(0.5)  
+                            st.cache_data.clear() 
                             st.rerun()
                         else:
                             st.error("Falha ao excluir.")
