@@ -5,15 +5,22 @@ from datetime import datetime
 import json
 import time
 from streamlit_autorefresh import st_autorefresh
-import requests 
-import base64 
-from io import StringIO 
-import os # <--- ADICIONADO PARA LER VARIÁVEIS DO RENDER
+import requests
+import base64
+from io import StringIO
+import os  # <--- ADICIONADO PARA LER VARIÁVEIS DO RENDER
 
+# --- Variáveis de Configuração (CORRIGIDO PARA O RENDER) ---
+# As variáveis são lidas diretamente das Variáveis de Ambiente (Environment Variables)
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+REPO_NAME = os.environ.get("REPO_NAME")
+BRANCH = os.environ.get("BRANCH")
 
+# Teste opcional (pode remover depois)
 st.write("Repo:", REPO_NAME)
 st.write("Branch:", BRANCH)
-st.write("Token:", bool(GITHUB_TOKEN))  # mostra apenas se o token existe (True/False)
+st.write("Token:", bool(GITHUB_TOKEN))  # mostra apenas se o token existe (True/False))
+
 
 
 # --- Variáveis de Configuração (CORRIGIDO PARA O RENDER) ---
@@ -410,5 +417,6 @@ else:
         product_id = row['ID'] 
         with cols[i % 4]: 
             render_product_card(product_id, row, key_prefix='prod')
+
 
 
