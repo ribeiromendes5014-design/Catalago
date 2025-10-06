@@ -338,11 +338,21 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
         st.error(f"Erro desconhecido ao enviar o pedido: {e}")
         return False
 
-def adicionar_ao_carrinho(produto_id, produto_nome, produto_preco):
+def adicionar_ao_carrinho(produto_id, produto_row):
+    """Adiciona um produto ao carrinho, agora salvando também a URL da imagem."""
+    produto_nome = produto_row['NOME']
+    produto_preco = produto_row['PRECO_FINAL']
+    produto_imagem = produto_row.get('LINKIMAGEM', '') # Pega o link da imagem
+
     if produto_id in st.session_state.carrinho:
         st.session_state.carrinho[produto_id]['quantidade'] += 1
     else:
-        st.session_state.carrinho[produto_id] = {'nome': produto_nome, 'preco': produto_preco, 'quantidade': 1}
+        st.session_state.carrinho[produto_id] = {
+            'nome': produto_nome, 
+            'preco': produto_preco, 
+            'quantidade': 1,
+            'imagem': produto_imagem  # <-- NOVO CAMPO ADICIONADO
+        }
     st.toast(f"✅ {produto_nome} adicionado!", icon="🛍️"); time.sleep(0.1)
 
 def remover_do_carrinho(produto_id):
@@ -549,6 +559,7 @@ else:
         with cols[i % 4]: 
             # Chama a função com a chave única
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
