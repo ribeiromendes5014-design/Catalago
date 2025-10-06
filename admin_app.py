@@ -14,7 +14,7 @@ SHEET_NAME_PROMOCOES = "promocoes"
 # --- Configurações do GitHub ---
 GITHUB_RAW_BASE_URL = "https://raw.githubusercontent.com/ribeiromendes5014-design/Catalago/main"
 
-# --- Conexão e Carregamento de Dados (FINALMENTE CORRIGIDO PARA VÍRGULA E COLUNA EXTRA) ---
+# --- Conexão e Carregamento de Dados (CORRIGIDO E NORMALIZADO) ---
 
 @st.cache_data(ttl=60)
 def carregar_dados(sheet_name):
@@ -23,13 +23,13 @@ def carregar_dados(sheet_name):
     url = f"{GITHUB_RAW_BASE_URL}/{csv_filename}"
     
     try:
-        # CORREÇÃO: Usando sep=',' conforme o cabeçalho fornecido.
+        # CORREÇÃO: Usando sep=',' conforme o cabeçalho fornecido (e para produtos.csv)
         df = pd.read_csv(url, sep=',') 
         
         # Limpeza e Normalização dos Nomes das Colunas
         df.columns = df.columns.str.strip().str.upper() 
 
-        # NOVO: Remove a coluna 'COLUNA' (se existir) que parece ser um índice extra.
+        # Remove a coluna 'COLUNA' (se existir) que parece ser um índice extra.
         if 'COLUNA' in df.columns:
             df.drop(columns=['COLUNA'], inplace=True)
 
@@ -179,7 +179,24 @@ with tab_produtos:
                             link_edit = st.text_input("Link Imagem", value=produto.get('LINKIMAGEM', ''))
                             curta_edit = st.text_input("Desc. Curta", value=produto.get('DESCRICAOCURTA', ''))
                             longa_edit = st.text_area("Desc. Longa", value=produto.get('DESCRICAOLONGA', ''))
-                            disponivel_edit = st.selectbox("Disponível", ["Sim", "Não"], index=["Sim", "Não"].index(produto.get('DISPONIVEL', 'Sim')))
+                            
+                            # CORREÇÃO AQUI: Limpar a string DISPONIVEL antes de usar o .index()
+                            disponivel_val = produto.get('DISPONIVEL', 'Sim')
+                            # Se for string, limpa, senão assume o default
+                            if isinstance(disponivel_val, str):
+                                # Strip: remove espaços; title(): garante que a primeira letra seja maiúscula (Sim/Não)
+                                disponivel_val = disponivel_val.strip().title()
+                            else:
+                                disponivel_val = 'Sim' # Default caso não seja string
+                            
+                            try:
+                                # Tenta encontrar o índice limpo, se falhar, usa 0 (Sim)
+                                default_index = ["Sim", "Não"].index(disponivel_val)
+                            except ValueError:
+                                default_index = 0 # Assume 'Sim' como fallback
+                                
+                            disponivel_edit = st.selectbox("Disponível", ["Sim", "Não"], index=default_index)
+
                             if st.form_submit_button("Salvar Alterações"):
                                 if atualizar_produto(produto['ID'], nome_edit, preco_edit, curta_edit, longa_edit, link_edit, disponivel_edit):
                                     st.success("Produto atualizado!"); st.rerun()
