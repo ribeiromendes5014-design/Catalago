@@ -8,12 +8,13 @@ from streamlit_autorefresh import st_autorefresh
 import requests 
 import base64 
 from io import StringIO 
+import os # <--- ADICIONADO PARA LER VARIÁVEIS DO RENDER
 
-# --- Variáveis de Configuração (MANTIDO) ---
-# Carregadas do .streamlit/secrets.toml
-GITHUB_TOKEN = st.secrets["github"]["token"]
-REPO_NAME = st.secrets["github"]["repo_name"]
-BRANCH = st.secrets["github"]["branch"]
+# --- Variáveis de Configuração (CORRIGIDO PARA O RENDER) ---
+# As variáveis são lidas diretamente das Variáveis de Ambiente (Environment Variables)
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+REPO_NAME = os.environ.get("REPO_NAME")
+BRANCH = os.environ.get("BRANCH")
 
 # URLs da API (MANTIDO)
 GITHUB_BASE_API = f"https://api.github.com/repos/{REPO_NAME}/contents/"
@@ -60,6 +61,7 @@ def get_data_from_github(file_name):
         response = requests.get(api_url, headers=headers)
         response.raise_for_status()
 
+        # A API de Conteúdo retorna um objeto JSON contendo o conteúdo base64
         data = response.json()
         if "content" not in data:
             st.error(f"O campo 'content' não foi encontrado na resposta da API. Verifique se o arquivo {file_name} existe na branch '{BRANCH}'.")
