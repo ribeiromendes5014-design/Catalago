@@ -34,7 +34,6 @@ except KeyError:
 
 # --- Funções Base do GitHub para Leitura e Escrita ---
 
-# Cache REMOVIDO para garantir a leitura em tempo real
 def carregar_dados(sheet_name):
     """Carrega dados de um CSV do GitHub."""
     csv_filename = f"{sheet_name}.csv"
@@ -75,11 +74,16 @@ def write_csv_to_github(df, sheet_name, commit_message):
     # 1. Obter o SHA atual do arquivo
     response = requests.get(api_url, headers=HEADERS)
     if response.status_code != 200:
-        st.error(f"Erro ao obter SHA: {response.status_code} - {response.json().get('message', 'Erro desconhecido')}")
-        return False
+        # Se 404, pode ser a criação do arquivo. Neste caso, assumimos SHA nulo.
+        if response.status_code == 404:
+             sha = None
+        else:
+             st.error(f"Erro ao obter SHA: {response.status_code} - {response.json().get('message', 'Erro desconhecido')}")
+             return False
     
     try:
-        sha = response.json()['sha']
+        if response.status_code == 200:
+            sha = response.json()['sha']
     except KeyError:
         st.error("Erro interno: SHA não encontrado na resposta do GitHub.")
         return False
@@ -94,14 +98,14 @@ def write_csv_to_github(df, sheet_name, commit_message):
     payload = {
         "message": commit_message,
         "content": content_base64,
-        "sha": sha,
         "branch": BRANCH
     }
+    if sha:
+        payload["sha"] = sha # Adiciona SHA apenas se estiver atualizando um arquivo existente
     
     put_response = requests.put(api_url, headers=HEADERS, json=payload)
     
     if put_response.status_code in [200, 201]:
-        # REMOVIDO: st.cache_data.clear() (não é mais necessário sem o decorador)
         return True
     else:
         error_message = put_response.json().get('message', 'Erro desconhecido')
@@ -140,10 +144,10 @@ def exibir_itens_pedido(pedido_json, df_catalogo):
             item_id = pd.to_numeric(item.get('id'), errors='coerce')
             
             if not df_catalogo.empty and not pd.isna(item_id) and not df_catalogo[df_catalogo['ID'] == int(item_id)].empty: 
-                 link_na_tabela = str(df_catalogo[df_catalogo['ID'] == int(item_id)].iloc[0].get('LINKIMAGEM', link_imagem)).strip()
-                 
-                 if link_na_tabela.lower() != 'nan' and link_na_tabela:
-                     link_imagem = link_na_tabela
+                link_na_tabela = str(df_catalogo[df_catalogo['ID'] == int(item_id)].iloc[0].get('LINKIMAGEM', link_imagem)).strip()
+                
+                if link_na_tabela.lower() != 'nan' and link_na_tabela:
+                    link_imagem = link_na_tabela
 
             col_img, col_detalhes = st.columns([1, 4]); col_img.image(link_imagem, width=100)
             quantidade = item.get('qtd', item.get('quantidade', 0)); preco_unitario = float(item.get('preco', 0.0)); subtotal = item.get('subtotal')
@@ -156,7 +160,9 @@ def exibir_itens_pedido(pedido_json, df_catalogo):
 def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponivel):
     df = carregar_dados(SHEET_NAME_CATALOGO).copy()
     
-    novo_id = df['ID'].max() + 1 if not df.empty and df['ID'].any() else 1
+    # Garante que 'ID' seja tratada como numérica antes de chamar .max()
+    df['ID'] = pd.to_numeric(df['ID'], errors='coerce')
+    novo_id = df['ID'].max() + 1 if not df.empty and df['ID'].any() and not pd.isna(df['ID'].max()) else 1
     
     nova_linha = {
         'ID': novo_id, 
@@ -185,6 +191,7 @@ def excluir_produto(id_produto):
     commit_msg = f"Excluir produto ID: {id_produto}"
     return write_csv_to_github(df, SHEET_NAME_CATALOGO, commit_msg)
 
+# FUNÇÃO CORRIGIDA: Usando os parâmetros desc_curta e desc_longa corretamente
 def atualizar_produto(id_produto, nome, preco, desc_curta, desc_longa, link_imagem, disponivel):
     df = carregar_dados(SHEET_NAME_CATALOGO).copy()
     if df.empty: return False
@@ -194,8 +201,8 @@ def atualizar_produto(id_produto, nome, preco, desc_curta, desc_longa, link_imag
         idx = index_to_update[0]
         df.loc[idx, 'NOME'] = nome
         df.loc[idx, 'PRECO'] = str(preco).replace('.', ',') 
-        df.loc[idx, 'DESCRICAOCURTA'] = curta_edit
-        df.loc[idx, 'DESCRICAOLONGA'] = longa_edit
+        df.loc[idx, 'DESCRICAOCURTA'] = desc_curta   # CORRIGIDO
+        df.loc[idx, 'DESCRICAOLONGA'] = desc_longa   # CORRIGIDO
         df.loc[idx, 'LINKIMAGEM'] = link_imagem
         df.loc[idx, 'DISPONIVEL'] = disponivel
         
@@ -261,7 +268,6 @@ st.set_page_config(page_title="Admin Doce&Bella", layout="wide")
 st.title("⭐ Painel de Administração | Doce&Bella")
 
 # --- ATUALIZAÇÃO AUTOMÁTICA A CADA 60 SEGUNDOS ---
-from streamlit_autorefresh import st_autorefresh
 st_autorefresh(interval=60000, key="auto_update_github")
 
 # --- TABS DO SISTEMA ---
@@ -291,13 +297,15 @@ with tab_pedidos:
                 with st.expander(titulo):
                     st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{pedido['ID_PEDIDO']}`")
                     if st.button("✅ Finalizar Pedido", key=f"finalizar_{pedido['ID_PEDIDO']}"):
-                        if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status="Finalizado"): st.success(f"Pedido {pedido['ID_PEDIDO']} finalizado!"); st.rerun()
+                        if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status="Finalizado"): 
+                            st.success(f"Pedido {pedido['ID_PEDIDO']} finalizado!")
+                            time.sleep(0.5); st.cache_data.clear(); st.rerun() # Atualização imediata
                         else: st.error("Falha ao finalizar pedido.")
                     st.markdown("---"); exibir_itens_pedido(pedido['ITENS_PEDIDO'], df_catalogo_pedidos)
         st.header("✅ Pedidos Finalizados")
         if pedidos_finalizados.empty: st.info("Nenhum pedido finalizado encontrado.")
         else:
-             for index, pedido in pedidos_finalizados.iloc[::-1].iterrows():
+              for index, pedido in pedidos_finalizados.iloc[::-1].iterrows():
                 data_hora_str = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indisponível"
                 titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {data_hora_str} - Total: R$ {pedido['VALOR_TOTAL']}"
                 with st.expander(titulo):
@@ -305,11 +313,15 @@ with tab_pedidos:
                     col_reverter, col_excluir = st.columns(2)
                     with col_reverter:
                         if st.button("↩️ Reverter para Pendente", key=f"reverter_{pedido['ID_PEDIDO']}", use_container_width=True):
-                            if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status=""): st.success(f"Pedido {pedido['ID_PEDIDO']} revertido."); st.rerun()
+                            if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status=""): 
+                                st.success(f"Pedido {pedido['ID_PEDIDO']} revertido.")
+                                time.sleep(0.5); st.cache_data.clear(); st.rerun() # Atualização imediata
                             else: st.error("Falha ao reverter status do pedido.")
                     with col_excluir:
                         if st.button("🗑️ Excluir Pedido", type="primary", key=f"excluir_{pedido['ID_PEDIDO']}", use_container_width=True):
-                            if excluir_pedido(pedido['ID_PEDIDO']): st.success(f"Pedido {pedido['ID_PEDIDO']} excluído!"); st.rerun()
+                            if excluir_pedido(pedido['ID_PEDIDO']): 
+                                st.success(f"Pedido {pedido['ID_PEDIDO']} excluído!")
+                                time.sleep(0.5); st.cache_data.clear(); st.rerun() # Atualização imediata
                             else: st.error("Falha ao excluir o pedido.")
                     st.markdown("---"); exibir_itens_pedido(pedido['ITENS_PEDIDO'], df_catalogo_pedidos)
 
@@ -322,7 +334,8 @@ with tab_produtos:
             if st.form_submit_button("Cadastrar Produto"):
                 if not nome_prod or preco_prod <= 0: st.warning("Preencha Nome e Preço.")
                 elif adicionar_produto(nome_prod, preco_prod, desc_curta_prod, desc_longa_prod, link_imagem_prod, disponivel_prod):
-                    st.success("Produto cadastrado!"); st.rerun()
+                    st.success("Produto cadastrado!")
+                    time.sleep(0.5); st.cache_data.clear(); st.rerun() # Atualização imediata
                 else: st.error("Falha ao cadastrar.")
     
     st.markdown("---")
@@ -339,10 +352,10 @@ with tab_produtos:
                 
                 with col1:
                     if link_imagem_produto.lower() == 'nan' or not link_imagem_produto:
-                         img_url = "https://via.placeholder.com/150?text=Sem+Imagem"
+                          img_url = "https://via.placeholder.com/150?text=Sem+Imagem"
                     else:
-                         img_url = link_imagem_produto
-                         
+                          img_url = link_imagem_produto
+                          
                     st.image(img_url, width=100)
                     
                 with col2:
@@ -351,7 +364,9 @@ with tab_produtos:
                     with st.popover("📝 Editar"):
                         with st.form(f"edit_form_{produto.get('ID', index)}", clear_on_submit=True):
                             st.markdown(f"Editando: **{produto.get('NOME', 'N/A')}**")
+                            # Converte o preço de string 'X,Y' para float 'X.Y' para o number_input
                             preco_val = float(str(produto.get('PRECO', '0')).replace(',','.'))
+                            
                             nome_edit = st.text_input("Nome", value=produto.get('NOME', ''))
                             preco_edit = st.number_input("Preço", value=preco_val, format="%.2f")
                             link_edit = st.text_input("Link Imagem", value=produto.get('LINKIMAGEM', ''))
@@ -373,19 +388,19 @@ with tab_produtos:
 
                             if st.form_submit_button("Salvar Alterações"):
                                 if atualizar_produto(produto['ID'], nome_edit, preco_edit, curta_edit, longa_edit, link_edit, disponivel_edit):
-                                    st.success("Produto atualizado!"); st.rerun()
+                                    st.success("Produto atualizado!")
+                                    time.sleep(0.5); st.cache_data.clear(); st.rerun() # Atualização imediata
                                 else: st.error("Falha ao atualizar.")
 
+                    # Lógica de exclusão com atualização imediata (CONFORME SOLICITADO)
                     if st.button("🗑️ Excluir", key=f"del_{produto.get('ID', index)}", type="primary"):
-                        if excluir_produto(produto['ID']):
-                            st.success("Produto excluído!")
-                            # --- força recarregar os dados imediatamente ---
-                            time.sleep(0.5)  # mostra o sucesso por meio segundo
-                            # Embora 'carregar_dados' não use cache, é uma boa prática limpar:
-                            st.cache_data.clear()
-                            st.rerun()
-                        else: 
-                            st.error("Falha ao excluir.")
+                        if excluir_produto(produto['ID']):
+                            st.success("Produto excluído!")
+                            time.sleep(0.5)  # mostra o sucesso por meio segundo
+                            st.cache_data.clear() # limpa cache de qualquer DataFrame residual
+                            st.rerun()
+                        else:
+                            st.error("Falha ao excluir.")
 
 
 with tab_promocoes:
@@ -396,6 +411,7 @@ with tab_promocoes:
             st.warning("Cadastre produtos antes de criar uma promoção.")
         else:
             with st.form("form_nova_promocao", clear_on_submit=True):
+                # Converte o preço de string 'X,Y' para float 'X.Y' para operações
                 df_catalogo_promo['PRECO_FLOAT'] = pd.to_numeric(df_catalogo_promo['PRECO'].astype(str).str.replace(',', '.'), errors='coerce') 
                 opcoes_produtos = {f"{row['NOME']} (R$ {row['PRECO_FLOAT']:.2f})": row['ID'] for _, row in df_catalogo_promo.dropna(subset=['PRECO_FLOAT', 'ID']).iterrows()}
                 
@@ -405,7 +421,7 @@ with tab_promocoes:
                     produto_selecionado_nome = st.selectbox("Escolha o produto:", options=opcoes_produtos.keys())
                     preco_promocional = st.number_input("Novo Preço Promocional (R$)", min_value=0.01, format="%.2f")
                     col_data1, col_data2 = st.columns(2)
-                    data_inicio = col_data1.date_input("Data de Início", value=datetime.now())
+                    data_inicio = col_data1.date_input("Data de Início", value=datetime.now().date()) # Usa .date() para evitar problemas
                     sem_data_fim = col_data2.checkbox("Não tem data para acabar")
                     data_fim = col_data2.date_input("Data de Fim", min_value=data_inicio) if not sem_data_fim else None
                     if st.form_submit_button("Lançar Promoção"):
@@ -413,7 +429,8 @@ with tab_promocoes:
                         produto_info = df_catalogo_promo[df_catalogo_promo['ID'] == id_produto].iloc[0]
                         data_fim_str = "" if sem_data_fim or data_fim is None else data_fim.strftime('%Y-%m-%d')
                         if criar_promocao(id_produto, produto_info['NOME'], produto_info['PRECO_FLOAT'], preco_promocional, data_inicio.strftime('%Y-%m-%d'), data_fim_str):
-                            st.success("Promoção criada!"); st.rerun()
+                            st.success("Promoção criada!")
+                            time.sleep(0.5); st.cache_data.clear(); st.rerun() # Atualização imediata
                         else: st.error("Falha ao criar promoção.")
 
     st.markdown("---")
@@ -433,8 +450,9 @@ with tab_promocoes:
                         preco_promo_val = float(str(promo.get('PRECO_PROMOCIONAL', '0')).replace(',','.'))
                         preco_promo_edit = st.number_input("Preço Promocional", value=preco_promo_val, format="%.2f")
                         
-                        di_val = datetime.strptime(promo['DATA_INICIO'], '%Y-%m-%d') if promo.get('DATA_INICIO') and len(promo['DATA_INICIO']) >= 10 else datetime.now()
-                        df_val = datetime.strptime(promo['DATA_FIM'], '%Y-%m-%d') if promo.get('DATA_FIM') and len(promo['DATA_FIM']) >= 10 else di_val
+                        # Tratamento para datas vazias
+                        di_val = datetime.strptime(promo['DATA_INICIO'], '%Y-%m-%d').date() if promo.get('DATA_INICIO') and len(promo['DATA_INICIO']) >= 10 else datetime.now().date()
+                        df_val = datetime.strptime(promo['DATA_FIM'], '%Y-%m-%d').date() if promo.get('DATA_FIM') and len(promo['DATA_FIM']) >= 10 else di_val
                         
                         data_inicio_edit = st.date_input("Data de Início", value=di_val, key=f"di_{promo.get('ID_PROMOCAO', index)}")
                         data_fim_edit = st.date_input("Data de Fim", value=df_val, min_value=data_inicio_edit, key=f"df_{promo.get('ID_PROMOCAO', index)}")
@@ -442,13 +460,12 @@ with tab_promocoes:
                         
                         if st.form_submit_button("Salvar"):
                             if atualizar_promocao(promo['ID_PROMOCAO'], preco_promo_edit, data_inicio_edit.strftime('%Y-%m-%d'), data_fim_edit.strftime('%Y-%m-%d'), status_edit):
-                                st.success("Promoção atualizada!"); st.rerun()
+                                st.success("Promoção atualizada!")
+                                time.sleep(0.5); st.cache_data.clear(); st.rerun() # Atualização imediata
                             else: st.error("Falha ao atualizar promoção.")
 
                 if st.button("🗑️ Excluir Promoção", key=f"del_promo_{promo.get('ID_PROMOCAO', index)}", type="primary"):
                     if excluir_promocao(promo['ID_PROMOCAO']):
-                        st.success("Promoção excluída!"); st.rerun()
+                        st.success("Promoção excluída!")
+                        time.sleep(0.5); st.cache_data.clear(); st.rerun() # Atualização imediata
                     else: st.error("Falha ao excluir promoção.")
-
-
-
