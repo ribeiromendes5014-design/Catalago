@@ -9,27 +9,27 @@ import requests
 import base64 
 from io import StringIO 
 
-# --- Variáveis de Configuração ---
+# --- Variáveis de Configuração (MANTIDO) ---
 # Carregadas do .streamlit/secrets.toml
 GITHUB_TOKEN = st.secrets["github"]["token"]
 REPO_NAME = st.secrets["github"]["repo_name"]
 BRANCH = st.secrets["github"]["branch"]
 
-# URLs da API
+# URLs da API (MANTIDO)
 GITHUB_BASE_API = f"https://api.github.com/repos/{REPO_NAME}/contents/"
 
-# Fontes de Dados (CSV no GitHub)
+# Fontes de Dados (CSV no GitHub) (MANTIDO)
 SHEET_NAME_CATALOGO_CSV = "produtos.csv" 
 SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
 SHEET_NAME_PEDIDOS_CSV = "pedidos.csv" 
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
 
 
-# Inicialização do Carrinho de Compras e Estado
+# Inicialização do Carrinho de Compras e Estado (MANTIDO)
 if 'carrinho' not in st.session_state:
     st.session_state.carrinho = {} 
 
-# --- Headers para Autenticação do GitHub ---
+# --- Headers para Autenticação do GitHub (MANTIDO) ---
 def get_github_headers(content_type='json'):
     """Retorna os cabeçalhos de autorização e aceitação para escrita."""
     headers = {
@@ -42,11 +42,14 @@ def get_github_headers(content_type='json'):
     return headers
 
 # --- Funções de Conexão GITHUB (LEITURA PÚBLICA) ---
-
+# Adicionada tolerância a erros no CSV usando 'engine="python"' e 'on_bad_lines="warn"'
 def get_data_from_github(file_name):
     """
     Faz a requisição HTTP para obter o conteúdo RAW do CSV do GitHub.
     Usa a URL pública (raw.githubusercontent.com) sem Token de leitura.
+    
+    ATENÇÃO: Adicionei 'engine="python"' e 'on_bad_lines="warn"' ao pd.read_csv
+    para aumentar a tolerância a erros de tokenização que estavam ocorrendo.
     """
     # URL completa, usando o REPO_NAME e BRANCH
     file_url = f"https://raw.githubusercontent.com/{REPO_NAME}/{BRANCH}/{file_name}"
@@ -58,7 +61,11 @@ def get_data_from_github(file_name):
         
         # Lê o conteúdo de texto retornado
         csv_data = StringIO(response.text)
-        return pd.read_csv(csv_data, sep=',', encoding='utf-8') 
+        
+        # <<< MUDANÇA AQUI: Adiciona argumentos para tolerância a CSVs malformados >>>
+        # 'engine="python"' é mais lento, mas mais robusto para erros de tokenização.
+        # 'on_bad_lines="warn"' avisa sobre linhas com problemas em vez de falhar.
+        return pd.read_csv(csv_data, sep=',', encoding='utf-8', engine="python", on_bad_lines="warn") 
 
     except requests.exceptions.HTTPError as e:
         if response.status_code == 404:
@@ -72,7 +79,7 @@ def get_data_from_github(file_name):
 
 @st.cache_data(ttl=60)
 def carregar_promocoes():
-    """Carrega as promoções do 'promocoes.csv' do GitHub."""
+    """Carrega as promoções do 'promocoes.csv' do GitHub. (MANTIDO)"""
     df = get_data_from_github(SHEET_NAME_PROMOCOES_CSV)
     if df is None or df.empty:
         return pd.DataFrame(columns=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
@@ -96,6 +103,14 @@ def carregar_catalogo():
     
     df_produtos.columns = [col.upper().replace(' ', '_') for col in df_produtos.columns]
 
+    # <<< MUDANÇA AQUI: Removendo a referência à coluna CATEGORIA se ela não existe mais. >>>
+    # O código abaixo verifica se o DF tem as colunas essenciais antes de prosseguir
+    colunas_essenciais = ['PRECO', 'ID', 'DISPONIVEL', 'NOME']
+    for col in colunas_essenciais:
+        if col not in df_produtos.columns:
+            st.error(f"Coluna essencial '{col}' não encontrada no 'produtos.csv'. Verifique o cabeçalho.")
+            return pd.DataFrame()
+
     df_produtos['PRECO'] = pd.to_numeric(df_produtos['PRECO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
     df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
     
@@ -115,7 +130,7 @@ def carregar_catalogo():
     return df_final.reset_index()
 
 
-# --- Funções do Aplicativo (SALVAR PEDIDO NO GITHUB) ---
+# --- Funções do Aplicativo (SALVAR PEDIDO NO GITHUB) (MANTIDO) ---
 
 def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
     """Salva o novo pedido no 'pedidos.csv' do GitHub usando a Content API."""
@@ -195,7 +210,7 @@ def render_product_image(link_imagem):
         st.markdown(placeholder_html, unsafe_allow_html=True)
 
 
-# --- Layout do Aplicativo ---
+# --- Layout do Aplicativo (MANTIDO) ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
 # --- CSS (MANTIDO) ---
@@ -217,14 +232,14 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 """, unsafe_allow_html=True)
 
 
-# --- ATUALIZAÇÃO AUTOMÁTICA ---
+# --- ATUALIZAÇÃO AUTOMÁTICA (MANTIDO) ---
 st_autorefresh(interval=60000, key="auto_refresh_catalogo")
 
 
-# --- CABEÇALHO ---
+# --- CABEÇALHO (MANTIDO) ---
 col_logo, col_titulo = st.columns([0.1, 5]); col_logo.markdown("<h3>💖</h3>", unsafe_allow_html=True); col_titulo.title("Catálogo de Pedidos Doce&Bella")
 
-# --- BARRA ROSA (PESQUISA E CARRINHO) ---
+# --- BARRA ROSA (PESQUISA E CARRINHO) (MANTIDO) ---
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
@@ -265,12 +280,12 @@ with col_carrinho:
                     else:st.warning("Preencha seu nome e contato.")
 st.markdown("</div></div>", unsafe_allow_html=True)
 
-# --- SEÇÃO DE PRODUTOS ---
+# --- SEÇÃO DE PRODUTOS (MANTIDO) ---
 st.markdown("---")
 df_catalogo = carregar_catalogo()
 
 # --------------------------------------------------------------------------
-# FUNÇÃO render_product_card (MANTIDA)
+# FUNÇÃO render_product_card (MANTIDO)
 # --------------------------------------------------------------------------
 def render_product_card(prod_id, row, key_prefix):
     """Renderiza um card de produto, incluindo um selo de promoção se aplicável."""
@@ -317,9 +332,10 @@ def render_product_card(prod_id, row, key_prefix):
                 adicionar_ao_carrinho(prod_id, row['NOME'], preco_final)
                 st.rerun()
 
-# --- Filtragem e Renderização ---
+# --- Filtragem e Renderização (MANTIDO) ---
 termo = st.session_state.get('termo_pesquisa_barra', '').lower()
 if termo:
+    # A filtragem ainda funciona com DESCRICAOLONGA, NOME
     df_filtrado = df_catalogo[df_catalogo.apply(lambda row: termo in str(row['NOME']).lower() or termo in str(row['DESCRICAOLONGA']).lower(), axis=1)]
 else:
     df_filtrado = df_catalogo
@@ -336,6 +352,3 @@ else:
         product_id = row['ID'] 
         with cols[i % 4]: 
             render_product_card(product_id, row, key_prefix='prod')
-
-
-
