@@ -6,19 +6,21 @@ import json
 import time
 from streamlit_autorefresh import st_autorefresh
 import requests 
-import base64 # NOVO: Necessário para codificar o conteúdo para a API do GitHub
-from io import StringIO # NOVO: Para manipular o conteúdo CSV
+import base64 
+from io import StringIO 
 
 # --- Variáveis de Configuração ---
+# Carregadas do .streamlit/secrets.toml
 GITHUB_TOKEN = st.secrets["github"]["token"]
 REPO_NAME = st.secrets["github"]["repo_name"]
 BRANCH = st.secrets["github"]["branch"]
+
+# URLs da API
 GITHUB_BASE_API = f"https://api.github.com/repos/{REPO_NAME}/contents/"
 
-# Fontes de Leitura
+# Fontes de Dados (CSV no GitHub)
 SHEET_NAME_CATALOGO_CSV = "produtos.csv" 
 SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
-# Fonte de Escrita
 SHEET_NAME_PEDIDOS_CSV = "pedidos.csv" 
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
 
@@ -28,20 +30,33 @@ if 'carrinho' not in st.session_state:
     st.session_state.carrinho = {} 
 
 # --- Headers para Autenticação do GitHub ---
-def get_github_headers():
-    return {
+def get_github_headers(content_type='json'):
+    """Retorna os cabeçalhos de autorização e aceitação."""
+    headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3.raw, application/vnd.github.v3+json"
     }
+    if content_type == 'raw':
+        # Para leitura direta do conteúdo do arquivo raw.githubusercontent
+        headers["Accept"] = "application/vnd.github.v3.raw"
+    elif content_type == 'json':
+        # Para interações com a API de Conteúdo (leitura de SHA, escrita)
+        headers["Accept"] = "application/vnd.github.v3+json"
+    
+    return headers
 
 # --- Funções de Conexão GITHUB (LEITURA) ---
 
 def get_data_from_github(file_name):
-    """Faz a requisição HTTP para obter o conteúdo RAW do CSV do GitHub, usando Token."""
-    file_url = f"https://raw.githubusercontent.com/{REPO_NAME.split('/')[-1]}/main/{file_name}"
+    """
+    Faz a requisição HTTP para obter o conteúdo RAW do CSV do GitHub,
+    usando a URL raw.githubusercontent.com e Token.
+    """
+    # CORRIGIDO: Usa o REPO_NAME completo (owner/repo) e BRANCH
+    file_url = f"https://raw.githubusercontent.com/{REPO_NAME}/{BRANCH}/{file_name}"
     
     try:
-        response = requests.get(file_url, headers=get_github_headers())
+        # Usa o header 'raw' para obter o conteúdo de texto diretamente
+        response = requests.get(file_url, headers=get_github_headers(content_type='raw'))
         response.raise_for_status() 
         
         # Lê o conteúdo de texto retornado
@@ -50,11 +65,11 @@ def get_data_from_github(file_name):
 
     except requests.exceptions.HTTPError as e:
         if response.status_code == 404:
-            st.error(f"Erro 404: Arquivo '{file_name}' não encontrado no repositório. Verifique se o nome está correto.")
+            st.error(f"Erro 404: Arquivo '{file_name}' não encontrado. URL: {file_url}")
         elif response.status_code == 403:
-             st.error(f"Erro 403 (Limite de Taxa): O Token do GitHub está ativo, mas o limite foi atingido. Tente novamente em 1 minuto.")
+             st.error(f"Erro 403 (Limite de Taxa): O limite do Token do GitHub foi atingido ou o token não tem permissão de leitura. URL: {file_url}")
         else:
-            st.error(f"Erro ao acessar o GitHub. Status {response.status_code}: {e}")
+            st.error(f"Erro ao acessar o GitHub. Status {response.status_code}. URL: {file_url}")
         return None
     except KeyError:
         st.error("Erro de Token: Verifique se a chave 'token' está configurada corretamente no secrets.toml.")
@@ -63,7 +78,7 @@ def get_data_from_github(file_name):
         st.error(f"Ocorreu um erro ao carregar o arquivo '{file_name}': {e}")
         return None
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=5)
 def carregar_promocoes():
     """Carrega as promoções do 'promocoes.csv' do GitHub."""
     df = get_data_from_github(SHEET_NAME_PROMOCOES_CSV)
@@ -111,16 +126,12 @@ def carregar_catalogo():
 # --- Funções do Aplicativo (SALVAR PEDIDO NO GITHUB) ---
 
 def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
-    """
-    Salva o novo pedido no 'pedidos.csv' do GitHub usando a Content API.
-    Isto requer ler o arquivo, adicionar a linha, e reescrever o arquivo com o SHA.
-    """
+    """Salva o novo pedido no 'pedidos.csv' do GitHub usando a Content API."""
     file_path = SHEET_NAME_PEDIDOS_CSV
     api_url = f"{GITHUB_BASE_API}{file_path}?ref={BRANCH}"
     
     # 1. Obter o conteúdo atual do arquivo (e o SHA)
-    headers_get = get_github_headers()
-    headers_get["Accept"] = "application/vnd.github.v3+json" # Garante que recebemos o JSON completo
+    headers_get = get_github_headers(content_type='json')
     
     try:
         response_get = requests.get(api_url, headers=headers_get)
@@ -133,7 +144,7 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
 
     except requests.exceptions.HTTPError as e:
         if response_get.status_code == 404:
-            st.error(f"Erro 404: O arquivo '{file_path}' não existe. Crie um CSV vazio com os cabeçalhos para pedidos.")
+            st.error(f"Erro 404: O arquivo '{file_path}' não existe. Crie um CSV vazio com os cabeçalhos para pedidos: 'timestamp,data_hora,nome_cliente,contato,itens_json,valor_total'")
             return False
         st.error(f"Erro ao obter o SHA do arquivo no GitHub: {e}")
         return False
@@ -141,8 +152,10 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
         st.error(f"Erro na decodificação do CSV: {e}")
         return False
 
-    # 2. Adicionar o novo pedido ao conteúdo
-    novo_registro = f"\n{int(datetime.now().timestamp())},\"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\",\"{nome_cliente}\",\"{contato_cliente}\",\"{itens_json}\",\"{valor_total:.2f}\""
+    # 2. Adicionar o novo pedido ao conteúdo (garantindo que o JSON esteja entre aspas)
+    novo_registro = f"\n{int(datetime.now().timestamp())},\"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\",\"{nome_cliente}\",\"{contato_cliente}\",\"{itens_json.replace('"', '""')}\",\"{valor_total:.2f}\""
+    
+    # Remove espaços em branco do início/fim para garantir que o CSV fique limpo
     new_content = current_content.strip() + novo_registro + "\n"
     
     # 3. Codificar o novo conteúdo em Base64
@@ -156,15 +169,14 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
         "branch": BRANCH
     }
     
-    headers_put = get_github_headers()
-    headers_put["Content-Type"] = "application/json"
+    headers_put = get_github_headers(content_type='json')
 
     try:
         response_put = requests.put(api_url, headers=headers_put, data=json.dumps(commit_data))
         response_put.raise_for_status()
         return True
     except requests.exceptions.HTTPError as e:
-        st.error(f"Erro ao salvar o pedido (Commit no GitHub). Verifique as permissões do seu PAT (Precisa de 'repo'). Detalhe: {e}")
+        st.error(f"Erro ao salvar o pedido (Commit no GitHub). Status {response_put.status_code}. Verifique as permissões 'repo' do seu PAT. Detalhe: {e}")
         return False
     except Exception as e:
         st.error(f"Erro desconhecido ao enviar o pedido: {e}")
@@ -254,7 +266,6 @@ with col_carrinho:
                 nome=st.text_input("Seu Nome Completo:");contato=st.text_input("Seu Contato (WhatsApp/E-mail):")
                 if st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True):
                     if nome and contato:
-                        # O ID precisa ser string (para o carrinho) mas garantimos que é um número para o JSON
                         detalhes={"total":total_acumulado,"itens":[{"id":int(k),"nome":v['nome'],"preco":v['preco'],"quantidade":v['quantidade']} for k,v in st.session_state.carrinho.items()]}
                         if salvar_pedido(nome,contato,total_acumulado,json.dumps(detalhes,ensure_ascii=False)):
                             st.balloons();st.success("🎉 Pedido enviado com sucesso!");st.session_state.carrinho={};st.rerun()
@@ -333,4 +344,3 @@ else:
         product_id = row['ID'] 
         with cols[i % 4]: 
             render_product_card(product_id, row, key_prefix='prod')
-
