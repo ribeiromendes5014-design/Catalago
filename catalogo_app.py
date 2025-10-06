@@ -1,9 +1,4 @@
 # catalogo_app.py
-import os
-os.environ["DATA_REPO_NAME"] = "ribeiromendes5014-design/fluxo"
-os.environ["BRANCH"] = "main"
-os.environ["GITHUB_TOKEN"] = ""  # (só se o repositório for privado)
-
 
 import streamlit as st
 import pandas as pd
@@ -495,6 +490,7 @@ else:
         with cols[i % 4]: 
             # Chama a função com a chave única
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
