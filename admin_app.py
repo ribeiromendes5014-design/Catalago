@@ -19,7 +19,6 @@ if 'data_version' not in st.session_state:
     st.session_state['data_version'] = 0
 
 # --- Configurações do GitHub (Lendo do st.secrets) ---
-# ... (Bloco try/except mantido inalterado) ...
 try:
     GITHUB_TOKEN = st.secrets["github"]["token"]
     REPO_NAME_FULL = st.secrets["github"]["repo_name"] 
@@ -39,16 +38,14 @@ except KeyError:
 
 # --- Funções Base do GitHub para Leitura e Escrita ---
 
-# RENOMEADO e com CACHE FORÇADO pelo version_control
-@st.cache_data(ttl=5) # Reduzido o TTL para 5 segundos para testes
+# Mantemos o cache controlado por versão
+@st.cache_data(ttl=5) 
 def fetch_github_data_v2(sheet_name, version_control):
     """Carrega dados de um CSV do GitHub. O 'version_control' força o reload."""
     csv_filename = f"{sheet_name}.csv"
     url = f"{GITHUB_RAW_BASE_URL}/{csv_filename}"
     
     try:
-        # Nota: requests.get(url).content pode ser mais robusto que pd.read_csv(url)
-        # Tenta carregar o DataFrame diretamente da URL RAW
         df = pd.read_csv(url, sep=',') 
         
         df.columns = df.columns.str.strip().str.upper() 
@@ -74,14 +71,14 @@ def fetch_github_data_v2(sheet_name, version_control):
     except Exception as e:
         st.error(f"Erro ao carregar dados de '{csv_filename}': {e}"); return pd.DataFrame()
 
-# Função auxiliar para o app usar o nome antigo
+# Função auxiliar para o app usar o nome antigo e passar a versão
 def carregar_dados(sheet_name):
     # Passa o contador de versão para a função em cache
     return fetch_github_data_v2(sheet_name, st.session_state['data_version'])
 
 # Função para obter o SHA e fazer o PUT (commit)
 def write_csv_to_github(df, sheet_name, commit_message):
-# ... (Restante desta função mantido inalterado) ...
+    """Obtém o SHA do arquivo e faz o commit do novo DataFrame no GitHub."""
     csv_filename = f"{sheet_name}.csv"
     api_url = f"{GITHUB_API_BASE_URL}/{csv_filename}"
     
@@ -279,8 +276,8 @@ def atualizar_promocao(id_promocao, preco_promocional, data_inicio, data_fim, st
 st.set_page_config(page_title="Admin Doce&Bella", layout="wide")
 st.title("⭐ Painel de Administração | Doce&Bella")
 
-# --- ATUALIZAÇÃO AUTOMÁTICA A CADA 5 SEGUNDOS ---
-st_autorefresh(interval=5000, key="auto_update_github")
+# --- ATUALIZAÇÃO AUTOMÁTICA A CADA 60 SEGUNDOS ---
+st_autorefresh(interval=60000, key="auto_update_github")
 
 # --- TABS DO SISTEMA ---
 tab_pedidos, tab_produtos, tab_promocoes = st.tabs(["Pedidos", "Produtos", "🔥 Promoções"])
@@ -315,7 +312,7 @@ with tab_pedidos:
                     if st.button("✅ Finalizar Pedido", key=f"finalizar_{pedido['ID_PEDIDO']}"):
                         if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status="Finalizado"): 
                             st.success(f"Pedido {pedido['ID_PEDIDO']} finalizado!")
-                            st.session_state['data_version'] += 1 # Incrementa a versão para forçar o reload do cache
+                            st.session_state['data_version'] += 1 
                             st.rerun() 
                         else: st.error("Falha ao finalizar pedido.")
                     st.markdown("---"); exibir_itens_pedido(pedido['ITENS_PEDIDO'], df_catalogo_pedidos)
@@ -332,14 +329,14 @@ with tab_pedidos:
                         if st.button("↩️ Reverter para Pendente", key=f"reverter_{pedido['ID_PEDIDO']}", use_container_width=True):
                             if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status=""): 
                                 st.success(f"Pedido {pedido['ID_PEDIDO']} revertido.")
-                                st.session_state['data_version'] += 1 # Incrementa a versão
+                                st.session_state['data_version'] += 1 
                                 st.rerun() 
                             else: st.error("Falha ao reverter status do pedido.")
                     with col_excluir:
                         if st.button("🗑️ Excluir Pedido", type="primary", key=f"excluir_{pedido['ID_PEDIDO']}", use_container_width=True):
                             if excluir_pedido(pedido['ID_PEDIDO']): 
                                 st.success(f"Pedido {pedido['ID_PEDIDO']} excluído!")
-                                st.session_state['data_version'] += 1 # Incrementa a versão
+                                st.session_state['data_version'] += 1 
                                 st.rerun() 
                             else: st.error("Falha ao excluir o pedido.")
                     st.markdown("---"); exibir_itens_pedido(pedido['ITENS_PEDIDO'], df_catalogo_pedidos)
@@ -354,7 +351,7 @@ with tab_produtos:
                 if not nome_prod or preco_prod <= 0: st.warning("Preencha Nome e Preço.")
                 elif adicionar_produto(nome_prod, preco_prod, desc_curta_prod, desc_longa_prod, link_imagem_prod, disponivel_prod):
                     st.success("Produto cadastrado!")
-                    st.session_state['data_version'] += 1 # Incrementa a versão
+                    st.session_state['data_version'] += 1 
                     st.rerun() 
                 else: st.error("Falha ao cadastrar.")
     
@@ -409,15 +406,19 @@ with tab_produtos:
                             if st.form_submit_button("Salvar Alterações"):
                                 if atualizar_produto(produto['ID'], nome_edit, preco_edit, curta_edit, longa_edit, link_edit, disponivel_edit):
                                     st.success("Produto atualizado!")
-                                    st.session_state['data_version'] += 1 # Incrementa a versão
+                                    st.session_state['data_version'] += 1 
                                     st.rerun() 
                                 else: st.error("Falha ao atualizar.")
 
-                    # Lógica de exclusão com atualização imediata
+                    # Lógica de exclusão com atualização imediata (REINTRODUZINDO time.sleep e st.cache_data.clear)
                     if st.button("🗑️ Excluir", key=f"del_{produto.get('ID', index)}", type="primary"):
                         if excluir_produto(produto['ID']):
                             st.success("Produto excluído!")
-                            st.session_state['data_version'] += 1 # Incrementa a versão
+                            st.session_state['data_version'] += 1 # A chave que força o reload do cache
+                            # --- BLOCO EXPLICITAMENTE REQUISITADO ---
+                            time.sleep(0.5) 
+                            st.cache_data.clear() 
+                            # --- FIM DO BLOCO EXPLICITAMENTE REQUISITADO ---
                             st.rerun()
                         else:
                             st.error("Falha ao excluir.")
@@ -450,7 +451,7 @@ with tab_promocoes:
                         data_fim_str = "" if sem_data_fim or data_fim is None else data_fim.strftime('%Y-%m-%d')
                         if criar_promocao(id_produto, produto_info['NOME'], produto_info['PRECO_FLOAT'], preco_promocional, data_inicio.strftime('%Y-%m-%d'), data_fim_str):
                             st.success("Promoção criada!")
-                            st.session_state['data_version'] += 1 # Incrementa a versão
+                            st.session_state['data_version'] += 1 
                             st.rerun()
                         else: st.error("Falha ao criar promoção.")
 
@@ -482,14 +483,13 @@ with tab_promocoes:
                         if st.form_submit_button("Salvar"):
                             if atualizar_promocao(promo['ID_PROMOCAO'], preco_promo_edit, data_inicio_edit.strftime('%Y-%m-%d'), data_fim_edit.strftime('%Y-%m-%d'), status_edit):
                                 st.success("Promoção atualizada!")
-                                st.session_state['data_version'] += 1 # Incrementa a versão
+                                st.session_state['data_version'] += 1 
                                 st.rerun()
                             else: st.error("Falha ao atualizar promoção.")
 
                 if st.button("🗑️ Excluir Promoção", key=f"del_promo_{promo.get('ID_PROMOCAO', index)}", type="primary"):
                     if excluir_promocao(promo['ID_PROMOCAO']):
                         st.success("Promoção excluída!")
-                        st.session_state['data_version'] += 1 # Incrementa a versão
+                        st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
-
