@@ -48,10 +48,11 @@ def get_github_headers(content_type='json'):
 # Adicionada tolerância a erros no CSV usando 'engine="python"' e 'on_bad_lines="warn"'
 def get_data_from_github(file_name):
     """
-    Lê o conteúdo de um CSV do GitHub diretamente via API.
-    (Versão aprimorada para depuração de erros de JSON/404)
+    Lê o conteúdo de um CSV do GitHub diretamente via API (sem cache da CDN).
+    Garante que sempre trará a versão mais recente do arquivo.
     """
-    api_url = f"https://api.github.com/repos/{REPO_NAME}/contents/{file_name}?ref={BRANCH}"
+    # CORREÇÃO PRINCIPAL AQUI: DEVE USAR DATA_REPO_NAME
+    api_url = f"https://api.github.com/repos/{DATA_REPO_NAME}/contents/{file_name}?ref={BRANCH}"
     
     try:
         # Autenticação com token
@@ -425,6 +426,7 @@ else:
         product_id = row['ID'] 
         with cols[i % 4]: 
             render_product_card(product_id, row, key_prefix='prod')
+
 
 
 
