@@ -10,8 +10,8 @@ import numpy as np
 import random
 from io import StringIO
 
-# --- Configurações de Dados ---
-SHEET_NAME_CATALOGO = "produtos"
+# --- Configurações de Dados (AJUSTADO) ---
+SHEET_NAME_CATALOGO = "produtos_estoque" # <<< NOVO NOME DO ARQUIVO
 SHEET_NAME_PEDIDOS = "pedidos"
 SHEET_NAME_PROMOCOES = "promocoes"
 
@@ -46,7 +46,11 @@ except KeyError:
 @st.cache_data(ttl=5)
 def fetch_github_data_v2(sheet_name, version_control):
     """Carrega dados de um CSV do GitHub via API (sem cache da CDN)."""
-    csv_filename = f"{sheet_name}.csv"
+    # Renomeia o nome do arquivo para o novo padrão se for o catálogo
+    if sheet_name == "produtos": # Verifica o nome da sheet passada, se for o antigo, usa o novo
+        csv_filename = f"{SHEET_NAME_CATALOGO}.csv"
+    else:
+        csv_filename = f"{sheet_name}.csv"
     
     # --- Lógica para Repositório de Pedidos Externo (AJUSTADO) ---
     if sheet_name == SHEET_NAME_PEDIDOS:
@@ -56,6 +60,7 @@ def fetch_github_data_v2(sheet_name, version_control):
         repo_to_use = REPO_NAME_FULL
         branch_to_use = BRANCH
         
+    # ATENÇÃO: Se sheet_name for "produtos_estoque", csv_filename será "produtos_estoque.csv"
     api_url = f"https://api.github.com/repos/{repo_to_use}/contents/{csv_filename}?ref={branch_to_use}"
 
     try:
@@ -104,15 +109,21 @@ def carregar_dados(sheet_name):
 # Função para obter o SHA e fazer o PUT (commit)
 def write_csv_to_github(df, sheet_name, commit_message):
     """Obtém o SHA do arquivo e faz o commit do novo DataFrame no GitHub."""
-    csv_filename = f"{sheet_name}.csv"
     
-    # --- NOVO: Define o repositório e URL API para escrita ---
-    if sheet_name == SHEET_NAME_PEDIDOS:
-        repo_to_write = PEDIDOS_REPO_FULL
-        branch_to_write = PEDIDOS_BRANCH
-    else:
+    # Determina o nome do arquivo no GitHub (usa o nome real da planilha)
+    if sheet_name == "produtos": 
+        csv_filename = f"{SHEET_NAME_CATALOGO}.csv"
         repo_to_write = REPO_NAME_FULL
         branch_to_write = BRANCH
+    else:
+        csv_filename = f"{sheet_name}.csv"
+        # --- NOVO: Define o repositório e URL API para escrita ---
+        if sheet_name == SHEET_NAME_PEDIDOS:
+            repo_to_write = PEDIDOS_REPO_FULL
+            branch_to_write = PEDIDOS_BRANCH
+        else:
+            repo_to_write = REPO_NAME_FULL
+            branch_to_write = BRANCH
         
     GITHUB_API_BASE_URL_WRITE = f"https://api.github.com/repos/{repo_to_write}/contents"
     api_url = f"{GITHUB_API_BASE_URL_WRITE}/{csv_filename}"
@@ -195,7 +206,6 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
             json_str = str(pedido_json)
             
             # 2. CORREÇÃO PARA FORMATO CSV ESCAPADO (substitui "" por ")
-            # Esta linha resolve o problema de aspas duplas duplas
             json_str_limpo = json_str.replace('""', '"') 
             
             detalhes_pedido = json.loads(json_str_limpo)
