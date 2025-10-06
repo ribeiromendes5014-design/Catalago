@@ -52,23 +52,44 @@ def get_github_headers(content_type='json'):
 # Adicionada tolerância a erros no CSV usando 'engine="python"' e 'on_bad_lines="warn"'
 def get_data_from_github(file_name):
     """
-    Lê o conteúdo de um CSV do GitHub diretamente via API (sem cache da CDN).
-    Garante que sempre trará a versão mais recente do arquivo.
+    Lê o conteúdo de um CSV do GitHub diretamente via API.
+    (Versão aprimorada para depuração de erros de JSON/404)
     """
     api_url = f"https://api.github.com/repos/{REPO_NAME}/contents/{file_name}?ref={BRANCH}"
     
     try:
-        # Autenticação com token do secrets
+        # Autenticação com token
         headers = {
             "Authorization": f"token {GITHUB_TOKEN}",
-            "Accept": "application/vnd.github.com.v3.raw"
+            "Accept": "application/vnd.github.com.v3.raw" # O RAW não deve ser usado aqui, queremos o JSON da Content API
         }
 
-        response = requests.get(api_url, headers=headers)
-        response.raise_for_status()
+        # Para leitura do arquivo via Content API (que retorna JSON com base64)
+        headers_content = {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            # Aceita o JSON padrão, não o 'raw'
+        }
 
-        # A API de Conteúdo retorna um objeto JSON contendo o conteúdo base64
-        data = response.json()
+
+        response = requests.get(api_url, headers=headers_content)
+        
+        # 1. VERIFICAÇÃO DO STATUS HTTP
+        if response.status_code == 404:
+            st.error(f"Erro 404: Arquivo '{file_name}' não encontrado no repositório '{REPO_NAME}' na branch '{BRANCH}'. Verifique o nome do arquivo/branch/repo.")
+            return None
+        
+        response.raise_for_status() # Levanta exceção para outros erros HTTP (400, 500 etc.)
+
+        # 2. TENTA DECODIFICAR O JSON
+        try:
+            data = response.json()
+        except requests.exceptions.JSONDecodeError as e:
+            st.error(f"Erro de JSON ao decodificar a resposta da API do GitHub para '{file_name}'.")
+            st.warning("A resposta não é um JSON válido. Conteúdo da resposta (Pode ser erro HTML):")
+            st.code(response.text[:500]) # Mostra os primeiros 500 caracteres da resposta
+            return None
+
+
         if "content" not in data:
             st.error(f"O campo 'content' não foi encontrado na resposta da API. Verifique se o arquivo {file_name} existe na branch '{BRANCH}'.")
             st.json(data)
@@ -78,17 +99,15 @@ def get_data_from_github(file_name):
         content = base64.b64decode(data["content"]).decode("utf-8")
         csv_data = StringIO(content)
 
-        # Lê o CSV e trata erros de formatação
+        # Lê o CSV
         df = pd.read_csv(csv_data, sep=",", encoding="utf-8", engine="python", on_bad_lines="warn")
 
-        # Normaliza nomes de colunas (boa prática)
+        # Normaliza nomes de colunas
         df.columns = [col.strip().upper() for col in df.columns]
         return df
 
-    except requests.exceptions.HTTPError as e:
-        st.error(f"Erro HTTP ao acessar '{file_name}' via API ({response.status_code}). URL: {api_url}")
-        return None
     except Exception as e:
+        # Se ocorrer qualquer outro erro (conexão, decodificação, etc.)
         st.error(f"Erro ao carregar '{file_name}' via API do GitHub: {e}")
         return None
 
@@ -410,6 +429,7 @@ else:
         product_id = row['ID'] 
         with cols[i % 4]: 
             render_product_card(product_id, row, key_prefix='prod')
+
 
 
 
