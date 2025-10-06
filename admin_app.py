@@ -191,19 +191,20 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
     porcentagem de itens separados.
     """
     try:
-        # 1. TRATA VALORES NULOS E GARANTE STRING
+        # --- INÍCIO DA CORREÇÃO 1 ---
+        # Verifica se o JSON do pedido é válido antes de tentar decodificá-lo
         if pd.isna(pedido_json) or not str(pedido_json).strip():
-            detalhes_pedido = {'itens': []} # Cria um objeto vazio
-            st.warning(f"O pedido {id_pedido} não possui itens válidos para exibir.")
-        else:
-            json_str = str(pedido_json)
-            
-            # 2. CORREÇÃO PARA FORMATO CSV ESCAPADO (substitui "" por ")
-            json_str_limpo = json_str.replace('""', '"') 
-            
-            detalhes_pedido = json.loads(json_str_limpo)
-            
+            st.warning(f"Pedido {id_pedido} não possui detalhes de itens para exibir.")
+            return 0
+        
+        detalhes_pedido = json.loads(pedido_json)
         itens = detalhes_pedido.get('itens', [])
+
+        if not itens:
+            st.warning(f"Pedido {id_pedido} não possui uma lista de itens válida.")
+            return 0
+        # --- FIM DA CORREÇÃO 1 ---
+
         total_itens = len(itens)
         itens_separados = 0
         
@@ -262,6 +263,13 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
             progresso = int((itens_separados / total_itens) * 100)
             return progresso
         return 0
+        
+    except json.JSONDecodeError:
+        st.error(f"Erro ao processar itens do pedido {id_pedido}: O formato dos dados dos itens é inválido.")
+        return 0
+    except Exception as e: 
+        st.error(f"Erro inesperado ao processar itens do pedido {id_pedido}: {e}")
+        return 0 # Retorna 0% em caso de erro
         
     except Exception as e: 
         st.error(f"Erro ao processar itens do pedido: {e}")
@@ -660,3 +668,4 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
