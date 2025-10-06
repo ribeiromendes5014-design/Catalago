@@ -292,7 +292,17 @@ CSS_GERAL = """
         line-height: 1.2 !important;
     }
 </style>
-"""
+CSS_GERAL = """
+<style>
+    .stApp {{ 
+        background-image: url({bg}); 
+        background-size: cover; 
+        background-attachment: fixed; 
+    }}
+    /* o restante do seu CSS fica igual */
+</style>
+""".format(bg=BACKGROUND_IMAGE_URL)
+
 st.markdown(CSS_GERAL, unsafe_allow_html=True)
 
 
@@ -428,4 +438,5 @@ else:
         """, unsafe_allow_html=True)
         
         st.caption("✨ Role a barra abaixo (ou deslize a tela) para ver todos os produtos. Use a barra de pesquisa para encontrar e adicionar produtos.")
+
 
