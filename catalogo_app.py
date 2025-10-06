@@ -221,7 +221,7 @@ def render_product_image(link_imagem):
 # --- Layout do Aplicativo (MANTIDO) ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS (CORRIGIDO NOVAMENTE PARA FIXAÇÃO FORÇADA) ---
+# --- CSS (SOLUÇÃO FINAL PARA FIXAÇÃO DE CABEÇALHO) ---
 st.markdown(f"""
 <style>
 /* ---------------------------------------------------- */
@@ -251,6 +251,7 @@ html, body, .main, .stApp {{
 }}
 
 /* CORREÇÃO 2: Adiciona padding-top ao contêiner principal para o conteúdo não ficar embaixo da barra fixa */
+/* O Streamlit envolve o corpo do app em 'div.block-container', este é o alvo para o espaçamento. */
 div.block-container {{ 
     background-color: rgba(255, 255, 255, 0.95); 
     border-radius: 10px; 
@@ -258,6 +259,10 @@ div.block-container {{
     padding-top: 160px !important; /* VALOR AUMENTADO E FORÇADO */
     margin-top: 0; /* Remove a margem superior desnecessária */
 }}
+
+/* Esconde o cabeçalho original (que pode estar duplicado/interferindo) */
+[data-testid="stHeader"] {{ visibility: hidden; }}
+
 /* ---------------------------------------------------- */
 /* OUTROS ESTILOS (MANTIDOS) */
 /* ---------------------------------------------------- */
@@ -278,10 +283,10 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 st_autorefresh(interval=10000, key="auto_refresh_catalogo")
 
 
-# --- CABEÇALHO (MANTIDO) ---
-col_logo, col_titulo = st.columns([0.1, 5]); col_logo.markdown("<h3>💖</h3>", unsafe_allow_html=True); col_titulo.title("Catálogo de Pedidos Doce&Bella")
+# --- CABEÇALHO (REMOVIDO TÍTULO PARA EVITAR SOBREPOSIÇÃO) ---
+col_logo, col_titulo = st.columns([0.1, 5]); col_logo.markdown("<h3>💖</h3>", unsafe_allow_html=True); # Removido col_titulo.title(...)
 
-# --- BARRA ROSA (PESQUISA E CARRINHO) (MANTIDO) ---
+# --- BARRA ROSA (PESQUISA E CARRINHO) (MANTEVE O MARKDOWN PARA INJETAR O CONTÊINER FIXO) ---
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
