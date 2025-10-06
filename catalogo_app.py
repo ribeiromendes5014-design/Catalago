@@ -167,6 +167,7 @@ def get_product_card_html_for_carousel(prod_id, row):
     else:
         preco_html = f"<h4 class='price-normal'>R$ {preco_final:.2f}</h4>"
 
+    # Nota: O link/botão no carrossel HTML é apenas visual e não funcional no Streamlit
     return f"""
     <div class="carousel-item-html">
         {img_html}
@@ -176,8 +177,6 @@ def get_product_card_html_for_carousel(prod_id, row):
         <a href="#" class="carousel-detail-link">Ver Detalhes</a>
     </div>
     """
-
-    return card_html
 
 def render_product_card_with_streamlit_buttons(prod_id, row, key_prefix):
     """Renderiza o card com st.container, st.expander e botões funcionais - LAYOUT UNIFICADO."""
@@ -260,25 +259,29 @@ CSS_GERAL = """
         border: none !important; 
     }}
     
-    /* ESTILOS DO CARROSSEL - HTML INJETADO (APLICADO SOMENTE AO CATÁLOGO COMPLETO) */
+    /* ESTILOS DO CARROSSEL - HTML INJETADO (NOVO ESTILO) */
     .carousel-outer-container {{
-        overflow-x: scroll; 
-        padding-bottom: 20px; 
-        margin-top: 15px;
+        overflow-x: auto; 
+        padding: 1rem 0;
     }}
     .product-wrapper {{
         display: flex; 
-        flex-direction: row;
-        width: max-content; 
+        gap: 1rem;
+        flex-wrap: nowrap;
     }}
     .carousel-item-html {{ 
-        border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin: 5px 10px 5px 0; 
-        min-width: 220px; max-width: 220px; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        background-color: #fff;
+        border-radius: 10px;
+        padding: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        min-width: 230px;
+        max-width: 230px;
+        flex-shrink: 0;
         text-align: center;
-        height: 250px; 
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
+        transition: transform 0.2s ease;
+    }}
+    .carousel-item-html:hover {{
+        transform: translateY(-5px);
     }}
     .product-image-container-html {{ 
         height: 120px; 
@@ -292,11 +295,11 @@ CSS_GERAL = """
         display: block;
         background-color: #C2185B;
         color: white;
-        padding: 5px;
-        border-radius: 5px;
+        padding: 8px 0;
+        border-radius: 6px;
         text-decoration: none;
-        margin-top: 10px;
-        font-weight: bold;
+        margin-top: 8px;
+        font-weight: 600;
     }}
     h4.price-normal {{
         color: #880E4F !important;
@@ -307,7 +310,6 @@ CSS_GERAL = """
 """.format(bg=BACKGROUND_IMAGE_URL)
 
 st.markdown(CSS_GERAL, unsafe_allow_html=True)
-
 
 
 # --- ATUALIZAÇÃO AUTOMÁTICA ---
@@ -420,39 +422,30 @@ else:
     # ==============================================================================
     st.subheader("🛍️ Catálogo Completo")
 
-# Filtro de busca
-termo = st.session_state.get('termo_pesquisa_barra', '').lower()
-if termo:
-    df_filtrado = df_catalogo[df_catalogo.apply(lambda row: termo in str(row['NOME']).lower() or termo in str(row['DESCRICAOLONGA']).lower(), axis=1)]
-else:
-    df_filtrado = df_catalogo
+    termo = st.session_state.get('termo_pesquisa_barra', '').lower()
+    df_filtrado = (
+        df_catalogo[df_catalogo.apply(lambda row: termo in str(row['NOME']).lower() or termo in str(row['DESCRICAOLONGA']).lower(), axis=1)]
+        if termo else df_catalogo
+    )
 
-if df_filtrado.empty:
-    st.info(f"Nenhum produto encontrado com o termo '{termo}'.")
-else:
-    # CSS para rolagem horizontal no layout padrão (sem HTML)
-    st.markdown("""
-        <style>
-            .scroll-container {
-                display: flex;
-                overflow-x: auto;
-                padding-bottom: 1rem;
-                gap: 1rem;
-            }
-            .scroll-container > div {
-                flex: 0 0 23%;
-                min-width: 250px;
-            }
-        </style>
-    """, unsafe_allow_html=True)
+    if df_filtrado.empty:
+        st.info(f"Nenhum produto encontrado com o termo '{termo}'.")
+    else:
+        # 1. Gera a lista de HTML dos cards usando a função de carrossel
+        html_cards_catalogo = [get_product_card_html_for_carousel(prod_id, row) for prod_id, row in df_filtrado.iterrows()]
 
-    # Renderiza cards com botões Streamlit, mas dentro de uma div com rolagem lateral
-    st.markdown('<div class="scroll-container">', unsafe_allow_html=True)
-    for prod_id, row in df_filtrado.iterrows():
-        render_product_card_with_streamlit_buttons(prod_id, row, key_prefix='catalogo')
-    st.markdown('</div>', unsafe_allow_html=True)
+        # 2. Monta a estrutura de carrossel com as classes recém-atualizadas
+        carrossel_html = """
+        <div class="carousel-outer-container">
+            <div class="product-wrapper">
+                {cards}
+            </div>
+        </div>
+        """.format(cards=''.join(html_cards_catalogo))
 
-
-
-
-
+        # 3. Injeta o HTML usando st.markdown
+        st.markdown(carrossel_html, unsafe_allow_html=True)
+        st.caption("✨ Role lateralmente para explorar os produtos.")
+        
+        # Aviso para o usuário sobre a funcionalidade
+        st.warning("⚠️ **Atenção:** Os cards no carrossel do Catálogo Completo são apenas visuais. Use as seções 'Mais Queridinhos' e 'Ofertas' ou a busca para adicionar produtos ao carrinho com botões funcionais.")
