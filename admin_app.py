@@ -345,6 +345,7 @@ with tab_pedidos:
 
 with tab_produtos:
     st.header("🛍️ Gerenciamento de Produtos")
+    st_autorefresh(interval=5000, key="auto_refresh_catalogo")
     with st.expander("➕ Cadastrar Novo Produto", expanded=False):
         with st.form("form_novo_produto", clear_on_submit=True):
             col1, col2 = st.columns(2); nome_prod = col1.text_input("Nome do Produto*"); preco_prod = col1.number_input("Preço (R$)*", min_value=0.0, format="%.2f", step=0.50); link_imagem_prod = col1.text_input("URL da Imagem"); desc_curta_prod = col2.text_input("Descrição Curta"); desc_longa_prod = col2.text_area("Descrição Longa"); disponivel_prod = col2.selectbox("Disponível?", ("Sim", "Não"))
@@ -494,6 +495,7 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
 
 
