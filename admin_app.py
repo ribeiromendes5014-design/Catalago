@@ -14,6 +14,10 @@ SHEET_NAME_CATALOGO = "produtos"
 SHEET_NAME_PEDIDOS = "pedidos"
 SHEET_NAME_PROMOCOES = "promocoes"
 
+# --- Controle de Cache para forçar o reload do GitHub ---
+if 'data_version' not in st.session_state:
+    st.session_state['data_version'] = 0
+
 # --- Configurações do GitHub (Lendo do st.secrets) ---
 try:
     GITHUB_TOKEN = st.secrets["github"]["token"]
@@ -34,13 +38,14 @@ except KeyError:
 
 # --- Funções Base do GitHub para Leitura e Escrita ---
 
-def carregar_dados(sheet_name):
+# Aplicamos o cache, e o parâmetro 'version_control' garante que o cache quebre quando ele muda.
+@st.cache_data(ttl=60) 
+def carregar_dados(sheet_name, version_control):
     """Carrega dados de um CSV do GitHub."""
     csv_filename = f"{sheet_name}.csv"
     url = f"{GITHUB_RAW_BASE_URL}/{csv_filename}"
     
     try:
-        # A URL RAW do GitHub é usada. Streamlit ou a rede podem cachear esta chamada.
         df = pd.read_csv(url, sep=',') 
         
         df.columns = df.columns.str.strip().str.upper() 
@@ -115,7 +120,7 @@ def write_csv_to_github(df, sheet_name, commit_message):
 # --- Funções de Pedidos (ESCRITA HABILITADA) ---
 
 def atualizar_status_pedido(id_pedido, novo_status):
-    df = carregar_dados(SHEET_NAME_PEDIDOS).copy()
+    df = carregar_dados(SHEET_NAME_PEDIDOS, st.session_state['data_version']).copy() # Chamada corrigida
     if df.empty: 
         st.error("Não há dados de pedidos para atualizar.")
         return False
@@ -128,7 +133,7 @@ def atualizar_status_pedido(id_pedido, novo_status):
     return False
 
 def excluir_pedido(id_pedido):
-    df = carregar_dados(SHEET_NAME_PEDIDOS).copy()
+    df = carregar_dados(SHEET_NAME_PEDIDOS, st.session_state['data_version']).copy() # Chamada corrigida
     if df.empty: return False
 
     df = df[df['ID_PEDIDO'] != id_pedido]
@@ -158,7 +163,7 @@ def exibir_itens_pedido(pedido_json, df_catalogo):
 # --- FUNÇÕES CRUD PARA PRODUTOS (ESCRITA HABILITADA) ---
 
 def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponivel):
-    df = carregar_dados(SHEET_NAME_CATALOGO).copy()
+    df = carregar_dados(SHEET_NAME_CATALOGO, st.session_state['data_version']).copy() # Chamada corrigida
     
     df['ID'] = pd.to_numeric(df['ID'], errors='coerce')
     novo_id = df['ID'].max() + 1 if not df.empty and df['ID'].any() and not pd.isna(df['ID'].max()) else 1
@@ -183,7 +188,7 @@ def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponiv
 
 
 def excluir_produto(id_produto):
-    df = carregar_dados(SHEET_NAME_CATALOGO).copy()
+    df = carregar_dados(SHEET_NAME_CATALOGO, st.session_state['data_version']).copy() # Chamada corrigida
     if df.empty: return False
 
     df = df[df['ID'] != int(id_produto)]
@@ -192,7 +197,7 @@ def excluir_produto(id_produto):
 
 
 def atualizar_produto(id_produto, nome, preco, desc_curta, desc_longa, link_imagem, disponivel):
-    df = carregar_dados(SHEET_NAME_CATALOGO).copy()
+    df = carregar_dados(SHEET_NAME_CATALOGO, st.session_state['data_version']).copy() # Chamada corrigida
     if df.empty: return False
     
     index_to_update = df[df['ID'] == int(id_produto)].index
@@ -212,7 +217,7 @@ def atualizar_produto(id_produto, nome, preco, desc_curta, desc_longa, link_imag
 # --- FUNÇÕES CRUD PARA PROMOÇÕES (ESCRITA HABILITADA) ---
 
 def criar_promocao(id_produto, nome_produto, preco_original, preco_promocional, data_inicio, data_fim):
-    df = carregar_dados(SHEET_NAME_PROMOCOES).copy()
+    df = carregar_dados(SHEET_NAME_PROMOCOES, st.session_state['data_version']).copy() # Chamada corrigida
     
     id_promocao = int(time.time()) 
 
@@ -237,7 +242,7 @@ def criar_promocao(id_produto, nome_produto, preco_original, preco_promocional, 
 
 
 def excluir_promocao(id_promocao):
-    df = carregar_dados(SHEET_NAME_PROMOCOES).copy()
+    df = carregar_dados(SHEET_NAME_PROMOCOES, st.session_state['data_version']).copy() # Chamada corrigida
     if df.empty: return False
     
     df = df[df['ID_PROMOCAO'] != int(id_promocao)]
@@ -246,7 +251,7 @@ def excluir_promocao(id_promocao):
 
 
 def atualizar_promocao(id_promocao, preco_promocional, data_inicio, data_fim, status):
-    df = carregar_dados(SHEET_NAME_PROMOCOES).copy()
+    df = carregar_dados(SHEET_NAME_PROMOCOES, st.session_state['data_version']).copy() # Chamada corrigida
     if df.empty: return False
     
     index_to_update = df[df['ID_PROMOCAO'] == int(id_promocao)].index
@@ -272,12 +277,17 @@ st_autorefresh(interval=60000, key="auto_update_github")
 # --- TABS DO SISTEMA ---
 tab_pedidos, tab_produtos, tab_promocoes = st.tabs(["Pedidos", "Produtos", "🔥 Promoções"])
 
+# Obtém a versão atual dos dados para passar para as funções de leitura
+current_version = st.session_state['data_version']
+
 with tab_pedidos:
     st.header("📋 Pedidos Recebidos"); 
-    # Botão de recarga manual agora força o rerun para refletir mudanças
     if st.button("Recarregar Pedidos"): st.rerun() 
-    df_pedidos_raw = carregar_dados(SHEET_NAME_PEDIDOS); 
-    df_catalogo_pedidos = carregar_dados(SHEET_NAME_CATALOGO)
+    
+    # Chamada corrigida
+    df_pedidos_raw = carregar_dados(SHEET_NAME_PEDIDOS, current_version); 
+    df_catalogo_pedidos = carregar_dados(SHEET_NAME_CATALOGO, current_version)
+    
     if df_pedidos_raw.empty: st.info("Nenhum pedido foi encontrado na planilha.")
     else:
         df_pedidos_raw['DATA_HORA'] = pd.to_datetime(df_pedidos_raw['DATA_HORA'], errors='coerce'); st.subheader("🔍 Filtrar Pedidos")
@@ -298,8 +308,8 @@ with tab_pedidos:
                     if st.button("✅ Finalizar Pedido", key=f"finalizar_{pedido['ID_PEDIDO']}"):
                         if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status="Finalizado"): 
                             st.success(f"Pedido {pedido['ID_PEDIDO']} finalizado!")
-                            # Sincronização agressiva
-                            time.sleep(1); st.cache_data.clear(); st.cache_resource.clear(); st.rerun() 
+                            st.session_state['data_version'] += 1 # Incrementa a versão
+                            time.sleep(1); st.rerun() 
                         else: st.error("Falha ao finalizar pedido.")
                     st.markdown("---"); exibir_itens_pedido(pedido['ITENS_PEDIDO'], df_catalogo_pedidos)
         st.header("✅ Pedidos Finalizados")
@@ -315,15 +325,15 @@ with tab_pedidos:
                         if st.button("↩️ Reverter para Pendente", key=f"reverter_{pedido['ID_PEDIDO']}", use_container_width=True):
                             if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status=""): 
                                 st.success(f"Pedido {pedido['ID_PEDIDO']} revertido.")
-                                # Sincronização agressiva
-                                time.sleep(1); st.cache_data.clear(); st.cache_resource.clear(); st.rerun() 
+                                st.session_state['data_version'] += 1 # Incrementa a versão
+                                time.sleep(1); st.rerun() 
                             else: st.error("Falha ao reverter status do pedido.")
                     with col_excluir:
                         if st.button("🗑️ Excluir Pedido", type="primary", key=f"excluir_{pedido['ID_PEDIDO']}", use_container_width=True):
                             if excluir_pedido(pedido['ID_PEDIDO']): 
                                 st.success(f"Pedido {pedido['ID_PEDIDO']} excluído!")
-                                # Sincronização agressiva
-                                time.sleep(1); st.cache_data.clear(); st.cache_resource.clear(); st.rerun() 
+                                st.session_state['data_version'] += 1 # Incrementa a versão
+                                time.sleep(1); st.rerun() 
                             else: st.error("Falha ao excluir o pedido.")
                     st.markdown("---"); exibir_itens_pedido(pedido['ITENS_PEDIDO'], df_catalogo_pedidos)
 
@@ -337,13 +347,14 @@ with tab_produtos:
                 if not nome_prod or preco_prod <= 0: st.warning("Preencha Nome e Preço.")
                 elif adicionar_produto(nome_prod, preco_prod, desc_curta_prod, desc_longa_prod, link_imagem_prod, disponivel_prod):
                     st.success("Produto cadastrado!")
-                    # Sincronização agressiva
-                    time.sleep(1); st.cache_data.clear(); st.cache_resource.clear(); st.rerun() 
+                    st.session_state['data_version'] += 1 # Incrementa a versão
+                    time.sleep(1); st.rerun() 
                 else: st.error("Falha ao cadastrar.")
     
     st.markdown("---")
     st.subheader("Catálogo Atual")
-    df_produtos = carregar_dados(SHEET_NAME_CATALOGO)
+    # Chamada corrigida
+    df_produtos = carregar_dados(SHEET_NAME_CATALOGO, current_version)
     if df_produtos.empty:
         st.warning("Nenhum produto encontrado.")
     else:
@@ -391,19 +402,16 @@ with tab_produtos:
                             if st.form_submit_button("Salvar Alterações"):
                                 if atualizar_produto(produto['ID'], nome_edit, preco_edit, curta_edit, longa_edit, link_edit, disponivel_edit):
                                     st.success("Produto atualizado!")
-                                    # Sincronização agressiva
-                                    time.sleep(1); st.cache_data.clear(); st.cache_resource.clear(); st.rerun() 
+                                    st.session_state['data_version'] += 1 # Incrementa a versão
+                                    time.sleep(1); st.rerun() 
                                 else: st.error("Falha ao atualizar.")
 
                     # Lógica de exclusão com atualização imediata
                     if st.button("🗑️ Excluir", key=f"del_{produto.get('ID', index)}", type="primary"):
                         if excluir_produto(produto['ID']):
                             st.success("Produto excluído!")
-                            # Sincronização agressiva (foco na correção)
-                            time.sleep(1)  
-                            st.cache_data.clear() 
-                            st.cache_resource.clear()
-                            st.rerun()
+                            st.session_state['data_version'] += 1 # Incrementa a versão
+                            time.sleep(1); st.rerun()
                         else:
                             st.error("Falha ao excluir.")
 
@@ -411,7 +419,8 @@ with tab_produtos:
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     with st.expander("➕ Criar Nova Promoção", expanded=False):
-        df_catalogo_promo = carregar_dados(SHEET_NAME_CATALOGO)
+        # Chamada corrigida
+        df_catalogo_promo = carregar_dados(SHEET_NAME_CATALOGO, current_version)
         if df_catalogo_promo.empty:
             st.warning("Cadastre produtos antes de criar uma promoção.")
         else:
@@ -434,13 +443,14 @@ with tab_promocoes:
                         data_fim_str = "" if sem_data_fim or data_fim is None else data_fim.strftime('%Y-%m-%d')
                         if criar_promocao(id_produto, produto_info['NOME'], produto_info['PRECO_FLOAT'], preco_promocional, data_inicio.strftime('%Y-%m-%d'), data_fim_str):
                             st.success("Promoção criada!")
-                            # Sincronização agressiva
-                            time.sleep(1); st.cache_data.clear(); st.cache_resource.clear(); st.rerun()
+                            st.session_state['data_version'] += 1 # Incrementa a versão
+                            time.sleep(1); st.rerun()
                         else: st.error("Falha ao criar promoção.")
 
     st.markdown("---")
     st.subheader("Promoções Criadas")
-    df_promocoes = carregar_dados(SHEET_NAME_PROMOCOES)
+    # Chamada corrigida
+    df_promocoes = carregar_dados(SHEET_NAME_PROMOCOES, current_version)
     if df_promocoes.empty:
         st.info("Nenhuma promoção foi criada ainda.")
     else:
@@ -465,13 +475,13 @@ with tab_promocoes:
                         if st.form_submit_button("Salvar"):
                             if atualizar_promocao(promo['ID_PROMOCAO'], preco_promo_edit, data_inicio_edit.strftime('%Y-%m-%d'), data_fim_edit.strftime('%Y-%m-%d'), status_edit):
                                 st.success("Promoção atualizada!")
-                                # Sincronização agressiva
-                                time.sleep(1); st.cache_data.clear(); st.cache_resource.clear(); st.rerun()
+                                st.session_state['data_version'] += 1 # Incrementa a versão
+                                time.sleep(1); st.rerun()
                             else: st.error("Falha ao atualizar promoção.")
 
                 if st.button("🗑️ Excluir Promoção", key=f"del_promo_{promo.get('ID_PROMOCAO', index)}", type="primary"):
                     if excluir_promocao(promo['ID_PROMOCAO']):
                         st.success("Promoção excluída!")
-                        # Sincronização agressiva
-                        time.sleep(1); st.cache_data.clear(); st.cache_resource.clear(); st.rerun()
+                        st.session_state['data_version'] += 1 # Incrementa a versão
+                        time.sleep(1); st.rerun()
                     else: st.error("Falha ao excluir promoção.")
