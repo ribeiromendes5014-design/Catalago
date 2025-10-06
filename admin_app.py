@@ -33,8 +33,7 @@ except KeyError:
 
 # --- Funções Base do GitHub para Leitura e Escrita ---
 
-# CORREÇÃO: Cache com TTL de 5 segundos para refletir mudanças externas rapidamente
-@st.cache_data(ttl=5) 
+# Cache REMOVIDO para garantir a leitura em tempo real
 def carregar_dados(sheet_name):
     """Carrega dados de um CSV do GitHub."""
     csv_filename = f"{sheet_name}.csv"
@@ -49,7 +48,6 @@ def carregar_dados(sheet_name):
             df.drop(columns=['COLUNA'], inplace=True)
             
         if 'PRECO' in df.columns:
-            # Substitui ponto por vírgula para manter o padrão brasileiro (se for float)
             df['PRECO'] = df['PRECO'].astype(str).str.replace('.', ',', regex=False)
             
         if sheet_name == SHEET_NAME_PEDIDOS and 'STATUS' not in df.columns: df['STATUS'] = ''
@@ -102,8 +100,7 @@ def write_csv_to_github(df, sheet_name, commit_message):
     put_response = requests.put(api_url, headers=HEADERS, json=payload)
     
     if put_response.status_code in [200, 201]:
-        # CORREÇÃO: Limpa o cache e faz o rerun
-        st.cache_data.clear() 
+        # REMOVIDO: st.cache_data.clear() (não é mais necessário sem o decorador)
         return True
     else:
         error_message = put_response.json().get('message', 'Erro desconhecido')
@@ -265,7 +262,8 @@ tab_pedidos, tab_produtos, tab_promocoes = st.tabs(["Pedidos", "Produtos", "🔥
 
 with tab_pedidos:
     st.header("📋 Pedidos Recebidos"); 
-    if st.button("Recarregar Pedidos"): st.cache_data.clear(); st.rerun()
+    # Botão de recarga manual agora força o rerun para refletir mudanças
+    if st.button("Recarregar Pedidos"): st.rerun() 
     df_pedidos_raw = carregar_dados(SHEET_NAME_PEDIDOS); 
     df_catalogo_pedidos = carregar_dados(SHEET_NAME_CATALOGO)
     if df_pedidos_raw.empty: st.info("Nenhum pedido foi encontrado na planilha.")
