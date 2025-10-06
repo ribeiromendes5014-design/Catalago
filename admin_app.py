@@ -5,16 +5,34 @@ import json
 from datetime import datetime
 import time
 import requests 
+import base64
+import numpy as np # Adicionado para tratar NaN
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
 SHEET_NAME_PEDIDOS = "pedidos"
 SHEET_NAME_PROMOCOES = "promocoes"
 
-# --- Configurações do GitHub ---
-GITHUB_RAW_BASE_URL = "https://raw.githubusercontent.com/ribeiromendes5014-design/Catalago/main"
+# --- Configurações do GitHub (Lendo do st.secrets) ---
+try:
+    GITHUB_TOKEN = st.secrets["github"]["token"]
+    REPO_NAME_FULL = st.secrets["github"]["repo_name"] # ex: "ribeiromendes5014-design/Catalago"
+    BRANCH = st.secrets["github"]["branch"] # ex: "main"
+    
+    # URLs de API
+    GITHUB_RAW_BASE_URL = f"https://raw.githubusercontent.com/{REPO_NAME_FULL}/{BRANCH}"
+    GITHUB_API_BASE_URL = f"https://api.github.com/repos/{REPO_NAME_FULL}/contents"
+    
+    HEADERS = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+except KeyError:
+    st.error("Erro de configuração: As chaves 'token', 'repo_name' e 'branch' do GitHub precisam estar configuradas no secrets.toml.")
+    st.stop()
 
-# --- Conexão e Carregamento de Dados (CORRIGIDO E NORMALIZADO) ---
+
+# --- Funções Base do GitHub para Leitura e Escrita ---
 
 @st.cache_data(ttl=60)
 def carregar_dados(sheet_name):
@@ -23,7 +41,7 @@ def carregar_dados(sheet_name):
     url = f"{GITHUB_RAW_BASE_URL}/{csv_filename}"
     
     try:
-        # Usando sep=',' para delimitador de vírgula
+        # Usando sep=',' para delimitador de vírgula (ajuste feito em conversas anteriores)
         df = pd.read_csv(url, sep=',') 
         
         # Limpeza e Normalização dos Nomes das Colunas
@@ -33,10 +51,9 @@ def carregar_dados(sheet_name):
         if 'COLUNA' in df.columns:
             df.drop(columns=['COLUNA'], inplace=True)
 
-        # Adicionar colunas ausentes para compatibilidade, como antes
+        # Adicionar colunas ausentes e limpar ID
         if sheet_name == SHEET_NAME_PEDIDOS and 'STATUS' not in df.columns: df['STATUS'] = ''
         if sheet_name == SHEET_NAME_CATALOGO and 'ID' in df.columns: 
-            # Garante que ID é numérico
             df['ID'] = pd.to_numeric(df['ID'], errors='coerce') 
             df.dropna(subset=['ID'], inplace=True) 
             df['ID'] = df['ID'].astype(int)
@@ -50,14 +67,70 @@ def carregar_dados(sheet_name):
     except Exception as e:
         st.error(f"Erro ao carregar dados de '{csv_filename}': {e}"); return pd.DataFrame()
 
+# NOVO: Função para obter o SHA e fazer o PUT (commit)
+def write_csv_to_github(df, sheet_name, commit_message):
+    """Obtém o SHA do arquivo e faz o commit do novo DataFrame no GitHub."""
+    csv_filename = f"{sheet_name}.csv"
+    api_url = f"{GITHUB_API_BASE_URL}/{csv_filename}"
 
-# --- Funções de Pedidos (DESABILITADAS PARA ESCRITA) ---
+    # 1. Obter o SHA atual do arquivo
+    response = requests.get(api_url, headers=HEADERS)
+    if response.status_code == 404:
+        st.error(f"Arquivo {csv_filename} não encontrado no GitHub. Verifique o nome do arquivo e branch.")
+        return False
+    elif response.status_code != 200:
+        st.error(f"Erro ao obter SHA: {response.status_code} - {response.json().get('message', 'Erro desconhecido')}")
+        return False
+    
+    sha = response.json()['sha']
+
+    # 2. Preparar o novo conteúdo CSV (limpando NaN e convertendo para string CSV)
+    # df.fillna('') substitui NaN por string vazia antes de converter para CSV
+    # index=False evita escrever o índice do Pandas como primeira coluna.
+    # sep=',' garante que a escrita usa a vírgula, correspondendo à leitura.
+    csv_content = df.fillna('').to_csv(index=False, sep=',')
+    
+    # 3. Codificar o conteúdo em Base64
+    content_base64 = base64.b64encode(csv_content.encode('utf-8')).decode('utf-8')
+
+    # 4. Enviar a requisição PUT (Commit)
+    payload = {
+        "message": commit_message,
+        "content": content_base64,
+        "sha": sha,
+        "branch": BRANCH
+    }
+    
+    put_response = requests.put(api_url, headers=HEADERS, json=payload)
+    
+    if put_response.status_code == 200:
+        st.cache_data.clear() # Limpa o cache para forçar a leitura do novo arquivo
+        return True
+    else:
+        st.error(f"Falha no Commit: {put_response.status_code} - {put_response.json().get('message', 'Erro desconhecido')}")
+        return False
+
+# --- Funções de Pedidos (ESCRITA HABILITADA) ---
 
 def atualizar_status_pedido(id_pedido, novo_status):
-    st.error("Funcionalidade de escrita desabilitada. Configure a API do GitHub para escrita."); return False
-    
+    df = carregar_dados(SHEET_NAME_PEDIDOS).copy()
+    if df.empty: return False
+
+    index_to_update = df[df['ID_PEDIDO'] == id_pedido].index
+    if not index_to_update.empty:
+        df.loc[index_to_update, 'STATUS'] = novo_status
+        commit_msg = f"Atualizar status do pedido {id_pedido} para {novo_status}"
+        return write_csv_to_github(df, SHEET_NAME_PEDIDOS, commit_msg)
+    return False
+
 def excluir_pedido(id_pedido):
-    st.error("Funcionalidade de escrita desabilitada. Configure a API do GitHub para escrita."); return False
+    df = carregar_dados(SHEET_NAME_PEDIDOS).copy()
+    if df.empty: return False
+
+    df = df[df['ID_PEDIDO'] != id_pedido]
+    commit_msg = f"Excluir pedido {id_pedido}"
+    return write_csv_to_github(df, SHEET_NAME_PEDIDOS, commit_msg)
+
 
 def exibir_itens_pedido(pedido_json, df_catalogo):
     try:
@@ -67,7 +140,6 @@ def exibir_itens_pedido(pedido_json, df_catalogo):
             item_id = pd.to_numeric(item.get('id'), errors='coerce')
             
             if not df_catalogo.empty and not pd.isna(item_id) and not df_catalogo[df_catalogo['ID'] == int(item_id)].empty: 
-                 # CORREÇÃO: Trata o link como string e verifica se é 'nan'
                  link_na_tabela = str(df_catalogo[df_catalogo['ID'] == int(item_id)].iloc[0].get('LINKIMAGEM', link_imagem)).strip()
                  
                  if link_na_tabela.lower() != 'nan' and link_na_tabela:
@@ -79,27 +151,108 @@ def exibir_itens_pedido(pedido_json, df_catalogo):
             col_detalhes.markdown(f"**Produto:** {item.get('nome', 'N/A')}\n\n**Quantidade:** {quantidade}\n\n**Subtotal:** R$ {subtotal:.2f}"); st.markdown("---")
     except Exception as e: st.error(f"Erro ao processar itens do pedido: {e}")
 
-# --- FUNÇÕES CRUD PARA PRODUTOS (DESABILITADAS PARA ESCRITA) ---
+# --- FUNÇÕES CRUD PARA PRODUTOS (ESCRITA HABILITADA) ---
 
 def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponivel):
-    st.error("Funcionalidade de escrita desabilitada. Configure a API do GitHub para escrita."); return False
+    df = carregar_dados(SHEET_NAME_CATALOGO).copy()
+    
+    # Gerar novo ID
+    novo_id = df['ID'].max() + 1 if not df.empty and df['ID'].any() else 1
+    
+    # Criar nova linha (a ordem das colunas é importante aqui)
+    nova_linha = {
+        'ID': novo_id, 
+        'NOME': nome, 
+        'PRECO': str(preco).replace('.', ','), # Mantém o formato com vírgula (se necessário)
+        'DESCRICAOCURTA': desc_curta,
+        'DESCRICAOLONGA': desc_longa,
+        'LINKIMAGEM': link_imagem, 
+        'DISPONIVEL': disponivel,
+        # A coluna "COLUNA" original não será incluída aqui, pois foi removida.
+    }
+    
+    # Adicionar a nova linha ao DataFrame
+    df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
+    
+    commit_msg = f"Adicionar produto: {nome} (ID: {novo_id})"
+    return write_csv_to_github(df, SHEET_NAME_CATALOGO, commit_msg)
+
 
 def excluir_produto(id_produto):
-    st.error("Funcionalidade de escrita desabilitada. Configure a API do GitHub para escrita."); return False
+    df = carregar_dados(SHEET_NAME_CATALOGO).copy()
+    if df.empty: return False
+
+    df = df[df['ID'] != int(id_produto)]
+    commit_msg = f"Excluir produto ID: {id_produto}"
+    return write_csv_to_github(df, SHEET_NAME_CATALOGO, commit_msg)
 
 def atualizar_produto(id_produto, nome, preco, desc_curta, desc_longa, link_imagem, disponivel):
-    st.error("Funcionalidade de escrita desabilitada. Configure a API do GitHub para escrita."); return False
+    df = carregar_dados(SHEET_NAME_CATALOGO).copy()
+    if df.empty: return False
+    
+    index_to_update = df[df['ID'] == int(id_produto)].index
+    if not index_to_update.empty:
+        idx = index_to_update[0]
+        df.loc[idx, 'NOME'] = nome
+        df.loc[idx, 'PRECO'] = str(preco).replace('.', ',')
+        df.loc[idx, 'DESCRICAOCURTA'] = curta_edit
+        df.loc[idx, 'DESCRICAOLONGA'] = longa_edit
+        df.loc[idx, 'LINKIMAGEM'] = link_imagem
+        df.loc[idx, 'DISPONIVEL'] = disponivel
+        
+        commit_msg = f"Atualizar produto ID: {id_produto}"
+        return write_csv_to_github(df, SHEET_NAME_CATALOGO, commit_msg)
+    return False
 
-# --- FUNÇÕES CRUD PARA PROMOÇÕES (DESABILITADAS PARA ESCRITA) ---
+# --- FUNÇÕES CRUD PARA PROMOÇÕES (ESCRITA HABILITADA) ---
 
 def criar_promocao(id_produto, nome_produto, preco_original, preco_promocional, data_inicio, data_fim):
-    st.error("Funcionalidade de escrita desabilitada. Configure a API do GitHub para escrita."); return False
+    df = carregar_dados(SHEET_NAME_PROMOCOES).copy()
+    
+    id_promocao = int(time.time()) # ID único baseado no tempo
+
+    # Criar nova linha
+    nova_linha = {
+        'ID_PROMOCAO': id_promocao,
+        'ID_PRODUTO': str(id_produto),
+        'NOME_PRODUTO': nome_produto,
+        'PRECO_ORIGINAL': str(preco_original),
+        'PRECO_PROMOCIONAL': str(preco_promocional),
+        'STATUS': "Ativa",
+        'DATA_INICIO': data_inicio,
+        'DATA_FIM': data_fim
+    }
+    
+    df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
+    
+    commit_msg = f"Criar promoção para {nome_produto}"
+    return write_csv_to_github(df, SHEET_NAME_PROMOCOES, commit_msg)
+
 
 def excluir_promocao(id_promocao):
-    st.error("Funcionalidade de escrita desabilitada. Configure a API do GitHub para escrita."); return False
+    df = carregar_dados(SHEET_NAME_PROMOCOES).copy()
+    if df.empty: return False
+    
+    df = df[df['ID_PROMOCAO'] != int(id_promocao)]
+    commit_msg = f"Excluir promoção ID: {id_promocao}"
+    return write_csv_to_github(df, SHEET_NAME_PROMOCOES, commit_msg)
+
 
 def atualizar_promocao(id_promocao, preco_promocional, data_inicio, data_fim, status):
-    st.error("Funcionalidade de escrita desabilitada. Configure a API do GitHub para escrita."); return False
+    df = carregar_dados(SHEET_NAME_PROMOCOES).copy()
+    if df.empty: return False
+    
+    index_to_update = df[df['ID_PROMOCAO'] == int(id_promocao)].index
+    if not index_to_update.empty:
+        idx = index_to_update[0]
+        df.loc[idx, 'PRECO_PROMOCIONAL'] = str(preco_promocional).replace('.', ',')
+        df.loc[idx, 'DATA_INICIO'] = data_inicio
+        df.loc[idx, 'DATA_FIM'] = data_fim
+        df.loc[idx, 'STATUS'] = status
+        
+        commit_msg = f"Atualizar promoção ID: {id_promocao}"
+        return write_csv_to_github(df, SHEET_NAME_PROMOCOES, commit_msg)
+    return False
 
 
 # --- LAYOUT DO APP ---
@@ -131,6 +284,7 @@ with tab_pedidos:
                     st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{pedido['ID_PEDIDO']}`")
                     if st.button("✅ Finalizar Pedido", key=f"finalizar_{pedido['ID_PEDIDO']}"):
                         if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status="Finalizado"): st.success(f"Pedido {pedido['ID_PEDIDO']} finalizado!"); st.rerun()
+                        else: st.error("Falha ao finalizar pedido.")
                     st.markdown("---"); exibir_itens_pedido(pedido['ITENS_PEDIDO'], df_catalogo_pedidos)
         st.header("✅ Pedidos Finalizados")
         if pedidos_finalizados.empty: st.info("Nenhum pedido finalizado encontrado.")
@@ -144,9 +298,11 @@ with tab_pedidos:
                     with col_reverter:
                         if st.button("↩️ Reverter para Pendente", key=f"reverter_{pedido['ID_PEDIDO']}", use_container_width=True):
                             if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status=""): st.success(f"Pedido {pedido['ID_PEDIDO']} revertido."); st.rerun()
+                            else: st.error("Falha ao reverter status do pedido.")
                     with col_excluir:
                         if st.button("🗑️ Excluir Pedido", type="primary", key=f"excluir_{pedido['ID_PEDIDO']}", use_container_width=True):
                             if excluir_pedido(pedido['ID_PEDIDO']): st.success(f"Pedido {pedido['ID_PEDIDO']} excluído!"); st.rerun()
+                            else: st.error("Falha ao excluir o pedido.")
                     st.markdown("---"); exibir_itens_pedido(pedido['ITENS_PEDIDO'], df_catalogo_pedidos)
 
 
@@ -171,7 +327,6 @@ with tab_produtos:
             with st.container(border=True):
                 col1, col2 = st.columns([1, 4])
                 
-                # CORREÇÃO: Garante que o link da imagem é uma string antes de usar no st.image
                 link_imagem_produto = str(produto.get("LINKIMAGEM")).strip() 
                 
                 with col1:
@@ -195,7 +350,6 @@ with tab_produtos:
                             curta_edit = st.text_input("Desc. Curta", value=produto.get('DESCRICAOCURTA', ''))
                             longa_edit = st.text_area("Desc. Longa", value=produto.get('DESCRICAOLONGA', ''))
                             
-                            # Tratamento para o ValueError do DISPONIVEL
                             disponivel_val = produto.get('DISPONIVEL', 'Sim')
                             if isinstance(disponivel_val, str):
                                 disponivel_val = disponivel_val.strip().title()
@@ -228,7 +382,6 @@ with tab_promocoes:
             st.warning("Cadastre produtos antes de criar uma promoção.")
         else:
             with st.form("form_nova_promocao", clear_on_submit=True):
-                # Conversão para float, tratando o separador de milhar/decimal
                 df_catalogo_promo['PRECO_FLOAT'] = pd.to_numeric(df_catalogo_promo['PRECO'].astype(str).str.replace(',', '.'), errors='coerce') 
                 opcoes_produtos = {f"{row['NOME']} (R$ {row['PRECO_FLOAT']:.2f})": row['ID'] for _, row in df_catalogo_promo.dropna(subset=['PRECO_FLOAT', 'ID']).iterrows()}
                 
@@ -247,6 +400,7 @@ with tab_promocoes:
                         data_fim_str = "" if sem_data_fim or data_fim is None else data_fim.strftime('%Y-%m-%d')
                         if criar_promocao(id_produto, produto_info['NOME'], produto_info['PRECO_FLOAT'], preco_promocional, data_inicio.strftime('%Y-%m-%d'), data_fim_str):
                             st.success("Promoção criada!"); st.rerun()
+                        else: st.error("Falha ao criar promoção.")
 
     st.markdown("---")
     st.subheader("Promoções Criadas")
@@ -275,7 +429,9 @@ with tab_promocoes:
                         if st.form_submit_button("Salvar"):
                             if atualizar_promocao(promo['ID_PROMOCAO'], preco_promo_edit, data_inicio_edit.strftime('%Y-%m-%d'), data_fim_edit.strftime('%Y-%m-%d'), status_edit):
                                 st.success("Promoção atualizada!"); st.rerun()
+                            else: st.error("Falha ao atualizar promoção.")
 
                 if st.button("🗑️ Excluir Promoção", key=f"del_promo_{promo.get('ID_PROMOCAO', index)}", type="primary"):
                     if excluir_promocao(promo['ID_PROMOCAO']):
                         st.success("Promoção excluída!"); st.rerun()
+                    else: st.error("Falha ao excluir promoção.")
