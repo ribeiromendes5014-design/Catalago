@@ -133,18 +133,42 @@ def carregar_catalogo():
         st.warning("Catálogo indisponível. Verifique o arquivo 'produtos_estoque.csv' no GitHub.")
         return pd.DataFrame()
     
+    # Padroniza todas as colunas para MAIÚSCULAS
     df_produtos.columns = [col.upper().replace(' ', '_') for col in df_produtos.columns]
 
-    # <<< MUDANÇA AQUI: Removendo a referência à coluna CATEGORIA se ela não existe mais. >>>
-    # O código abaixo verifica se o DF tem as colunas essenciais antes de prosseguir
-    colunas_essenciais = ['PRECO', 'ID', 'DISPONIVEL', 'NOME']
+    # --- INÍCIO DA CORREÇÃO DE COLUNAS ---
+    
+    # 1. Mapeamento dos Nomes do CSV para os Nomes Esperados no Código
+    # Seu CSV: ID, NOME, MARCA, CATEGORIA, QUANTIDADE, PRECOCUSTO, PRECOVISTA, PRECARTAO, VALIDADE, FOTOURL, CODIGOBARRAS
+    
+    # O código antigo esperava: ID, NOME, PRECO, LINKIMAGEM, DESCRICAOCURTA, DESCRICAOLONGA, DISPONIVEL
+    
+    # Colunas Essenciais (mínimo para evitar o erro de 'PRECO')
+    colunas_essenciais = ['PRECOVISTA', 'ID', 'NOME', 'FOTOURL']
     for col in colunas_essenciais:
         if col not in df_produtos.columns:
             st.error(f"Coluna essencial '{col}' não encontrada no 'produtos_estoque.csv'. Verifique o cabeçalho.")
             return pd.DataFrame()
+        
+    # 2. Renomeia as colunas do CSV para o padrão esperado pelo código
+    df_produtos.rename(columns={
+        'PRECOVISTA': 'PRECO',        # O preço que você quer mostrar
+        'FOTOURL': 'LINKIMAGEM',      # A URL da imagem
+        'MARCA': 'DESCRICAOCURTA',    # Usando Marca como descrição curta
+    }, inplace=True)
+    
+    # 3. Adiciona colunas que faltam com valor padrão para evitar erros
+    if 'DISPONIVEL' not in df_produtos.columns:
+        df_produtos['DISPONIVEL'] = 'SIM' # Assume que está disponível por padrão
+    if 'DESCRICAOLONGA' not in df_produtos.columns:
+        df_produtos['DESCRICAOLONGA'] = df_produtos.get('CATEGORIA', '') # Usa Categoria como descrição longa padrão
+    
+    # --- FIM DA CORREÇÃO DE COLUNAS ---
 
     df_produtos['PRECO'] = pd.to_numeric(df_produtos['PRECO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
     df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
+    
+    # ... (o restante da função carregar_catalogo continua)
     
     df_produtos = df_produtos[df_produtos['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
     df_produtos.set_index('ID', inplace=True)
@@ -426,6 +450,7 @@ else:
         product_id = row['ID'] 
         with cols[i % 4]: 
             render_product_card(product_id, row, key_prefix='prod')
+
 
 
 
