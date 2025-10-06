@@ -201,13 +201,16 @@ def carregar_catalogo():
     return df_final.reset_index()
 
 
-# --- Funções do Aplicativo (SALVAR PEDIDO NO GITHUB) (MANTIDO) ---
+# --- Funções do Aplicativo (SALVAR PEDIDO NO GITHUB) ---
 
 def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
     """Salva o novo pedido no 'pedidos.csv' do GitHub usando a Content API."""
     file_path = SHEET_NAME_PEDIDOS_CSV
     api_url = f"{GITHUB_BASE_API}{file_path}?ref={BRANCH}"
     
+    # NOVO CABEÇALHO DE 9 COLUNAS (ATUALIZADO)
+    novo_cabecalho = 'ID_PEDIDO,DATA_HORA,NOME_CLIENTE,CONTATO_CLIENTE,ITENS_PEDIDO,VALOR_TOTAL,LINKIMAGEM,STATUS,itens_json'
+
     # 1. Obter o conteúdo atual do arquivo (e o SHA)
     headers_get = get_github_headers(content_type='json')
     
@@ -223,31 +226,31 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
 
     except requests.exceptions.HTTPError as e:
         if response_get.status_code == 404:
-            # ATUALIZAR ESTA MENSAGEM COM O NOVO CABEÇALHO ESPERADO
-            novo_cabecalho = 'ID_PEDIDO,DATA_HORA,NOME_CLIENTE,CONTATO_CLIENTE,ITENS_PEDIDO,VALOR_TOTAL,LINKIMAGEM,STATUS'
+            # ATUALIZAÇÃO DA MENSAGEM DE ERRO 404 COM O CABEÇALHO CORRETO
             st.error(f"Erro 404: O arquivo '{file_path}' não existe. Crie um CSV vazio com os cabeçalhos: '{novo_cabecalho}'")
             return False
         st.error(f"Erro ao obter o SHA do arquivo no GitHub (Leitura para Escrita): {e}")
         return False
     except Exception as e:
-        st.error(f"Erro na decodificação do CSV: {e}")
+        # MENSAGEM MAIS CLARA PARA O ERRO DE DECODIFICAÇÃO (Expecting value)
+        st.error(f"Erro na decodificação do CSV: O arquivo 'pedidos.csv' pode estar vazio (0 bytes) ou malformado. Adicione o cabeçalho '{novo_cabecalho}' no GitHub. Detalhe: {e}")
         return False
 
-    # 2. Adicionar o novo pedido ao conteúdo (garantindo que o JSON esteja entre aspas)
+    # 2. Adicionar o novo pedido ao conteúdo
     
-    # NOVAS VARIÁVEIS PARA AS COLUNAS SOLICITADAS
+    # VARIÁVEIS PARA AS 9 COLUNAS
     timestamp = int(datetime.now().timestamp())
     data_hora = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     id_pedido = timestamp # Usando timestamp como ID provisório
     status = "NOVO" 
-    link_imagem = "" # Sem valor, a ser preenchido se necessário
-    itens_pedido_vazio = "" # Usando itens_json no lugar, esta fica vazia
-
-    # NOVO REGISTRO: Adicionado ITENS_PEDIDO, VALOR_TOTAL, LINKIMAGEM, STATUS (MUDAR A ORDEM DE ACORDO COM SEU NOVO CABEÇALHO!)
-    # Atenção: Mantenha a ordem das colunas igual à do seu novo cabeçalho no CSV.
-    # O CSV que está sendo criado agora terá os dados na ordem que o código está gerando abaixo.
+    link_imagem = "" 
+    itens_pedido_vazio = "" # Usado para manter a coluna ITENS_PEDIDO vazia, já que o JSON está em 'itens_json'
     
-    novo_registro = f"\n\"{id_pedido}\",\"{data_hora}\",\"{nome_cliente}\",\"{contato_cliente}\",\"{itens_pedido_vazio}\",\"{valor_total:.2f}\",\"{link_imagem}\",\"{status}\",\"{itens_json.replace('"', '""')}\"" # Inclui o 'itens_json' original no final
+    # TRATAMENTO DO JSON: Escapa as aspas internas para não quebrar o formato CSV
+    escaped_itens_json = itens_json.replace('"', '""')
+    
+    # CRIAÇÃO DO NOVO REGISTRO CSV (9 COLUNAS ALINHADAS COM O NOVO CABEÇALHO)
+    novo_registro = f"\n\"{id_pedido}\",\"{data_hora}\",\"{nome_cliente}\",\"{contato_cliente}\",\"{itens_pedido_vazio}\",\"{valor_total:.2f}\",\"{link_imagem}\",\"{status}\",\"{escaped_itens_json}\""
     
     new_content = current_content.strip() + novo_registro + "\n"
     
@@ -486,4 +489,3 @@ else:
         with cols[i % 4]: 
             # Chama a função com a chave única
             render_product_card(product_id, row, key_prefix=unique_key)
-
