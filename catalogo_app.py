@@ -54,7 +54,7 @@ def get_data_from_github(file_name):
         # Autenticação com token do secrets
         headers = {
             "Authorization": f"token {GITHUB_TOKEN}",
-            "Accept": "application/vnd.github.v3+json"
+            "Accept": "application/vnd.github.com"
         }
 
         response = requests.get(api_url, headers=headers)
@@ -111,7 +111,6 @@ def carregar_catalogo():
     
     df_produtos.columns = [col.upper().replace(' ', '_') for col in df_produtos.columns]
 
-    # <<< MUDANÇA AQUI: Removendo a referência à coluna CATEGORIA se ela não existe mais. >>>
     # O código abaixo verifica se o DF tem as colunas essenciais antes de prosseguir
     colunas_essenciais = ['PRECO', 'ID', 'DISPONIVEL', 'NOME']
     for col in colunas_essenciais:
@@ -218,58 +217,21 @@ def render_product_image(link_imagem):
         st.markdown(placeholder_html, unsafe_allow_html=True)
 
 
-# --- Layout do Aplicativo (MANTIDO) ---
+# --- Layout do Aplicativo ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS (SOLUÇÃO FINAL PARA FIXAÇÃO DE CABEÇALHO) ---
+# --------------------------------------------------------------------------
+# CORREÇÃO APLICADA AQUI: Oculta a barra de ferramentas (incluindo o menu de 3 pontos) 
+# e a barra de log na parte inferior para todos os visualizadores.
+st.set_option('client.toolbarMode', 'viewer')
+# --------------------------------------------------------------------------
+
+# --- CSS (MANTIDO) ---
 st.markdown(f"""
 <style>
-/* ---------------------------------------------------- */
-/* SOLUÇÃO PARA CORRIGIR 'position: fixed' NO STREAMLIT */
-/* ---------------------------------------------------- */
-html, body, .main, .stApp {{
-    /* Força o contêiner Streamlit a não restringir a rolagem */
-    overflow-x: hidden !important;
-}}
-.stApp {{ 
-    background-image: url({BACKGROUND_IMAGE_URL}) !important; 
-    background-size: cover; 
-    background-attachment: fixed; 
-}}
-
-/* Esconde a barra de cabeçalho padrão do Streamlit */
-[data-testid="stHeader"] {{ visibility: hidden !important; }}
-/* Remove o padding padrão do Streamlit no contêiner principal */
-div[data-testid="stAppViewBlockContainer"] {{
-    padding-top: 0 !important;
-}}
-
-
-/* CORREÇÃO 1: FATOR CHAVE para fixar a barra e garantir que ela ocupe toda a largura */
-.pink-bar-container {{ 
-    background-color: #E91E63; 
-    padding: 20px 0; 
-    width: 100vw; 
-    position: fixed !important;  /* FORÇANDO FIXAÇÃO */
-    top: 0 !important;           /* COLADO NO TOPO */
-    left: 0 !important;          /* COLADO À ESQUERDA */
-    right: 0 !important;         /* COLADO À DIREITA */
-    z-index: 2000 !important;    /* PRIORIDADE MÁXIMA */
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3); /* Sombra mais forte para destaque */
-}}
-
-/* CORREÇÃO 2: Adiciona padding-top ao contêiner principal para o conteúdo não ficar embaixo da barra fixa */
-/* O Streamlit envolve o corpo do app em 'div.block-container', este é o alvo para o espaçamento. */
-div.block-container {{ 
-    background-color: rgba(255, 255, 255, 0.95); 
-    border-radius: 10px; 
-    padding: 2rem; 
-    padding-top: 160px !important; /* VALOR AUMENTADO E FORÇADO */
-    margin-top: 0; /* Remove a margem superior desnecessária */
-}}
-/* ---------------------------------------------------- */
-/* OUTROS ESTILOS (MANTIDOS) */
-/* ---------------------------------------------------- */
+.stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
+div.block-container {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 10px; padding: 2rem; margin-top: 1rem; }}
+.pink-bar-container {{ background-color: #E91E63; padding: 20px 0; width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
 .pink-bar-content {{ width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; }}
 div[data-testid="stPopover"] > div:first-child > button {{ display: none; }}
 .cart-badge-button {{ background-color: #C2185B; color: white; border-radius: 12px; padding: 8px 15px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; transition: background-color 0.3s; display: inline-flex; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-width: 150px; justify-content: center; }}
@@ -287,10 +249,10 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 st_autorefresh(interval=10000, key="auto_refresh_catalogo")
 
 
-# --- CABEÇALHO (REMOVIDO TÍTULO PARA EVITAR SOBREPOSIÇÃO) ---
-col_logo, col_titulo = st.columns([0.1, 5]); col_logo.markdown("<h3>💖</h3>", unsafe_allow_html=True); # Removido col_titulo.title(...)
+# --- CABEÇALHO (MANTIDO) ---
+col_logo, col_titulo = st.columns([0.1, 5]); col_logo.markdown("<h3>💖</h3>", unsafe_allow_html=True); col_titulo.title("Catálogo de Pedidos Doce&Bella")
 
-# --- BARRA ROSA (PESQUISA E CARRINHO) (AGORA DEVE ESTAR FIXA) ---
+# --- BARRA ROSA (PESQUISA E CARRINHO) (MANTIDO) ---
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
