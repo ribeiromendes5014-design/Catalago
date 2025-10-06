@@ -6,7 +6,7 @@ from datetime import datetime
 import time
 import requests 
 import base64
-import numpy as np # Adicionado para tratar NaN
+import numpy as np 
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
@@ -16,8 +16,8 @@ SHEET_NAME_PROMOCOES = "promocoes"
 # --- Configurações do GitHub (Lendo do st.secrets) ---
 try:
     GITHUB_TOKEN = st.secrets["github"]["token"]
-    REPO_NAME_FULL = st.secrets["github"]["repo_name"] # ex: "ribeiromendes5014-design/Catalago"
-    BRANCH = st.secrets["github"]["branch"] # ex: "main"
+    REPO_NAME_FULL = st.secrets["github"]["repo_name"] 
+    BRANCH = st.secrets["github"]["branch"] 
     
     # URLs de API
     GITHUB_RAW_BASE_URL = f"https://raw.githubusercontent.com/{REPO_NAME_FULL}/{BRANCH}"
@@ -28,8 +28,7 @@ try:
         "Accept": "application/vnd.github.v3+json",
     }
 except KeyError:
-    st.error("Erro de configuração: As chaves 'token', 'repo_name' e 'branch' do GitHub precisam estar configuradas no secrets.toml.")
-    st.stop()
+    st.error("Erro de configuração: As chaves 'token', 'repo_name' e 'branch' do GitHub precisam estar configuradas no secrets.toml."); st.stop()
 
 
 # --- Funções Base do GitHub para Leitura e Escrita ---
@@ -41,16 +40,21 @@ def carregar_dados(sheet_name):
     url = f"{GITHUB_RAW_BASE_URL}/{csv_filename}"
     
     try:
-        # Usando sep=',' para delimitador de vírgula (ajuste feito em conversas anteriores)
+        # Lendo com vírgula como separador de coluna
         df = pd.read_csv(url, sep=',') 
         
         # Limpeza e Normalização dos Nomes das Colunas
         df.columns = df.columns.str.strip().str.upper() 
 
-        # Remove a coluna 'COLUNA' (se existir) que parece ser um índice extra.
+        # Remove a coluna 'COLUNA' (se existir)
         if 'COLUNA' in df.columns:
             df.drop(columns=['COLUNA'], inplace=True)
-
+            
+        # Corrigindo a coluna de PRECO: Converção de volta para o formato de escrita (string com vírgula)
+        if 'PRECO' in df.columns:
+            # Substitui ponto por vírgula para manter o padrão brasileiro (se for float)
+            df['PRECO'] = df['PRECO'].astype(str).str.replace('.', ',', regex=False)
+            
         # Adicionar colunas ausentes e limpar ID
         if sheet_name == SHEET_NAME_PEDIDOS and 'STATUS' not in df.columns: df['STATUS'] = ''
         if sheet_name == SHEET_NAME_CATALOGO and 'ID' in df.columns: 
@@ -67,28 +71,28 @@ def carregar_dados(sheet_name):
     except Exception as e:
         st.error(f"Erro ao carregar dados de '{csv_filename}': {e}"); return pd.DataFrame()
 
-# NOVO: Função para obter o SHA e fazer o PUT (commit)
+# Função para obter o SHA e fazer o PUT (commit)
 def write_csv_to_github(df, sheet_name, commit_message):
     """Obtém o SHA do arquivo e faz o commit do novo DataFrame no GitHub."""
     csv_filename = f"{sheet_name}.csv"
     api_url = f"{GITHUB_API_BASE_URL}/{csv_filename}"
-
+    
     # 1. Obter o SHA atual do arquivo
     response = requests.get(api_url, headers=HEADERS)
-    if response.status_code == 404:
-        st.error(f"Arquivo {csv_filename} não encontrado no GitHub. Verifique o nome do arquivo e branch.")
-        return False
-    elif response.status_code != 200:
+    if response.status_code != 200:
         st.error(f"Erro ao obter SHA: {response.status_code} - {response.json().get('message', 'Erro desconhecido')}")
         return False
     
-    sha = response.json()['sha']
+    try:
+        sha = response.json()['sha']
+    except KeyError:
+        st.error("Erro interno: SHA não encontrado na resposta do GitHub.")
+        return False
 
-    # 2. Preparar o novo conteúdo CSV (limpando NaN e convertendo para string CSV)
-    # df.fillna('') substitui NaN por string vazia antes de converter para CSV
-    # index=False evita escrever o índice do Pandas como primeira coluna.
-    # sep=',' garante que a escrita usa a vírgula, correspondendo à leitura.
-    csv_content = df.fillna('').to_csv(index=False, sep=',')
+    # 2. Preparar o novo conteúdo CSV
+    # Garantindo que a escrita use o formato brasileiro (vírgula) e não o índice do Pandas.
+    # O .replace('\n\n', '\n') é um pequeno truque para evitar linhas vazias no final
+    csv_content = df.fillna('').to_csv(index=False, sep=',').replace('\n\n', '\n')
     
     # 3. Codificar o conteúdo em Base64
     content_base64 = base64.b64encode(csv_content.encode('utf-8')).decode('utf-8')
@@ -103,18 +107,23 @@ def write_csv_to_github(df, sheet_name, commit_message):
     
     put_response = requests.put(api_url, headers=HEADERS, json=payload)
     
-    if put_response.status_code == 200:
+    # Sucesso é 200 (OK) ou 201 (Created)
+    if put_response.status_code in [200, 201]:
         st.cache_data.clear() # Limpa o cache para forçar a leitura do novo arquivo
         return True
     else:
-        st.error(f"Falha no Commit: {put_response.status_code} - {put_response.json().get('message', 'Erro desconhecido')}")
+        # Tenta extrair a mensagem de erro do GitHub para melhor depuração
+        error_message = put_response.json().get('message', 'Erro desconhecido')
+        st.error(f"Falha no Commit: {put_response.status_code} - {error_message}")
         return False
 
 # --- Funções de Pedidos (ESCRITA HABILITADA) ---
 
 def atualizar_status_pedido(id_pedido, novo_status):
     df = carregar_dados(SHEET_NAME_PEDIDOS).copy()
-    if df.empty: return False
+    if df.empty: 
+        st.error("Não há dados de pedidos para atualizar.")
+        return False
 
     index_to_update = df[df['ID_PEDIDO'] == id_pedido].index
     if not index_to_update.empty:
@@ -156,24 +165,27 @@ def exibir_itens_pedido(pedido_json, df_catalogo):
 def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponivel):
     df = carregar_dados(SHEET_NAME_CATALOGO).copy()
     
-    # Gerar novo ID
     novo_id = df['ID'].max() + 1 if not df.empty and df['ID'].any() else 1
     
-    # Criar nova linha (a ordem das colunas é importante aqui)
     nova_linha = {
+        # ID é numérico
         'ID': novo_id, 
         'NOME': nome, 
-        'PRECO': str(preco).replace('.', ','), # Mantém o formato com vírgula (se necessário)
+        # PRECO deve ser string com vírgula para manter o formato do CSV
+        'PRECO': str(preco).replace('.', ','), 
         'DESCRICAOCURTA': desc_curta,
         'DESCRICAOLONGA': desc_longa,
         'LINKIMAGEM': link_imagem, 
         'DISPONIVEL': disponivel,
-        # A coluna "COLUNA" original não será incluída aqui, pois foi removida.
     }
     
-    # Adicionar a nova linha ao DataFrame
-    df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
-    
+    # Para garantir a ordem das colunas, usamos .loc se o DataFrame não estiver vazio
+    if not df.empty:
+        df.loc[len(df)] = nova_linha
+    else:
+        # Se estiver vazio, cria o DF com a nova linha
+        df = pd.DataFrame([nova_linha])
+        
     commit_msg = f"Adicionar produto: {nome} (ID: {novo_id})"
     return write_csv_to_github(df, SHEET_NAME_CATALOGO, commit_msg)
 
@@ -194,7 +206,8 @@ def atualizar_produto(id_produto, nome, preco, desc_curta, desc_longa, link_imag
     if not index_to_update.empty:
         idx = index_to_update[0]
         df.loc[idx, 'NOME'] = nome
-        df.loc[idx, 'PRECO'] = str(preco).replace('.', ',')
+        # PRECO deve ser string com vírgula para manter o formato do CSV
+        df.loc[idx, 'PRECO'] = str(preco).replace('.', ',') 
         df.loc[idx, 'DESCRICAOCURTA'] = curta_edit
         df.loc[idx, 'DESCRICAOLONGA'] = longa_edit
         df.loc[idx, 'LINKIMAGEM'] = link_imagem
@@ -211,19 +224,23 @@ def criar_promocao(id_produto, nome_produto, preco_original, preco_promocional, 
     
     id_promocao = int(time.time()) # ID único baseado no tempo
 
-    # Criar nova linha
     nova_linha = {
         'ID_PROMOCAO': id_promocao,
         'ID_PRODUTO': str(id_produto),
         'NOME_PRODUTO': nome_produto,
         'PRECO_ORIGINAL': str(preco_original),
-        'PRECO_PROMOCIONAL': str(preco_promocional),
+        # PRECO_PROMOCIONAL deve ser string com vírgula
+        'PRECO_PROMOCIONAL': str(preco_promocional).replace('.', ','), 
         'STATUS': "Ativa",
         'DATA_INICIO': data_inicio,
         'DATA_FIM': data_fim
     }
     
-    df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
+    # Adicionar nova linha
+    if not df.empty:
+        df.loc[len(df)] = nova_linha
+    else:
+        df = pd.DataFrame([nova_linha])
     
     commit_msg = f"Criar promoção para {nome_produto}"
     return write_csv_to_github(df, SHEET_NAME_PROMOCOES, commit_msg)
@@ -245,6 +262,7 @@ def atualizar_promocao(id_promocao, preco_promocional, data_inicio, data_fim, st
     index_to_update = df[df['ID_PROMOCAO'] == int(id_promocao)].index
     if not index_to_update.empty:
         idx = index_to_update[0]
+        # PRECO_PROMOCIONAL deve ser string com vírgula
         df.loc[idx, 'PRECO_PROMOCIONAL'] = str(preco_promocional).replace('.', ',')
         df.loc[idx, 'DATA_INICIO'] = data_inicio
         df.loc[idx, 'DATA_FIM'] = data_fim
