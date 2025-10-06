@@ -37,7 +37,7 @@ def get_github_headers(content_type='json'):
     }
     # Para interações com a API de Conteúdo (leitura de SHA, escrita)
     if content_type == 'json':
-        headers["Accept"] = "application/vnd.github.v3+json"
+        headers["Accept"] = "application/vnd.github.com.v3.raw"
     
     return headers
 
@@ -225,10 +225,11 @@ st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sid
 st.markdown(f"""
 <style>
 /* REGRAS DE OCULTAÇÃO DE ELEMENTOS PADRÃO DO STREAMLIT */
-/* 1. Oculta menu, footer, e sidebar */
+/* 1. Oculta menu, footer, sidebar, e o botão 'Manage app' */
 #MainMenu {{visibility: hidden;}}
 footer {{visibility: hidden;}}
 [data-testid="stSidebar"] {{visibility: hidden; width: 0 !important;}}
+[data-testid="stSidebarHeader"] {{ display: none !important; }} /* OCULTA O BOTÃO 'MANAGE APP' */
 
 /* 2. Oculta a toolbar (menu de 3 pontos e deploy do topo) */
 [data-testid="stToolbar"] {{display: none !important; height: 0 !important;}}
