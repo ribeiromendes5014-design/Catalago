@@ -221,20 +221,29 @@ def render_product_image(link_imagem):
 # --- Layout do Aplicativo (MANTIDO) ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS (COM TODAS AS REGRAS DE OCULTAÇÃO) ---
+# --- CSS (COM TODAS AS REGRAS DE OCULTAÇÃO AGRESSIVA) ---
 st.markdown(f"""
 <style>
 /* REGRAS DE OCULTAÇÃO DE ELEMENTOS PADRÃO DO STREAMLIT */
-/* 1. Oculta menu, footer, sidebar, e o botão 'Manage app' */
+/* 1. Oculta menu, footer, sidebar */
 #MainMenu {{visibility: hidden;}}
 footer {{visibility: hidden;}}
 [data-testid="stSidebar"] {{visibility: hidden; width: 0 !important;}}
-[data-testid="stSidebarHeader"] {{ display: none !important; }} /* OCULTA O BOTÃO 'MANAGE APP' */
 
-/* 2. Oculta a toolbar (menu de 3 pontos e deploy do topo) */
+/* 2. OCULTA O BOTÃO 'MANAGE APP' AGRESSIVAMENTE */
+[data-testid="stSidebarHeader"] {{ 
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important; /* Torna o botão não clicável */
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
+}}
+
+/* 3. Oculta a toolbar (menu de 3 pontos e deploy do topo) */
 [data-testid="stToolbar"] {{display: none !important; height: 0 !important;}}
 
-/* 3. Oculta botões e links externos do Streamlit (compartilhar, deploy, etc.) */
+/* 4. Oculta botões e links externos do Streamlit (compartilhar, deploy, etc.) */
 a[href*="streamlit.io"],
 a[href*="share.streamlit.io"],
 a[href*="discuss.streamlit.io"],
@@ -252,7 +261,7 @@ a[data-testid="stAppDeployButton"],
     width: 0 !important;
 }}
 
-/* 4. Oculta o botão padrão do popover (usado para o carrinho) */
+/* 5. Oculta o botão padrão do popover (usado para o carrinho) */
 div[data-testid="stPopover"] > div:first-child > button {{ display: none; }}
 
 
