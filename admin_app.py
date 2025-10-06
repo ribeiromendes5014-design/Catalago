@@ -33,29 +33,25 @@ except KeyError:
 
 # --- Funções Base do GitHub para Leitura e Escrita ---
 
-@st.cache_data(ttl=60)
+# CORREÇÃO: Cache com TTL de 5 segundos para refletir mudanças externas rapidamente
+@st.cache_data(ttl=5) 
 def carregar_dados(sheet_name):
     """Carrega dados de um CSV do GitHub."""
     csv_filename = f"{sheet_name}.csv"
     url = f"{GITHUB_RAW_BASE_URL}/{csv_filename}"
     
     try:
-        # Lendo com vírgula como separador de coluna
         df = pd.read_csv(url, sep=',') 
         
-        # Limpeza e Normalização dos Nomes das Colunas
         df.columns = df.columns.str.strip().str.upper() 
 
-        # Remove a coluna 'COLUNA' (se existir)
         if 'COLUNA' in df.columns:
             df.drop(columns=['COLUNA'], inplace=True)
             
-        # Corrigindo a coluna de PRECO: Converção de volta para o formato de escrita (string com vírgula)
         if 'PRECO' in df.columns:
             # Substitui ponto por vírgula para manter o padrão brasileiro (se for float)
             df['PRECO'] = df['PRECO'].astype(str).str.replace('.', ',', regex=False)
             
-        # Adicionar colunas ausentes e limpar ID
         if sheet_name == SHEET_NAME_PEDIDOS and 'STATUS' not in df.columns: df['STATUS'] = ''
         if sheet_name == SHEET_NAME_CATALOGO and 'ID' in df.columns: 
             df['ID'] = pd.to_numeric(df['ID'], errors='coerce') 
@@ -90,8 +86,6 @@ def write_csv_to_github(df, sheet_name, commit_message):
         return False
 
     # 2. Preparar o novo conteúdo CSV
-    # Garantindo que a escrita use o formato brasileiro (vírgula) e não o índice do Pandas.
-    # O .replace('\n\n', '\n') é um pequeno truque para evitar linhas vazias no final
     csv_content = df.fillna('').to_csv(index=False, sep=',').replace('\n\n', '\n')
     
     # 3. Codificar o conteúdo em Base64
@@ -107,12 +101,11 @@ def write_csv_to_github(df, sheet_name, commit_message):
     
     put_response = requests.put(api_url, headers=HEADERS, json=payload)
     
-    # Sucesso é 200 (OK) ou 201 (Created)
     if put_response.status_code in [200, 201]:
-        st.cache_data.clear() # Limpa o cache para forçar a leitura do novo arquivo
+        # CORREÇÃO: Limpa o cache e faz o rerun
+        st.cache_data.clear() 
         return True
     else:
-        # Tenta extrair a mensagem de erro do GitHub para melhor depuração
         error_message = put_response.json().get('message', 'Erro desconhecido')
         st.error(f"Falha no Commit: {put_response.status_code} - {error_message}")
         return False
@@ -168,10 +161,8 @@ def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponiv
     novo_id = df['ID'].max() + 1 if not df.empty and df['ID'].any() else 1
     
     nova_linha = {
-        # ID é numérico
         'ID': novo_id, 
         'NOME': nome, 
-        # PRECO deve ser string com vírgula para manter o formato do CSV
         'PRECO': str(preco).replace('.', ','), 
         'DESCRICAOCURTA': desc_curta,
         'DESCRICAOLONGA': desc_longa,
@@ -179,11 +170,9 @@ def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponiv
         'DISPONIVEL': disponivel,
     }
     
-    # Para garantir a ordem das colunas, usamos .loc se o DataFrame não estiver vazio
     if not df.empty:
         df.loc[len(df)] = nova_linha
     else:
-        # Se estiver vazio, cria o DF com a nova linha
         df = pd.DataFrame([nova_linha])
         
     commit_msg = f"Adicionar produto: {nome} (ID: {novo_id})"
@@ -206,7 +195,6 @@ def atualizar_produto(id_produto, nome, preco, desc_curta, desc_longa, link_imag
     if not index_to_update.empty:
         idx = index_to_update[0]
         df.loc[idx, 'NOME'] = nome
-        # PRECO deve ser string com vírgula para manter o formato do CSV
         df.loc[idx, 'PRECO'] = str(preco).replace('.', ',') 
         df.loc[idx, 'DESCRICAOCURTA'] = curta_edit
         df.loc[idx, 'DESCRICAOLONGA'] = longa_edit
@@ -222,21 +210,19 @@ def atualizar_produto(id_produto, nome, preco, desc_curta, desc_longa, link_imag
 def criar_promocao(id_produto, nome_produto, preco_original, preco_promocional, data_inicio, data_fim):
     df = carregar_dados(SHEET_NAME_PROMOCOES).copy()
     
-    id_promocao = int(time.time()) # ID único baseado no tempo
+    id_promocao = int(time.time()) 
 
     nova_linha = {
         'ID_PROMOCAO': id_promocao,
         'ID_PRODUTO': str(id_produto),
         'NOME_PRODUTO': nome_produto,
         'PRECO_ORIGINAL': str(preco_original),
-        # PRECO_PROMOCIONAL deve ser string com vírgula
         'PRECO_PROMOCIONAL': str(preco_promocional).replace('.', ','), 
         'STATUS': "Ativa",
         'DATA_INICIO': data_inicio,
         'DATA_FIM': data_fim
     }
     
-    # Adicionar nova linha
     if not df.empty:
         df.loc[len(df)] = nova_linha
     else:
@@ -262,7 +248,6 @@ def atualizar_promocao(id_promocao, preco_promocional, data_inicio, data_fim, st
     index_to_update = df[df['ID_PROMOCAO'] == int(id_promocao)].index
     if not index_to_update.empty:
         idx = index_to_update[0]
-        # PRECO_PROMOCIONAL deve ser string com vírgula
         df.loc[idx, 'PRECO_PROMOCIONAL'] = str(preco_promocional).replace('.', ',')
         df.loc[idx, 'DATA_INICIO'] = data_inicio
         df.loc[idx, 'DATA_FIM'] = data_fim
