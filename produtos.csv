@@ -1,1 +1,3 @@
-Coluna, ID, NOME, PRECO, DESCRICAOCURTA, DESCRICAOLONGA, LINKIMAGEM, DISPONIVEL
+Coluna,ID,NOME,PRECO,DESCRICAOCURTA,DESCRICAOLONGA,LINKIMAGEM,DISPONIVEL
+1,101,Bolo de Chocolate,15.00,"Bolo simples de chocolate.", "Bolo caseiro de chocolate com cobertura de brigadeiro.", https://exemplo.com/bolo_choc.jpg, sim
+2,102,Torta de Morango,25.50,"Torta fresca com morangos.", "Massa crocante com creme de confeiteiro e morangos frescos.", https://exemplo.com/torta_mor.jpg, sim
