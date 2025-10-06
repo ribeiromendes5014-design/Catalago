@@ -14,7 +14,7 @@ SHEET_NAME_PROMOCOES = "promocoes"
 # --- Configurações do GitHub ---
 GITHUB_RAW_BASE_URL = "https://raw.githubusercontent.com/ribeiromendes5014-design/Catalago/main"
 
-# --- Conexão e Carregamento de Dados (CORRIGIDO E NORMALIZADO) ---
+# --- Conexão e Carregamento de Dados (FINALMENTE CORRIGIDO PARA VÍRGULA E COLUNA EXTRA) ---
 
 @st.cache_data(ttl=60)
 def carregar_dados(sheet_name):
@@ -23,11 +23,15 @@ def carregar_dados(sheet_name):
     url = f"{GITHUB_RAW_BASE_URL}/{csv_filename}"
     
     try:
-        # Usando sep=';' para delimitador de ponto e vírgula
-        df = pd.read_csv(url, sep=';') 
+        # CORREÇÃO: Usando sep=',' conforme o cabeçalho fornecido.
+        df = pd.read_csv(url, sep=',') 
         
-        # NOVO: Limpeza e Normalização dos Nomes das Colunas para UPPERCASE e sem espaços
+        # Limpeza e Normalização dos Nomes das Colunas
         df.columns = df.columns.str.strip().str.upper() 
+
+        # NOVO: Remove a coluna 'COLUNA' (se existir) que parece ser um índice extra.
+        if 'COLUNA' in df.columns:
+            df.drop(columns=['COLUNA'], inplace=True)
 
         # Adicionar colunas ausentes para compatibilidade, como antes
         if sheet_name == SHEET_NAME_PEDIDOS and 'STATUS' not in df.columns: df['STATUS'] = ''
