@@ -574,15 +574,19 @@ with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     with st.expander("➕ Criar Nova Promoção", expanded=False):
         df_catalogo_promo = carregar_dados(SHEET_NAME_CATALOGO)
+        
+        # --- INÍCIO DA CORREÇÃO 2 ---
         if df_catalogo_promo.empty:
             st.warning("Cadastre produtos antes de criar uma promoção.")
+        # Adiciona uma verificação para garantir que a coluna 'PRECO' existe
+        elif 'PRECO' not in df_catalogo_promo.columns:
+            st.error("ERRO: O arquivo 'produtos.csv' não contém uma coluna chamada 'PRECO'. Verifique seu arquivo no GitHub.")
+        # --- FIM DA CORREÇÃO 2 ---
         else:
-            # --- CORREÇÃO APLICADA AQUI (KeyError: 'PRECO') ---
-            df_catalogo_promo.columns = df_catalogo_promo.columns.str.upper()
-            # ----------------------------------------------------
-            
             with st.form("form_nova_promocao", clear_on_submit=True):
+                # Esta linha agora é segura, pois já verificamos a existência da coluna
                 df_catalogo_promo['PRECO_FLOAT'] = pd.to_numeric(df_catalogo_promo['PRECO'].astype(str).str.replace(',', '.'), errors='coerce') 
+                
                 opcoes_produtos = {f"{row['NOME']} (R$ {row['PRECO_FLOAT']:.2f})": row['ID'] for _, row in df_catalogo_promo.dropna(subset=['PRECO_FLOAT', 'ID']).iterrows()}
                 
                 if not opcoes_produtos:
@@ -668,4 +672,5 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
