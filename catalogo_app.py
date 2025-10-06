@@ -207,34 +207,93 @@ def carregar_catalogo():
 def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
     """Salva o novo pedido no 'pedidos.csv' do GitHub usando a Content API."""
     file_path = SHEET_NAME_PEDIDOS_CSV
-    api_url = f"{GITHUB_BASE_API}{file_path}?ref={BRANCH}"
+    api_url = f"{GITHUB_BASE_API}{file_path}" # Removido '?ref=BRANCH' daqui, pois será enviado no PUT
     
-    # NOVO CABEÇALHO DE 9 COLUNAS (ATUALIZADO)
     novo_cabecalho = 'ID_PEDIDO,DATA_HORA,NOME_CLIENTE,CONTATO_CLIENTE,ITENS_PEDIDO,VALOR_TOTAL,LINKIMAGEM,STATUS,itens_json'
 
+    # --- INÍCIO DA CORREÇÃO ---
     # 1. Obter o conteúdo atual do arquivo (e o SHA)
-    headers_get = get_github_headers(content_type='json')
+    # Headers para pedir a resposta JSON, e não o conteúdo raw.
+    headers_get = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json" 
+    }
     
     try:
-        # A requisição GET AQUI DEVE USAR AUTENTICAÇÃO, pois a Content API exige.
-        response_get = requests.get(api_url, headers=headers_get)
+        # A requisição GET agora usa a branch como parâmetro
+        response_get = requests.get(f"{api_url}?ref={BRANCH}", headers=headers_get)
         response_get.raise_for_status()
         
         file_data = response_get.json()
         current_sha = file_data['sha']
-        content_base64 = file_data['content']
-        current_content = base64.b64decode(content_base64).decode('utf-8')
+        content_base64 = file_data.get('content', '') # Usa .get para evitar erro se o arquivo estiver vazio
+        
+        # Se o conteúdo estiver vazio (arquivo recém-criado), inicializa com o cabeçalho
+        if not content_base64:
+             current_content = novo_cabecalho
+        else:
+             current_content = base64.b64decode(content_base64).decode('utf-8')
 
     except requests.exceptions.HTTPError as e:
-        if response_get.status_code == 404:
-            # ATUALIZAÇÃO DA MENSAGEM DE ERRO 404 COM O CABEÇALHO CORRETO
-            st.error(f"Erro 404: O arquivo '{file_path}' não existe. Crie um CSV vazio com os cabeçalhos: '{novo_cabecalho}'")
+        if e.response.status_code == 404:
+            st.error(f"Erro 404: O arquivo '{file_path}' não existe. Crie um CSV vazio no GitHub com o nome '{file_path}' (pode deixar em branco). O código adicionará o cabeçalho automaticamente.")
+            # Se o arquivo não existe, vamos criá-lo do zero
+            current_sha = None # Indica que é um novo arquivo
+            current_content = novo_cabecalho
+        else:
+            st.error(f"Erro HTTP ao obter o SHA do arquivo no GitHub: {e}")
             return False
-        st.error(f"Erro ao obter o SHA do arquivo no GitHub (Leitura para Escrita): {e}")
+    except Exception as e:
+        st.error(f"Erro na decodificação ou leitura do arquivo 'pedidos.csv'. Detalhe: {e}")
+        return False
+    # --- FIM DA CORREÇÃO ---
+
+
+    # 2. Adicionar o novo pedido ao conteúdo
+    timestamp = int(datetime.now().timestamp())
+    data_hora = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    id_pedido = timestamp
+    status = "NOVO" 
+    link_imagem = "" 
+    itens_pedido_vazio = ""
+    
+    escaped_itens_json = itens_json.replace('"', '""')
+    
+    novo_registro = f"\n\"{id_pedido}\",\"{data_hora}\",\"{nome_cliente}\",\"{contato_cliente}\",\"{itens_pedido_vazio}\",\"{valor_total:.2f}\",\"{link_imagem}\",\"{status}\",\"{escaped_itens_json}\""
+    
+    # Garante que não haja linhas em branco extras se o arquivo já tiver conteúdo
+    if current_content.strip() == novo_cabecalho:
+        new_content = current_content.strip() + novo_registro
+    else:
+        new_content = current_content.strip() + novo_registro + "\n"
+    
+    # 3. Codificar o novo conteúdo em Base64
+    encoded_content = base64.b64encode(new_content.encode('utf-8')).decode('utf-8')
+    
+    # 4. Enviar o novo conteúdo (PUT)
+    commit_data = {
+        "message": f"PEDIDO: Novo pedido de {nome_cliente} em {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        "content": encoded_content,
+        "branch": BRANCH
+    }
+    # Adiciona o SHA apenas se estivermos atualizando um arquivo existente
+    if current_sha:
+        commit_data["sha"] = current_sha
+    
+    headers_put = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+
+    try:
+        response_put = requests.put(api_url, headers=headers_put, data=json.dumps(commit_data))
+        response_put.raise_for_status()
+        return True
+    except requests.exceptions.HTTPError as e:
+        st.error(f"Erro ao salvar o pedido (Commit no GitHub). Status {e.response.status_code}. Verifique as permissões 'repo' do seu PAT. Detalhe: {e.response.text}")
         return False
     except Exception as e:
-        # MENSAGEM MAIS CLARA PARA O ERRO DE DECODIFICAÇÃO (Expecting value)
-        st.error(f"Erro na decodificação do CSV: O arquivo 'pedidos.csv' pode estar vazio (0 bytes) ou malformado. Adicione o cabeçalho '{novo_cabecalho}' no GitHub. Detalhe: {e}")
+        st.error(f"Erro desconhecido ao enviar o pedido: {e}")
         return False
 
     # 2. Adicionar o novo pedido ao conteúdo
@@ -490,6 +549,7 @@ else:
         with cols[i % 4]: 
             # Chama a função com a chave única
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
