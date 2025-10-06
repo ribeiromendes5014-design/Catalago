@@ -7,6 +7,7 @@ import time
 import requests 
 import base64
 import numpy as np 
+from streamlit_autorefresh import st_autorefresh
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
@@ -436,3 +437,4 @@ with tab_promocoes:
                     if excluir_promocao(promo['ID_PROMOCAO']):
                         st.success("Promoção excluída!"); st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
