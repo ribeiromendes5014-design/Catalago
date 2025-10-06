@@ -512,8 +512,7 @@ with tab_produtos:
                     st.markdown(f"**{produto.get('NOME', 'N/A')}** (ID: {produto.get('ID', 'N/A')})")
                     st.markdown(f"**Preço:** R$ {produto.get('PRECO', 'N/A')}")
                     with st.popover("📝 Editar"):
-                        # --- CORREÇÃO DA CHAVE DO FORMULÁRIO ---
-                        # Garante que a chave é única usando ID do produto (ou índice) E o índice de iteração
+                        # --- CORREÇÃO DA CHAVE DO FORMULÁRIO (FEITA NA CORREÇÃO ANTERIOR) ---
                         form_key = f"edit_form_{produto.get('ID', index)}_{index}" 
                         
                         with st.form(form_key, clear_on_submit=True):
@@ -551,7 +550,9 @@ with tab_produtos:
                                 else: st.error("Falha ao atualizar.")
 
                     # Lógica de exclusão com atualização imediata (LÓGICA REQUISITADA)
-                    if st.button("🗑️ Excluir", key=f"del_{produto.get('ID', index)}", type="primary"):
+                    # --- CORREÇÃO DA CHAVE DO BOTÃO APLICADA AQUI ---
+                    delete_button_key = f"del_{produto.get('ID', index)}_{index}"
+                    if st.button("🗑️ Excluir", key=delete_button_key, type="primary"):
                         if excluir_produto(produto['ID']):
                             st.success("Produto excluído!")
                             st.session_state['data_version'] += 1 # 🔁 Força o reload do cache
@@ -604,7 +605,7 @@ with tab_promocoes:
                 st.caption(f"Status: {promo.get('STATUS', 'N/A')} | ID da Promoção: {promo.get('ID_PROMOCAO', 'N/A')}")
                 
                 with st.popover("📝 Editar Promoção"):
-                    # --- CORREÇÃO DA CHAVE DO FORMULÁRIO DE PROMOÇÃO ---
+                    # --- CORREÇÃO DA CHAVE DO FORMULÁRIO DE PROMOÇÃO (FEITA NA CORREÇÃO ANTERIOR) ---
                     promo_form_key = f"edit_promo_{promo.get('ID_PROMOCAO', index)}_{index}_tab_promo"
                     
                     with st.form(promo_form_key, clear_on_submit=True):
