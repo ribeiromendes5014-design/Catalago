@@ -23,7 +23,7 @@ def carregar_dados(sheet_name):
     url = f"{GITHUB_RAW_BASE_URL}/{csv_filename}"
     
     try:
-        # CORREÇÃO: Usando sep=',' conforme o cabeçalho fornecido (e para produtos.csv)
+        # Usando sep=',' para delimitador de vírgula
         df = pd.read_csv(url, sep=',') 
         
         # Limpeza e Normalização dos Nomes das Colunas
@@ -65,9 +65,14 @@ def exibir_itens_pedido(pedido_json, df_catalogo):
         for item in detalhes_pedido.get('itens', []):
             link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
             item_id = pd.to_numeric(item.get('id'), errors='coerce')
-            if not df_catalogo.empty and not pd.isna(item_id) and not df_catalogo[df_catalogo['ID'] == int(item_id)].empty: 
-                 link_imagem = df_catalogo[df_catalogo['ID'] == int(item_id)].iloc[0].get('LINKIMAGEM', link_imagem)
             
+            if not df_catalogo.empty and not pd.isna(item_id) and not df_catalogo[df_catalogo['ID'] == int(item_id)].empty: 
+                 # CORREÇÃO: Trata o link como string e verifica se é 'nan'
+                 link_na_tabela = str(df_catalogo[df_catalogo['ID'] == int(item_id)].iloc[0].get('LINKIMAGEM', link_imagem)).strip()
+                 
+                 if link_na_tabela.lower() != 'nan' and link_na_tabela:
+                     link_imagem = link_na_tabela
+
             col_img, col_detalhes = st.columns([1, 4]); col_img.image(link_imagem, width=100)
             quantidade = item.get('qtd', item.get('quantidade', 0)); preco_unitario = float(item.get('preco', 0.0)); subtotal = item.get('subtotal')
             if subtotal is None: subtotal = preco_unitario * quantidade
@@ -165,8 +170,18 @@ with tab_produtos:
         for index, produto in df_produtos.iterrows():
             with st.container(border=True):
                 col1, col2 = st.columns([1, 4])
+                
+                # CORREÇÃO: Garante que o link da imagem é uma string antes de usar no st.image
+                link_imagem_produto = str(produto.get("LINKIMAGEM")).strip() 
+                
                 with col1:
-                    st.image(produto.get("LINKIMAGEM") or "https://via.placeholder.com/150?text=Sem+Imagem", width=100)
+                    if link_imagem_produto.lower() == 'nan' or not link_imagem_produto:
+                         img_url = "https://via.placeholder.com/150?text=Sem+Imagem"
+                    else:
+                         img_url = link_imagem_produto
+                         
+                    st.image(img_url, width=100)
+                    
                 with col2:
                     st.markdown(f"**{produto.get('NOME', 'N/A')}** (ID: {produto.get('ID', 'N/A')})")
                     st.markdown(f"**Preço:** R$ {produto.get('PRECO', 'N/A')}")
@@ -180,20 +195,17 @@ with tab_produtos:
                             curta_edit = st.text_input("Desc. Curta", value=produto.get('DESCRICAOCURTA', ''))
                             longa_edit = st.text_area("Desc. Longa", value=produto.get('DESCRICAOLONGA', ''))
                             
-                            # CORREÇÃO AQUI: Limpar a string DISPONIVEL antes de usar o .index()
+                            # Tratamento para o ValueError do DISPONIVEL
                             disponivel_val = produto.get('DISPONIVEL', 'Sim')
-                            # Se for string, limpa, senão assume o default
                             if isinstance(disponivel_val, str):
-                                # Strip: remove espaços; title(): garante que a primeira letra seja maiúscula (Sim/Não)
                                 disponivel_val = disponivel_val.strip().title()
                             else:
-                                disponivel_val = 'Sim' # Default caso não seja string
+                                disponivel_val = 'Sim' 
                             
                             try:
-                                # Tenta encontrar o índice limpo, se falhar, usa 0 (Sim)
                                 default_index = ["Sim", "Não"].index(disponivel_val)
                             except ValueError:
-                                default_index = 0 # Assume 'Sim' como fallback
+                                default_index = 0
                                 
                             disponivel_edit = st.selectbox("Disponível", ["Sim", "Não"], index=default_index)
 
