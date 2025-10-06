@@ -411,29 +411,39 @@ else:
     # --- SEÇÃO: CATÁLOGO COMPLETO (CARROSSEL VISUAL) ---
     # ==============================================================================
     st.subheader("🛍️ Catálogo Completo")
-    termo = st.session_state.get('termo_pesquisa_barra', '').lower()
-    
-    if termo:
-        df_filtrado = df_catalogo[df_catalogo.apply(lambda row: termo in str(row['NOME']).lower() or termo in str(row['DESCRICAOLONGA']).lower(), axis=1)]
-    else:
-        df_filtrado = df_catalogo
-    
-    if df_filtrado.empty:
-        st.info(f"Nenhum produto encontrado com o termo '{termo}'.")
-    else:
-        # 1. Gera o HTML dos cards (sem botões funcionais/expander)
-        html_cards_catalogo = [get_product_card_html_for_carousel(prod_id, row) for prod_id, row in df_filtrado.iterrows()]
 
-        # 2. Renderiza o carrossel (rolagem lateral)
-        st.markdown(f"""
-            <div class="carousel-outer-container">
-                <div class="product-wrapper">
-                    {''.join(html_cards_catalogo)}
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        st.caption("✨ Role a barra abaixo (ou deslize a tela) para ver todos os produtos. Use a barra de pesquisa para encontrar e adicionar produtos.")
+# Filtro de busca
+termo = st.session_state.get('termo_pesquisa_barra', '').lower()
+if termo:
+    df_filtrado = df_catalogo[df_catalogo.apply(lambda row: termo in str(row['NOME']).lower() or termo in str(row['DESCRICAOLONGA']).lower(), axis=1)]
+else:
+    df_filtrado = df_catalogo
+
+if df_filtrado.empty:
+    st.info(f"Nenhum produto encontrado com o termo '{termo}'.")
+else:
+    # CSS para rolagem horizontal no layout padrão (sem HTML)
+    st.markdown("""
+        <style>
+            .scroll-container {
+                display: flex;
+                overflow-x: auto;
+                padding-bottom: 1rem;
+                gap: 1rem;
+            }
+            .scroll-container > div {
+                flex: 0 0 23%;
+                min-width: 250px;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Renderiza cards com botões Streamlit, mas dentro de uma div com rolagem lateral
+    st.markdown('<div class="scroll-container">', unsafe_allow_html=True)
+    for prod_id, row in df_filtrado.iterrows():
+        render_product_card_with_streamlit_buttons(prod_id, row, key_prefix='catalogo')
+    st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 
