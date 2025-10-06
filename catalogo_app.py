@@ -125,11 +125,11 @@ def carregar_promocoes():
 
 @st.cache_data(ttl=2)
 def carregar_catalogo():
-    """Carrega o catálogo do 'produtos.csv' do GitHub, aplica as promoções e prepara o DataFrame."""
+    """Carrega o catálogo do 'produtos_estoque.csv' do GitHub, aplica as promoções e prepara o DataFrame."""
     df_produtos = get_data_from_github(SHEET_NAME_CATALOGO_CSV)
     
     if df_produtos is None or df_produtos.empty:
-        st.warning("Catálogo indisponível. Verifique o arquivo 'produtos.csv' no GitHub.")
+        st.warning("Catálogo indisponível. Verifique o arquivo 'produtos_estoque.csv' no GitHub.")
         return pd.DataFrame()
     
     df_produtos.columns = [col.upper().replace(' ', '_') for col in df_produtos.columns]
@@ -139,7 +139,7 @@ def carregar_catalogo():
     colunas_essenciais = ['PRECO', 'ID', 'DISPONIVEL', 'NOME']
     for col in colunas_essenciais:
         if col not in df_produtos.columns:
-            st.error(f"Coluna essencial '{col}' não encontrada no 'produtos.csv'. Verifique o cabeçalho.")
+            st.error(f"Coluna essencial '{col}' não encontrada no 'produtos_estoque.csv'. Verifique o cabeçalho.")
             return pd.DataFrame()
 
     df_produtos['PRECO'] = pd.to_numeric(df_produtos['PRECO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
@@ -425,6 +425,7 @@ else:
         product_id = row['ID'] 
         with cols[i % 4]: 
             render_product_card(product_id, row, key_prefix='prod')
+
 
 
 
