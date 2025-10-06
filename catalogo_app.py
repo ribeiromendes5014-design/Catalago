@@ -191,8 +191,34 @@ def carregar_catalogo():
     df_promocoes = carregar_promocoes()
     
     if not df_promocoes.empty:
+        # Merge baseado no novo nome da coluna ID_PRODUTO
         df_final = pd.merge(df_produtos.reset_index(), df_promocoes, left_on='ID', right_on='ID_PRODUTO', how='left').set_index('ID')
-        df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO'])
+        
+        # O merge adiciona ID_PRODUTO e DESCONTO (em vez de PRECO_PROMOCIONAL)
+        
+        # 1. Cria a coluna PRECO_PROMOCIONAL como NULL por enquanto
+        df_final['PRECO_PROMOCIONAL'] = None # Mantém a coluna para compatibilidade de renderização
+        
+        # 2. Calcula o PRECO_FINAL usando a coluna DESCONTO (Ex: 0.10 para 10%)
+        # Se DESCONTO for um valor absoluto, a lógica precisa mudar (e.g. preco - desconto).
+        # Assumindo que DESCONTO é a PORCENTAGEM (ex: 10 ou 0.10):
+        
+        # Se DESCONTO for uma porcentagem, dividimos por 100 se for maior que 1
+        df_final['DESCONTO_CALC'] = df_final['DESCONTO'].apply(lambda x: x / 100 if x > 1 else x)
+        
+        # Calcula o preço final apenas onde o DESCONTO existe (não é NaN)
+        # O preço final é o PRECO (original) * (1 - DESCONTO)
+        is_on_promo = pd.notna(df_final['DESCONTO'])
+        df_final.loc[is_on_on_promo, 'PRECO_FINAL'] = df_final['PRECO'] * (1 - df_final['DESCONTO_CALC'])
+        
+        # Para produtos sem promoção, o PRECO_FINAL é o PRECO original
+        df_final['PRECO_FINAL'] = df_final['PRECO_FINAL'].fillna(df_final['PRECO'])
+        
+        # Marca PRECO_PROMOCIONAL (que é o PRECO_FINAL) apenas se houver desconto
+        df_final.loc[is_on_on_promo, 'PRECO_PROMOCIONAL'] = df_final['PRECO_FINAL']
+        
+        # Limpa colunas de cálculo temporário
+        df_final.drop(columns=['ID_PRODUTO', 'DESCONTO', 'DESCONTO_CALC'], inplace=True, errors='ignore')
     else:
         df_final = df_produtos
         df_final['PRECO_FINAL'] = df_final['PRECO']
@@ -469,5 +495,6 @@ else:
         with cols[i % 4]: 
             # Chama a função com a chave única
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
