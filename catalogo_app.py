@@ -136,11 +136,9 @@ def carregar_catalogo():
     df_produtos.columns = [col.upper().replace(' ', '_') for col in df_produtos.columns]
 
     # --- INÍCIO DA CORREÇÃO DE COLUNAS ---
+    # Colunas no CSV: ID, NOME, MARCA, CATEGORIA, QUANTIDADE, PRECOCUSTO, PRECOVISTA, PRECARTAO, VALIDADE, FOTOURL, CODIGOBARRAS
     
-    # 1. Mapeamento dos Nomes do CSV para os Nomes Esperados no Código
-    # Seu CSV: ID, NOME, MARCA, CATEGORIA, QUANTIDADE, PRECOCUSTO, PRECOVISTA, PRECARTAO, VALIDADE, FOTOURL, CODIGOBARRAS
-    
-    # Colunas Essenciais (mínimo para evitar o erro de 'PRECO')
+    # Colunas Essenciais (mínimo para evitar erro)
     colunas_essenciais = ['PRECOVISTA', 'ID', 'NOME', 'FOTOURL']
     for col in colunas_essenciais:
         if col not in df_produtos.columns:
@@ -151,13 +149,12 @@ def carregar_catalogo():
     df_produtos.rename(columns={
         'PRECOVISTA': 'PRECO',        # O preço que você quer mostrar
         'FOTOURL': 'LINKIMAGEM',      # A URL da imagem
-        'MARCA': 'DESCRICAOCURTA',    # Usando Marca como descrição curta (pode ser ajustado)
+        'MARCA': 'DESCRICAOCURTA',    # Usando Marca como descrição curta
     }, inplace=True)
     
     # 3. Adiciona colunas que faltam com valor padrão para evitar erros
     if 'DISPONIVEL' not in df_produtos.columns:
-        # Se você usar a coluna QUANTIDADE para disponibilidade, mude isso depois
-        df_produtos['DISPONIVEL'] = 'SIM' 
+        df_produtos['DISPONIVEL'] = 'SIM' # Assume que está disponível por padrão
     if 'DESCRICAOLONGA' not in df_produtos.columns:
         df_produtos['DESCRICAOLONGA'] = df_produtos.get('CATEGORIA', '') # Usa Categoria como descrição longa padrão
     
@@ -321,7 +318,7 @@ div.block-container {{ background-color: rgba(255, 255, 255, 0.95); border-radiu
 .pink-bar-container {{ background-color: #E91E63; padding: 20px 0; width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
 .pink-bar-content {{ width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; }}
 .cart-badge-button {{ background-color: #C2185B; color: white; border-radius: 12px; padding: 8px 15px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; transition: background-color 0.3s; display: inline-flex; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-width: 150px; justify-content: center; }}
-.cart-badge-button:hover {{ background-color: #E91E63; }}
+.cart-badge-button:hover {{ background-color: #C2185B; }}
 .cart-count {{ background-color: white; color: #E91E63; border-radius: 50%; padding: 2px 7px; margin-left: 8px; font-size: 14px; line-height: 1; }}
 div[data-testid="stButton"] > button {{ background-color: #E91E63; color: white; border-radius: 10px; border: 1px solid #C2185B; font-weight: bold; }}
 div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: white; border: 1px solid #E91E63; }}
