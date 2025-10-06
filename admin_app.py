@@ -191,7 +191,7 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
     porcentagem de itens separados.
     """
     try:
-        # --- INÍCIO DA CORREÇÃO 1 ---
+        # --- INÍCIO DA CORREÇÃO ---
         # Verifica se o JSON do pedido é válido antes de tentar decodificá-lo
         if pd.isna(pedido_json) or not str(pedido_json).strip():
             st.warning(f"Pedido {id_pedido} não possui detalhes de itens para exibir.")
@@ -203,6 +203,69 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
         if not itens:
             st.warning(f"Pedido {id_pedido} não possui uma lista de itens válida.")
             return 0
+        # --- FIM DA CORREÇÃO ---
+
+        total_itens = len(itens)
+        itens_separados = 0
+        
+        # Cria um estado de sessão para o progresso do pedido, se ainda não existir
+        key_progress = f'pedido_{id_pedido}_itens_separados'
+        if key_progress not in st.session_state:
+            # Inicializa a lista de checks: False para cada item
+            st.session_state[key_progress] = [False] * total_itens
+            
+        for i, item in enumerate(itens):
+            link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
+            item_id = pd.to_numeric(item.get('id'), errors='coerce')
+            
+            # Busca link da imagem no catálogo
+            if not df_catalogo.empty and not pd.isna(item_id) and not df_catalogo[df_catalogo['ID'] == int(item_id)].empty: 
+                link_na_tabela = str(df_catalogo[df_catalogo['ID'] == int(item_id)].iloc[0].get('LINKIMAGEM', link_imagem)).strip()
+                
+                if link_na_tabela.lower() != 'nan' and link_na_tabela:
+                    link_imagem = link_na_tabela
+
+            col_check, col_img, col_detalhes = st.columns([0.5, 1, 3.5])
+            
+            # --- Lógica do Checkbox de Separação ---
+            checked = col_check.checkbox(
+                label="Separado",
+                value=st.session_state[key_progress][i],
+                key=f"check_{id_pedido}_{i}",
+            )
+            
+            if checked != st.session_state[key_progress][i]:
+                st.session_state[key_progress][i] = checked
+                st.rerun() 
+            # --- Fim Lógica do Checkbox ---
+
+            col_img.image(link_imagem, width=100)
+            quantidade = item.get('qtd', item.get('quantidade', 0))
+            preco_unitario = float(item.get('preco', 0.0))
+            subtotal = item.get('subtotal')
+            if subtotal is None: subtotal = preco_unitario * quantidade
+            
+            col_detalhes.markdown(
+                f"**Produto:** {item.get('nome', 'N/A')}\n\n"
+                f"**Quantidade:** {quantidade}\n\n"
+                f"**Subtotal:** R$ {subtotal:.2f}"
+            ); 
+            st.markdown("---")
+            
+            if st.session_state[key_progress][i]:
+                itens_separados += 1
+                
+        if total_itens > 0:
+            progresso = int((itens_separados / total_itens) * 100)
+            return progresso
+        return 0
+        
+    except json.JSONDecodeError:
+        st.error(f"Erro ao processar itens do pedido {id_pedido}: O formato dos dados dos itens é inválido.")
+        return 0
+    except Exception as e: 
+        st.error(f"Erro inesperado ao processar itens do pedido {id_pedido}: {e}")
+        return 0
         # --- FIM DA CORREÇÃO 1 ---
 
         total_itens = len(itens)
@@ -672,5 +735,6 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
 
