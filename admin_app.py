@@ -43,7 +43,7 @@ except KeyError:
 def fetch_github_data_v2(sheet_name, version_control):
     """Carrega dados de um CSV do GitHub. O 'version_control' força o reload."""
     csv_filename = f"{sheet_name}.csv"
-    url = f"{GITHUB_RAW_BASE_URL}/{csv_filename}"
+    url = f"{GITHUB_RAW_BASE_URL}/{csv_filename}?nocache={random.randint(1, 999999)}"
     
     try:
         df = pd.read_csv(url, sep=',') 
@@ -493,4 +493,5 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
