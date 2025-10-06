@@ -1,12 +1,10 @@
 # admin_app.py
 import streamlit as st
 import pandas as pd
-# import gspread # REMOVIDO: Não necessário para leitura de CSV do GitHub
-# from oauth2client.service_account import ServiceAccountCredentials # REMOVIDO
 import json
 from datetime import datetime
 import time
-import requests # NOVO: Para fazer requisições HTTP
+import requests 
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
@@ -14,14 +12,9 @@ SHEET_NAME_PEDIDOS = "pedidos"
 SHEET_NAME_PROMOCOES = "promocoes"
 
 # --- Configurações do GitHub ---
-# URL base do repositório/branch para acesso aos arquivos raw
 GITHUB_RAW_BASE_URL = "https://raw.githubusercontent.com/ribeiromendes5014-design/Catalago/main"
-# TOKEN_GITHUB = st.secrets["github"]["token"] if "github" in st.secrets and "token" in st.secrets["github"] else None
 
-# --- Conexão e Carregamento de Dados (CORRIGIDO) ---
-
-# Função gspread removida, pois não é mais usada.
-# get_gspread_client() removido
+# --- Conexão e Carregamento de Dados (CORRIGIDO E NORMALIZADO) ---
 
 @st.cache_data(ttl=60)
 def carregar_dados(sheet_name):
@@ -30,15 +23,18 @@ def carregar_dados(sheet_name):
     url = f"{GITHUB_RAW_BASE_URL}/{csv_filename}"
     
     try:
-        # CORREÇÃO APLICADA: Usando sep=';' para delimitador de ponto e vírgula
+        # Usando sep=';' para delimitador de ponto e vírgula
         df = pd.read_csv(url, sep=';') 
+        
+        # NOVO: Limpeza e Normalização dos Nomes das Colunas para UPPERCASE e sem espaços
+        df.columns = df.columns.str.strip().str.upper() 
 
         # Adicionar colunas ausentes para compatibilidade, como antes
         if sheet_name == SHEET_NAME_PEDIDOS and 'STATUS' not in df.columns: df['STATUS'] = ''
         if sheet_name == SHEET_NAME_CATALOGO and 'ID' in df.columns: 
             # Garante que ID é numérico
             df['ID'] = pd.to_numeric(df['ID'], errors='coerce') 
-            df.dropna(subset=['ID'], inplace=True) # Remove linhas sem ID válido
+            df.dropna(subset=['ID'], inplace=True) 
             df['ID'] = df['ID'].astype(int)
 
         return df
@@ -120,7 +116,6 @@ with tab_pedidos:
         if pedidos_pendentes.empty: st.info("Nenhum pedido pendente encontrado.")
         else:
             for index, pedido in pedidos_pendentes.iloc[::-1].iterrows():
-                # Converte para string antes de usar strftime
                 data_hora_str = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indisponível"
                 titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {data_hora_str} - Total: R$ {pedido['VALOR_TOTAL']}"
                 with st.expander(titulo):
@@ -132,7 +127,6 @@ with tab_pedidos:
         if pedidos_finalizados.empty: st.info("Nenhum pedido finalizado encontrado.")
         else:
              for index, pedido in pedidos_finalizados.iloc[::-1].iterrows():
-                # Converte para string antes de usar strftime
                 data_hora_str = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indisponível"
                 titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {data_hora_str} - Total: R$ {pedido['VALOR_TOTAL']}"
                 with st.expander(titulo):
