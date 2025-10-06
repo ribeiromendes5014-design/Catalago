@@ -288,9 +288,7 @@ def atualizar_promocao(id_promocao, preco_promocional, data_inicio, data_fim, st
 st.set_page_config(page_title="Admin Doce&Bella", layout="wide")
 st.title("⭐ Painel de Administração | Doce&Bella")
 
-# --- ATUALIZAÇÃO AUTOMÁTICA A CADA 60 SEGUNDOS ---
-# Mantido em 60s. O reload principal é forçado pelo data_version.
-st_autorefresh(interval=60000, key="auto_update_github") 
+
 
 # --- TABS DO SISTEMA ---
 tab_pedidos, tab_produtos, tab_promocoes = st.tabs(["Pedidos", "Produtos", "🔥 Promoções"])
@@ -508,6 +506,7 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
 
 
