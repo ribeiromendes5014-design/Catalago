@@ -1,2 +1,1 @@
 ID_PEDIDO,DATA_HORA,NOME_CLIENTE,CONTATO_CLIENTE,ITENS_PEDIDO,VALOR_TOTAL,LINKIMAGEM,STATUS
-1759719445,2025-10-06 02:57:25,Renan,41987876191,"{""total"": 20.0, ""itens"": [{""id"": 1, ""nome"": ""gloss"", ""preco"": 20.0, ""quantidade"": 1}]}",20.0,,Finalizado
