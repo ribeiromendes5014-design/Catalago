@@ -109,25 +109,24 @@ def carregar_promocoes():
     
     # Retorna DataFrame vazio se a leitura falhar
     if df is None or df.empty:
-        # CORREÇÃO: Usar 'DESCONTO' para o DataFrame de retorno
+        # CORRIGIDO: Usar 'DESCONTO' para o DataFrame de retorno
         return pd.DataFrame(columns=['ID_PRODUTO', 'DESCONTO']) 
 
     # Padroniza todas as colunas para MAIÚSCULAS e substitui espaços por _
     df.columns = [col.upper().replace(' ', '_') for col in df.columns]
     
-    # CORREÇÃO: Renomeia IDPRODUTO (do seu CSV) para ID_PRODUTO 
+    # CORRIGIDO: Renomeia IDPRODUTO (do seu CSV) para ID_PRODUTO 
     if 'IDPRODUTO' in df.columns:
         df.rename(columns={'IDPRODUTO': 'ID_PRODUTO'}, inplace=True)
-    # Se você usou ID no CSV para o ID do produto, renomeie também (como fallback)
     elif 'ID' in df.columns:
-         df.rename(columns={'ID': 'ID_PROUTO'}, inplace=True)
+         df.rename(columns={'ID': 'ID_PRODUTO'}, inplace=True)
          
     # Verifica se a coluna de desconto (DESCONTO) existe
     if 'DESCONTO' not in df.columns:
         st.error("Coluna 'Desconto' (DESCONTO) não encontrada no promocoes.csv. Verifique o cabeçalho.")
         return pd.DataFrame(columns=['ID_PRODUTO', 'DESCONTO'])
         
-    # CORREÇÃO: Seleciona DESCONTO no lugar de PRECO_PROMOCIONAL
+    # CORRIGIDO: Seleciona DESCONTO no lugar de PRECO_PROMOCIONAL
     df_essencial = df[['ID_PRODUTO', 'DESCONTO']].copy() 
     
     # Converte ID_PRODUTO e DESCONTO para numérico
@@ -151,7 +150,6 @@ def carregar_catalogo():
     df_produtos.columns = [col.upper().replace(' ', '_') for col in df_produtos.columns]
 
     # --- INÍCIO DA CORREÇÃO DE COLUNAS ---
-    # Colunas no CSV: ID, NOME, MARCA, CATEGORIA, QUANTIDADE, PRECOCUSTO, PRECOVISTA, PRECARTAO, VALIDADE, FOTOURL, CODIGOBARRAS
     
     # Colunas Essenciais (mínimo para evitar erro)
     colunas_essenciais = ['PRECOVISTA', 'ID', 'NOME', 'FOTOURL']
@@ -199,7 +197,8 @@ def carregar_catalogo():
         # 2. Lógica de Cálculo de Preço Final usando a coluna DESCONTO:
         
         # Converte o desconto para o formato decimal (ex: 10 passa a ser 0.10)
-        df_final['DESCONTO_CALC'] = df_final['DESCONTO'].apply(lambda x: x / 100 if x >= 1 and x <= 100 else x)
+        # Assume que o desconto pode vir como 10 (10%) ou 0.1 (10%)
+        df_final['DESCONTO_CALC'] = df_final['DESCONTO'].apply(lambda x: x / 100 if pd.notna(x) and x >= 1 and x <= 100 else x)
         
         # Identifica os produtos em promoção (onde DESCONTO não é NaN)
         is_on_promo = pd.notna(df_final['DESCONTO'])
@@ -211,6 +210,7 @@ def carregar_catalogo():
         df_final['PRECO_FINAL'] = df_final['PRECO_FINAL'].fillna(df_final['PRECO'])
         
         # Define PRECO_PROMOCIONAL com o preço final apenas se houver desconto
+        # Isso garante que a flag 'is_promotion' no render_product_card funcione
         df_final.loc[is_on_promo, 'PRECO_PROMOCIONAL'] = df_final['PRECO_FINAL']
         
         # Limpa colunas de cálculo temporário
@@ -433,6 +433,7 @@ def render_product_card(prod_id, row, key_prefix):
         preco_original = row['PRECO']
         
         # A promoção agora é detectada se o PRECO_PROMOCIONAL for diferente de nulo
+        # A coluna PRECO_PROMOCIONAL é preenchida no carregar_catalogo() se houver desconto
         is_promotion = pd.notna(row.get('PRECO_PROMOCIONAL')) 
 
         # --- NOVO: Lógica para exibir o selo de promoção ---
