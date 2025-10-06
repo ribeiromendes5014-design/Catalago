@@ -5,24 +5,25 @@ from datetime import datetime
 import json
 import time
 from streamlit_autorefresh import st_autorefresh
-import requests
-import base64
-from io import StringIO
-import os  # <--- ADICIONADO PARA LER VARIÁVEIS DO RENDER
+import requests 
+import base64 
+from io import StringIO 
+import os # <--- ADICIONADO PARA LER VARIÁVEIS DO RENDER
+
 
 # --- Variáveis de Configuração (CORRIGIDO PARA O RENDER) ---
 # As variáveis são lidas diretamente das Variáveis de Ambiente (Environment Variables)
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-REPO_NAME = os.environ.get("REPO_NAME")
+
+# NOVO: Repositório de Dados (Deve ser definido como DATA_REPO_NAME no Render)
+DATA_REPO_NAME = os.environ.get("DATA_REPO_NAME") 
 BRANCH = os.environ.get("BRANCH")
 
+# URLs da API (AGORA APONTA PARA DATA_REPO_NAME)
+GITHUB_BASE_API = f"https://api.github.com/repos/{DATA_REPO_NAME}/contents/"
 
-
-# URLs da API (MANTIDO)
-GITHUB_BASE_API = f"https://api.github.com/repos/{REPO_NAME}/contents/"
-
-# Fontes de Dados (CSV no GitHub) (MANTIDO)
-SHEET_NAME_CATALOGO_CSV = "produtos_estoque.csv" 
+# Fontes de Dados (CSV no GitHub)
+SHEET_NAME_CATALOGO_CSV = "produtos_estoque.csv" # <--- CORRIGIDO O NOME DO ARQUIVO
 SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
 SHEET_NAME_PEDIDOS_CSV = "pedidos.csv" 
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
@@ -51,28 +52,21 @@ def get_data_from_github(file_name):
     Lê o conteúdo de um CSV do GitHub diretamente via API (sem cache da CDN).
     Garante que sempre trará a versão mais recente do arquivo.
     """
-    # CORREÇÃO PRINCIPAL AQUI: DEVE USAR DATA_REPO_NAME
-    api_url = f"https://api.github.com/repos/{DATA_REPO_NAME}/contents/{file_name}?ref={BRANCH}"
+    # CORREÇÃO DO NAMEERROR: Usa GITHUB_BASE_API que é global e já contém o DATA_REPO_NAME
+    api_url = f"{GITHUB_BASE_API}{file_name}?ref={BRANCH}"
     
     try:
-        # Autenticação com token
-        headers = {
-            "Authorization": f"token {GITHUB_TOKEN}",
-            "Accept": "application/vnd.github.com.v3.raw" # O RAW não deve ser usado aqui, queremos o JSON da Content API
-        }
-
-        # Para leitura do arquivo via Content API (que retorna JSON com base64)
+        # Headers para requisição autenticada
         headers_content = {
             "Authorization": f"token {GITHUB_TOKEN}",
-            # Aceita o JSON padrão, não o 'raw'
+            # Não especificar Accept: application/vnd.github.com.v3.raw aqui para receber o JSON do conteúdo
         }
-
 
         response = requests.get(api_url, headers=headers_content)
         
         # 1. VERIFICAÇÃO DO STATUS HTTP
         if response.status_code == 404:
-            st.error(f"Erro 404: Arquivo '{file_name}' não encontrado no repositório '{REPO_NAME}' na branch '{BRANCH}'. Verifique o nome do arquivo/branch/repo.")
+            st.error(f"Erro 404: Arquivo '{file_name}' não encontrado no repositório '{DATA_REPO_NAME}' na branch '{BRANCH}'. Verifique o nome do arquivo/branch/repo.")
             return None
         
         response.raise_for_status() # Levanta exceção para outros erros HTTP (400, 500 etc.)
@@ -82,8 +76,7 @@ def get_data_from_github(file_name):
             data = response.json()
         except requests.exceptions.JSONDecodeError as e:
             st.error(f"Erro de JSON ao decodificar a resposta da API do GitHub para '{file_name}'.")
-            st.warning("A resposta não é um JSON válido. Conteúdo da resposta (Pode ser erro HTML):")
-            st.code(response.text[:500]) # Mostra os primeiros 500 caracteres da resposta
+            st.code(response.text[:500])
             return None
 
 
@@ -96,15 +89,17 @@ def get_data_from_github(file_name):
         content = base64.b64decode(data["content"]).decode("utf-8")
         csv_data = StringIO(content)
 
-        # Lê o CSV
+        # Lê o CSV e trata erros de formatação
         df = pd.read_csv(csv_data, sep=",", encoding="utf-8", engine="python", on_bad_lines="warn")
 
-        # Normaliza nomes de colunas
+        # Normaliza nomes de colunas (boa prática)
         df.columns = [col.strip().upper() for col in df.columns]
         return df
 
+    except requests.exceptions.HTTPError as e:
+        st.error(f"Erro HTTP ao acessar '{file_name}' via API ({response.status_code}). URL: {api_url}")
+        return None
     except Exception as e:
-        # Se ocorrer qualquer outro erro (conexão, decodificação, etc.)
         st.error(f"Erro ao carregar '{file_name}' via API do GitHub: {e}")
         return None
 
@@ -118,6 +113,10 @@ def carregar_promocoes():
 
     df.columns = [col.upper().replace(' ', '_') for col in df.columns]
     
+    # Se o ID_PRODUTO estiver como 'ID' no CSV de promoções, renomeie aqui se necessário
+    if 'ID' in df.columns:
+        df.rename(columns={'ID': 'ID_PRODUTO'}, inplace=True)
+        
     df_essencial = df[['ID_PRODUTO', 'PRECO_PROMOCIONAL']].copy()
     df_essencial['PRECO_PROMOCIONAL'] = pd.to_numeric(df_essencial['PRECO_PROMOCIONAL'].astype(str).str.replace(',', '.'), errors='coerce')
     df_essencial['ID_PRODUTO'] = pd.to_numeric(df_essencial['ID_PRODUTO'], errors='coerce').astype('Int64')
@@ -141,8 +140,6 @@ def carregar_catalogo():
     # 1. Mapeamento dos Nomes do CSV para os Nomes Esperados no Código
     # Seu CSV: ID, NOME, MARCA, CATEGORIA, QUANTIDADE, PRECOCUSTO, PRECOVISTA, PRECARTAO, VALIDADE, FOTOURL, CODIGOBARRAS
     
-    # O código antigo esperava: ID, NOME, PRECO, LINKIMAGEM, DESCRICAOCURTA, DESCRICAOLONGA, DISPONIVEL
-    
     # Colunas Essenciais (mínimo para evitar o erro de 'PRECO')
     colunas_essenciais = ['PRECOVISTA', 'ID', 'NOME', 'FOTOURL']
     for col in colunas_essenciais:
@@ -154,12 +151,13 @@ def carregar_catalogo():
     df_produtos.rename(columns={
         'PRECOVISTA': 'PRECO',        # O preço que você quer mostrar
         'FOTOURL': 'LINKIMAGEM',      # A URL da imagem
-        'MARCA': 'DESCRICAOCURTA',    # Usando Marca como descrição curta
+        'MARCA': 'DESCRICAOCURTA',    # Usando Marca como descrição curta (pode ser ajustado)
     }, inplace=True)
     
     # 3. Adiciona colunas que faltam com valor padrão para evitar erros
     if 'DISPONIVEL' not in df_produtos.columns:
-        df_produtos['DISPONIVEL'] = 'SIM' # Assume que está disponível por padrão
+        # Se você usar a coluna QUANTIDADE para disponibilidade, mude isso depois
+        df_produtos['DISPONIVEL'] = 'SIM' 
     if 'DESCRICAOLONGA' not in df_produtos.columns:
         df_produtos['DESCRICAOLONGA'] = df_produtos.get('CATEGORIA', '') # Usa Categoria como descrição longa padrão
     
@@ -168,9 +166,13 @@ def carregar_catalogo():
     df_produtos['PRECO'] = pd.to_numeric(df_produtos['PRECO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
     df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
     
-    # ... (o restante da função carregar_catalogo continua)
-    
     df_produtos = df_produtos[df_produtos['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
+    
+    # Opcional: Filtro por quantidade > 0 (Se 'DISPONIVEL' não for confiável)
+    if 'QUANTIDADE' in df_produtos.columns:
+        df_produtos['QUANTIDADE'] = pd.to_numeric(df_produtos['QUANTIDADE'], errors='coerce').fillna(0)
+        df_produtos = df_produtos[df_produtos['QUANTIDADE'] > 0].copy()
+    
     df_produtos.set_index('ID', inplace=True)
     
     df_promocoes = carregar_promocoes()
@@ -450,15 +452,3 @@ else:
         product_id = row['ID'] 
         with cols[i % 4]: 
             render_product_card(product_id, row, key_prefix='prod')
-
-
-
-
-
-
-
-
-
-
-
-
