@@ -91,7 +91,7 @@ def get_data_from_github(file_name):
         df = pd.read_csv(csv_data, sep=",", encoding="utf-8", engine="python", on_bad_lines="warn")
 
         # Normaliza nomes de colunas (boa prática)
-        df.columns = [col.strip().upper() for col in df.columns]
+        df.columns = [col.strip().upper().replace(' ', '_') for col in df.columns]
         return df
 
     except requests.exceptions.HTTPError as e:
@@ -104,37 +104,35 @@ def get_data_from_github(file_name):
 
 @st.cache_data(ttl=5)
 def carregar_promocoes():
-    """Carrega as promoções do 'promocoes.csv' do GitHub."""
+    """Carrega as promoções do 'promocoes.csv' do GitHub, usando PRECO_PROMOCIONAL diretamente."""
     df = get_data_from_github(SHEET_NAME_PROMOCOES_CSV)
     
-    # Retorna DataFrame vazio se a leitura falhar
-    if df is None or df.empty:
-        # CORRIGIDO: Usar 'DESCONTO' para o DataFrame de retorno
-        return pd.DataFrame(columns=['ID_PRODUTO', 'DESCONTO']) 
+    # Colunas essenciais para o merge e preço final
+    colunas_essenciais = ['ID_PRODUTO', 'PRECO_PROMOCIONAL', 'STATUS']
 
-    # Padroniza todas as colunas para MAIÚSCULAS e substitui espaços por _
-    df.columns = [col.upper().replace(' ', '_') for col in df.columns]
+    if df is None or df.empty:
+        return pd.DataFrame(columns=colunas_essenciais)
+
+    # A padronização de colunas já foi feita dentro de get_data_from_github
     
-    # CORRIGIDO: Renomeia IDPRODUTO (do seu CSV) para ID_PRODUTO 
-    if 'IDPRODUTO' in df.columns:
-        df.rename(columns={'IDPRODUTO': 'ID_PRODUTO'}, inplace=True)
-    elif 'ID' in df.columns:
-         df.rename(columns={'ID': 'ID_PRODUTO'}, inplace=True)
-         
-    # Verifica se a coluna de desconto (DESCONTO) existe
-    if 'DESCONTO' not in df.columns:
-        st.error("Coluna 'Desconto' (DESCONTO) não encontrada no promocoes.csv. Verifique o cabeçalho.")
-        return pd.DataFrame(columns=['ID_PRODUTO', 'DESCONTO'])
+    # GARANTE A PRESENÇA DAS COLUNAS (DEVIDO AO NOVO CABEÇALHO)
+    for col in colunas_essenciais:
+        if col not in df.columns:
+            st.error(f"Coluna essencial '{col}' não encontrada no 'promocoes.csv'. Verifique o cabeçalho.")
+            return pd.DataFrame(columns=colunas_essenciais)
         
-    # CORRIGIDO: Seleciona DESCONTO no lugar de PRECO_PROMOCIONAL
-    df_essencial = df[['ID_PRODUTO', 'DESCONTO']].copy() 
+    # Filtra apenas promoções ativas (STATUS = 'ATIVO', 'SIM', etc.)
+    df = df[df['STATUS'].astype(str).str.strip().str.upper() == 'ATIVO'].copy()
+
+    # Seleciona as colunas necessárias
+    df_essencial = df[colunas_essenciais].copy()
     
-    # Converte ID_PRODUTO e DESCONTO para numérico
-    df_essencial['DESCONTO'] = pd.to_numeric(df_essencial['DESCONTO'].astype(str).str.replace(',', '.'), errors='coerce')
+    # Conversão de tipos
+    df_essencial['PRECO_PROMOCIONAL'] = pd.to_numeric(df_essencial['PRECO_PROMOCIONAL'].astype(str).str.replace(',', '.'), errors='coerce')
     df_essencial['ID_PRODUTO'] = pd.to_numeric(df_essencial['ID_PRODUTO'], errors='coerce').astype('Int64')
     
-    # Filtra linhas sem ID_PRODUTO ou Desconto válido
-    return df_essencial.dropna(subset=['ID_PRODUTO', 'DESCONTO']).reset_index(drop=True)
+    # Retorna apenas as colunas válidas
+    return df_essencial.dropna(subset=['ID_PRODUTO', 'PRECO_PROMOCIONAL']).reset_index(drop=True)
 
 
 @st.cache_data(ttl=2)
@@ -146,11 +144,9 @@ def carregar_catalogo():
         st.warning("Catálogo indisponível. Verifique o arquivo 'produtos_estoque.csv' no GitHub.")
         return pd.DataFrame()
     
-    # Padroniza todas as colunas para MAIÚSCULAS
-    df_produtos.columns = [col.upper().replace(' ', '_') for col in df_produtos.columns]
+    # Padroniza todas as colunas para MAIÚSCULAS (já feito em get_data_from_github)
 
-    # --- INÍCIO DA CORREÇÃO DE COLUNAS ---
-    
+    # --- INÍCIO DA CORREÇÃO DE COLUNAS DO CATÁLOGO ---
     # Colunas Essenciais (mínimo para evitar erro)
     colunas_essenciais = ['PRECOVISTA', 'ID', 'NOME', 'FOTOURL']
     for col in colunas_essenciais:
@@ -171,7 +167,7 @@ def carregar_catalogo():
     if 'DESCRICAOLONGA' not in df_produtos.columns:
         df_produtos['DESCRICAOLONGA'] = df_produtos.get('CATEGORIA', '') # Usa Categoria como descrição longa padrão
     
-    # --- FIM DA CORREÇÃO DE COLUNAS ---
+    # --- FIM DA CORREÇÃO DE COLUNAS DO CATÁLOGO ---
 
     df_produtos['PRECO'] = pd.to_numeric(df_produtos['PRECO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
     df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
@@ -188,33 +184,14 @@ def carregar_catalogo():
     df_promocoes = carregar_promocoes()
     
     if not df_promocoes.empty:
-        # Merge baseado no ID_PRODUTO do catálogo e ID_PRODUTO das promoções
-        df_final = pd.merge(df_produtos.reset_index(), df_promocoes, left_on='ID', right_on='ID_PRODUTO', how='left').set_index('ID')
+        # Merge simples: usa PRECO_PROMOCIONAL diretamente do CSV de promoções
+        df_final = pd.merge(df_produtos.reset_index(), df_promocoes[['ID_PRODUTO', 'PRECO_PROMOCIONAL']], left_on='ID', right_on='ID_PRODUTO', how='left').set_index('ID')
         
-        # 1. Cria a coluna PRECO_PROMOCIONAL (necessária para a renderização)
-        df_final['PRECO_PROMOCIONAL'] = None 
+        # O PRECO_FINAL é o PRECO_PROMOCIONAL se não for nulo, ou o PRECO original
+        df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO'])
         
-        # 2. Lógica de Cálculo de Preço Final usando a coluna DESCONTO:
-        
-        # Converte o desconto para o formato decimal (ex: 10 passa a ser 0.10)
-        # Assume que o desconto pode vir como 10 (10%) ou 0.1 (10%)
-        df_final['DESCONTO_CALC'] = df_final['DESCONTO'].apply(lambda x: x / 100 if pd.notna(x) and x >= 1 and x <= 100 else x)
-        
-        # Identifica os produtos em promoção (onde DESCONTO não é NaN)
-        is_on_promo = pd.notna(df_final['DESCONTO'])
-        
-        # Calcula o preço final: Preço Original * (1 - Desconto Decimal)
-        df_final.loc[is_on_promo, 'PRECO_FINAL'] = df_final['PRECO'] * (1 - df_final['DESCONTO_CALC'])
-        
-        # Para produtos sem promoção, o PRECO_FINAL é o PRECO original
-        df_final['PRECO_FINAL'] = df_final['PRECO_FINAL'].fillna(df_final['PRECO'])
-        
-        # Define PRECO_PROMOCIONAL com o preço final apenas se houver desconto
-        # Isso garante que a flag 'is_promotion' no render_product_card funcione
-        df_final.loc[is_on_promo, 'PRECO_PROMOCIONAL'] = df_final['PRECO_FINAL']
-        
-        # Limpa colunas de cálculo temporário
-        df_final.drop(columns=['ID_PRODUTO', 'DESCONTO', 'DESCONTO_CALC'], inplace=True, errors='ignore')
+        # Limpa coluna temporária
+        df_final.drop(columns=['ID_PRODUTO'], inplace=True, errors='ignore')
 
     else:
         df_final = df_produtos
@@ -432,8 +409,7 @@ def render_product_card(prod_id, row, key_prefix):
         preco_final = row['PRECO_FINAL']
         preco_original = row['PRECO']
         
-        # A promoção agora é detectada se o PRECO_PROMOCIONAL for diferente de nulo
-        # A coluna PRECO_PROMOCIONAL é preenchida no carregar_catalogo() se houver desconto
+        # A promoção é detectada se o PRECO_PROMOCIONAL tiver um valor não nulo (ou seja, foi preenchido pelo merge)
         is_promotion = pd.notna(row.get('PRECO_PROMOCIONAL')) 
 
         # --- NOVO: Lógica para exibir o selo de promoção ---
