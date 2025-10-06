@@ -15,6 +15,10 @@ SHEET_NAME_CATALOGO = "produtos"
 SHEET_NAME_PEDIDOS = "pedidos"
 SHEET_NAME_PROMOCOES = "promocoes"
 
+# --- Configurações do Repositório de Pedidos Externo (NOVO) ---
+PEDIDOS_REPO_FULL = "ribeiromendes5014-design/fluxo"
+PEDIDOS_BRANCH = "main" 
+
 # --- Controle de Cache para forçar o reload do GitHub ---
 if 'data_version' not in st.session_state:
     st.session_state['data_version'] = 0
@@ -25,7 +29,7 @@ try:
     REPO_NAME_FULL = st.secrets["github"]["repo_name"] 
     BRANCH = st.secrets["github"]["branch"] 
     
-    # URLs de API
+    # URLs de API (Base URL é para o repositório principal, mas será ajustado nas funções)
     GITHUB_RAW_BASE_URL = f"https://raw.githubusercontent.com/{REPO_NAME_FULL}/{BRANCH}"
     GITHUB_API_BASE_URL = f"https://api.github.com/repos/{REPO_NAME_FULL}/contents"
     
@@ -43,7 +47,16 @@ except KeyError:
 def fetch_github_data_v2(sheet_name, version_control):
     """Carrega dados de um CSV do GitHub via API (sem cache da CDN)."""
     csv_filename = f"{sheet_name}.csv"
-    api_url = f"https://api.github.com/repos/{REPO_NAME_FULL}/contents/{csv_filename}?ref={BRANCH}"
+    
+    # --- Lógica para Repositório de Pedidos Externo (AJUSTADO) ---
+    if sheet_name == SHEET_NAME_PEDIDOS:
+        repo_to_use = PEDIDOS_REPO_FULL
+        branch_to_use = PEDIDOS_BRANCH
+    else:
+        repo_to_use = REPO_NAME_FULL
+        branch_to_use = BRANCH
+        
+    api_url = f"https://api.github.com/repos/{repo_to_use}/contents/{csv_filename}?ref={branch_to_use}"
 
     try:
         # Faz a requisição diretamente à API do GitHub
@@ -92,7 +105,17 @@ def carregar_dados(sheet_name):
 def write_csv_to_github(df, sheet_name, commit_message):
     """Obtém o SHA do arquivo e faz o commit do novo DataFrame no GitHub."""
     csv_filename = f"{sheet_name}.csv"
-    api_url = f"{GITHUB_API_BASE_URL}/{csv_filename}"
+    
+    # --- NOVO: Define o repositório e URL API para escrita ---
+    if sheet_name == SHEET_NAME_PEDIDOS:
+        repo_to_write = PEDIDOS_REPO_FULL
+        branch_to_write = PEDIDOS_BRANCH
+    else:
+        repo_to_write = REPO_NAME_FULL
+        branch_to_write = BRANCH
+        
+    GITHUB_API_BASE_URL_WRITE = f"https://api.github.com/repos/{repo_to_write}/contents"
+    api_url = f"{GITHUB_API_BASE_URL_WRITE}/{csv_filename}"
     
     # 1. Obter o SHA atual do arquivo
     response = requests.get(api_url, headers=HEADERS)
@@ -120,7 +143,7 @@ def write_csv_to_github(df, sheet_name, commit_message):
     payload = {
         "message": commit_message,
         "content": content_base64,
-        "branch": BRANCH
+        "branch": branch_to_write # Usa a branch correta para o repositório
     }
     if sha:
         payload["sha"] = sha 
