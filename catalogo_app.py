@@ -22,7 +22,7 @@ BRANCH = os.environ.get("BRANCH")
 GITHUB_BASE_API = f"https://api.github.com/repos/{REPO_NAME}/contents/"
 
 # Fontes de Dados (CSV no GitHub) (MANTIDO)
-SHEET_NAME_CATALOGO_CSV = "produtos.csv" 
+SHEET_NAME_CATALOGO_CSV = "produtos_estoque.csv" 
 SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
 SHEET_NAME_PEDIDOS_CSV = "pedidos.csv" 
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
@@ -425,6 +425,7 @@ else:
         product_id = row['ID'] 
         with cols[i % 4]: 
             render_product_card(product_id, row, key_prefix='prod')
+
 
 
 
