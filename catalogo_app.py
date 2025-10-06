@@ -70,7 +70,7 @@ def get_data_from_github(file_name):
         st.error(f"Ocorreu um erro na leitura do CSV: {e}")
         return None
 
-@st.cache_data(ttl=5)
+@st.cache_data(ttl=60)
 def carregar_promocoes():
     """Carrega as promoções do 'promocoes.csv' do GitHub."""
     df = get_data_from_github(SHEET_NAME_PROMOCOES_CSV)
@@ -336,3 +336,4 @@ else:
         product_id = row['ID'] 
         with cols[i % 4]: 
             render_product_card(product_id, row, key_prefix='prod')
+
