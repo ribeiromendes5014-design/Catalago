@@ -377,9 +377,15 @@ with tab_produtos:
                                 else: st.error("Falha ao atualizar.")
 
                     if st.button("🗑️ Excluir", key=f"del_{produto.get('ID', index)}", type="primary"):
-                        if excluir_produto(produto['ID']):
-                            st.success("Produto excluído!"); st.rerun()
-                        else: st.error("Falha ao excluir.")
+                        if excluir_produto(produto['ID']):
+                            st.success("Produto excluído!")
+                            # --- força recarregar os dados imediatamente ---
+                            time.sleep(0.5)  # mostra o sucesso por meio segundo
+                            # Embora 'carregar_dados' não use cache, é uma boa prática limpar:
+                            st.cache_data.clear()
+                            st.rerun()
+                        else: 
+                            st.error("Falha ao excluir.")
 
 
 with tab_promocoes:
@@ -443,5 +449,6 @@ with tab_promocoes:
                     if excluir_promocao(promo['ID_PROMOCAO']):
                         st.success("Promoção excluída!"); st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
 
