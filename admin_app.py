@@ -457,180 +457,112 @@ tab_pedidos, tab_produtos, tab_promocoes = st.tabs(["Pedidos", "Produtos", "🔥
 # --- VARIÁVEL DE CONTROLE DE VERSÃO JÁ ESTÁ NO TOPO ---
 
 with tab_pedidos:
-    st.header("📋 Pedidos Recebidos"); 
-    if st.button("Recarregar Pedidos"): 
+    st.header("📋 Pedidos Recebidos")
+
+    if st.button("Recarregar Pedidos"):
         # Limpa o estado de separação dos itens ao recarregar
         keys_to_delete = [k for k in st.session_state if k.startswith('pedido_') and k.endswith('_itens_separados')]
         for k in keys_to_delete:
             del st.session_state[k]
-        st.rerun() 
-    
-    df_pedidos_raw = carregar_dados(SHEET_NAME_PEDIDOS); 
+        st.rerun()
+
+    df_pedidos_raw = carregar_dados(SHEET_NAME_PEDIDOS)
     df_catalogo_pedidos = carregar_dados(SHEET_NAME_CATALOGO)
-    
-    if df_pedidos_raw.empty: st.info("Nenhum pedido foi encontrado na planilha.")
+
+    if df_pedidos_raw.empty:
+        st.info("Nenhum pedido foi encontrado na planilha.")
     else:
-        df_pedidos_raw['DATA_HORA'] = pd.to_datetime(df_pedidos_raw['DATA_HORA'], errors='coerce'); st.subheader("🔍 Filtrar Pedidos")
-        col_filtro1, col_filtro2 = st.columns(2); data_filtro = col_filtro1.date_input("Filtrar por data:"); texto_filtro = col_filtro2.text_input("Buscar por cliente ou produto:")
+        df_pedidos_raw['DATA_HORA'] = pd.to_datetime(df_pedidos_raw['DATA_HORA'], errors='coerce')
+
+        st.subheader("🔍 Filtrar Pedidos")
+        col_filtro1, col_filtro2 = st.columns(2)
+        data_filtro = col_filtro1.date_input("Filtrar por data:")
+        texto_filtro = col_filtro2.text_input("Buscar por cliente ou produto:")
+
         df_filtrado = df_pedidos_raw.copy()
-        if data_filtro: df_filtrado = df_filtrado[df_filtrado['DATA_HORA'].dt.date == data_filtro]
+        if data_filtro:
+            df_filtrado = df_filtrado[df_filtrado['DATA_HORA'].dt.date == data_filtro]
         if texto_filtro.strip():
-            texto_filtro = texto_filtro.lower(); df_filtrado = df_filtrado[df_filtrado['NOME_CLIENTE'].astype(str).str.lower().str.contains(texto_filtro) | df_filtrado['ITENS_PEDIDO'].astype(str).str.lower().str.contains(texto_filtro)]
-        st.markdown("---"); pedidos_pendentes = df_filtrado[df_filtrado['STATUS'] != 'Finalizado']; pedidos_finalizados = df_filtrado[df_filtrado['STATUS'] == 'Finalizado']
+            texto_filtro = texto_filtro.lower()
+            df_filtrado = df_filtrado[
+                df_filtrado['NOME_CLIENTE'].astype(str).str.lower().str.contains(texto_filtro)
+                | df_filtrado['ITENS_PEDIDO'].astype(str).str.lower().str.contains(texto_filtro)
+            ]
+
+        st.markdown("---")
+        pedidos_pendentes = df_filtrado[df_filtrado['STATUS'] != 'Finalizado']
+        pedidos_finalizados = df_filtrado[df_filtrado['STATUS'] == 'Finalizado']
+
+        # ======================
+        # PEDIDOS PENDENTES
+        # ======================
         st.header("⏳ Pedidos Pendentes")
-        if pedidos_pendentes.empty: st.info("Nenhum pedido pendente encontrado.")
+        if pedidos_pendentes.empty:
+            st.info("Nenhum pedido pendente encontrado.")
         else:
             for index, pedido in pedidos_pendentes.iloc[::-1].iterrows():
                 id_pedido = pedido['ID_PEDIDO']
                 data_hora_str = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indisponível"
                 titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {data_hora_str} - Total: R$ {pedido['VALOR_TOTAL']}"
+
                 with st.expander(titulo):
                     st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{id_pedido}`")
-                    
-                    # --- NOVO: Exibe itens e retorna o progresso ---
-                    progresso_separacao = exibir_itens_pedido(id_pedido, pedido['itens_json'], df_catalogo_pedidos)
-                    
-                    st.markdown(f"**Progresso de Separação:** {progresso_separacao}%")
-                    st.progress(progresso_separacao / 100) # Barra de progresso
 
-                    # O botão Finalizar Pedido só é habilitado se o progresso for 100%
+                    # ✅ Usa a coluna correta (ITENS_JSON)
+                    progresso_separacao = exibir_itens_pedido(id_pedido, pedido['ITENS_JSON'], df_catalogo_pedidos)
+
+                    st.markdown(f"**Progresso de Separação:** {progresso_separacao}%")
+                    st.progress(progresso_separacao / 100)
+
                     pode_finalizar = progresso_separacao == 100
-                    
+
                     if st.button("✅ Finalizar Pedido", key=f"finalizar_{id_pedido}", disabled=not pode_finalizar):
-                        if atualizar_status_pedido(id_pedido, novo_status="Finalizado"): 
+                        if atualizar_status_pedido(id_pedido, novo_status="Finalizado"):
                             st.success(f"Pedido {id_pedido} finalizado!")
-                            # Limpa o estado de separação após finalizar
                             key_progress = f'pedido_{id_pedido}_itens_separados'
                             if key_progress in st.session_state:
                                 del st.session_state[key_progress]
-                                
-                            st.session_state['data_version'] += 1 
-                            st.rerun() 
-                        else: st.error("Falha ao finalizar pedido.")
-        # O resto do código permanece igual para Pedidos Finalizados
+                            st.session_state['data_version'] += 1
+                            st.rerun()
+                        else:
+                            st.error("Falha ao finalizar pedido.")
+
+        # ======================
+        # PEDIDOS FINALIZADOS
+        # ======================
         st.header("✅ Pedidos Finalizados")
-        if pedidos_finalizados.empty: st.info("Nenhum pedido finalizado encontrado.")
+        if pedidos_finalizados.empty:
+            st.info("Nenhum pedido finalizado encontrado.")
         else:
-              for index, pedido in pedidos_finalizados.iloc[::-1].iterrows():
+            for index, pedido in pedidos_finalizados.iloc[::-1].iterrows():
                 data_hora_str = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indisponível"
                 titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {data_hora_str} - Total: R$ {pedido['VALOR_TOTAL']}"
+
                 with st.expander(titulo):
                     st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{pedido['ID_PEDIDO']}`")
+
                     col_reverter, col_excluir = st.columns(2)
                     with col_reverter:
                         if st.button("↩️ Reverter para Pendente", key=f"reverter_{pedido['ID_PEDIDO']}", use_container_width=True):
-                            if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status=""): 
+                            if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status=""):
                                 st.success(f"Pedido {pedido['ID_PEDIDO']} revertido.")
-                                st.session_state['data_version'] += 1 
-                                st.rerun() 
-                            else: st.error("Falha ao reverter status do pedido.")
+                                st.session_state['data_version'] += 1
+                                st.rerun()
+                            else:
+                                st.error("Falha ao reverter status do pedido.")
                     with col_excluir:
                         if st.button("🗑️ Excluir Pedido", type="primary", key=f"excluir_{pedido['ID_PEDIDO']}", use_container_width=True):
-                            if excluir_pedido(pedido['ID_PEDIDO']): 
+                            if excluir_pedido(pedido['ID_PEDIDO']):
                                 st.success(f"Pedido {pedido['ID_PEDIDO']} excluído!")
-                                st.session_state['data_version'] += 1 
-                                st.rerun() 
-                            else: st.error("Falha ao excluir o pedido.")
-                    st.markdown("---"); exibir_itens_pedido(pedido['ID_PEDIDO'], pedido['itens_json'], df_catalogo_pedidos)
-
-
-with tab_produtos:
-    st.header("🛍️ Gerenciamento de Produtos")
-    import time
-    if int(time.time()) % 5 == 0:
-        pass
-        
-    with st.expander("➕ Cadastrar Novo Produto", expanded=False):
-        with st.form("form_novo_produto", clear_on_submit=True):
-            col1, col2 = st.columns(2); nome_prod = col1.text_input("Nome do Produto*"); preco_prod = col1.number_input("Preço (R$)*", min_value=0.0, format="%.2f", step=0.50); link_imagem_prod = col1.text_input("URL da Imagem"); desc_curta_prod = col2.text_input("Descrição Curta"); desc_longa_prod = col2.text_area("Descrição Longa"); disponivel_prod = col2.selectbox("Disponível?", ("Sim", "Não"))
-            
-            # --- BLOCo ALTERADO ABAIXO ---
-            if st.form_submit_button("Cadastrar Produto"):
-                if not nome_prod or preco_prod <= 0: 
-                    st.warning("Preencha Nome e Preço.")
-                elif adicionar_produto(nome_prod, preco_prod, desc_curta_prod, desc_longa_prod, link_imagem_prod, disponivel_prod):
-                    st.success("Produto cadastrado!")
-                    st.session_state['data_version'] += 1  # Incrementa a versão
-                    st.rerun()  # Força o Streamlit a recarregar e usar a nova versão
-                else: 
-                    st.error("Falha ao cadastrar.")
-    
-    st.markdown("---")
-    st.subheader("Catálogo Atual")
-    
-    df_produtos = carregar_dados(SHEET_NAME_CATALOGO)
-    if df_produtos.empty:
-        st.warning("Nenhum produto encontrado.")
-    else:
-        for index, produto in df_produtos.iterrows():
-            with st.container(border=True):
-                col1, col2 = st.columns([1, 4])
-                
-                link_imagem_produto = str(produto.get("LINKIMAGEM")).strip() 
-                
-                # NOVO CÓDIGO DE VERIFICAÇÃO DE URL (Corrige MediaFileStorageError)
-                is_valid_url = link_imagem_produto.lower().startswith("http")
-                
-                with col1:
-                    if not is_valid_url:
-                          img_url = "https://via.placeholder.com/150?text=Sem+Imagem"
-                    else:
-                          img_url = link_imagem_produto
-                          
-                    st.image(img_url, width=100)
-                    
-                with col2:
-                    st.markdown(f"**{produto.get('NOME', 'N/A')}** (ID: {produto.get('ID', 'N/A')})")
-                    st.markdown(f"**Preço:** R$ {produto.get('PRECO', 'N/A')}")
-                    with st.popover("📝 Editar"):
-                        # --- CORREÇÃO DA CHAVE DO FORMULÁRIO ---
-                        form_key = f"edit_form_{produto.get('ID', index)}_{index}" 
-                        
-                        with st.form(form_key, clear_on_submit=True):
-                            st.markdown(f"Editando: **{produto.get('NOME', 'N/A')}**")
-                            preco_val_str = str(produto.get('PRECO', '0')).replace(',','.')
-                            try:
-                                preco_val = float(preco_val_str)
-                            except ValueError:
-                                preco_val = 0.0
-                            
-                            nome_edit = st.text_input("Nome", value=produto.get('NOME', ''))
-                            preco_edit = st.number_input("Preço", value=preco_val, format="%.2f")
-                            link_edit = st.text_input("Link Imagem", value=produto.get('LINKIMAGEM', ''))
-                            curta_edit = st.text_input("Desc. Curta", value=produto.get('DESCRICAOCURTA', ''))
-                            longa_edit = st.text_area("Desc. Longa", value=produto.get('DESCRICAOLONGA', ''))
-                            
-                            disponivel_val = produto.get('DISPONIVEL', 'Sim')
-                            if isinstance(disponivel_val, str):
-                                disponivel_val = disponivel_val.strip().title()
+                                st.session_state['data_version'] += 1
+                                st.rerun()
                             else:
-                                disponivel_val = 'Sim' 
-                            
-                            try:
-                                default_index = ["Sim", "Não"].index(disponivel_val)
-                            except ValueError:
-                                default_index = 0
-                                
-                            disponivel_edit = st.selectbox("Disponível", ["Sim", "Não"], index=default_index)
+                                st.error("Falha ao excluir o pedido.")
 
-                            if st.form_submit_button("Salvar Alterações"):
-                                if atualizar_produto(produto['ID'], nome_edit, preco_edit, curta_edit, longa_edit, link_edit, disponivel_edit):
-                                    st.success("Produto atualizado!")
-                                    st.session_state['data_version'] += 1 
-                                    st.rerun() 
-                                else: st.error("Falha ao atualizar.")
+                    st.markdown("---")
+                    # ✅ Também usa a coluna ITENS_JSON aqui
+                    exibir_itens_pedido(pedido['ID_PEDIDO'], pedido['ITENS_JSON'], df_catalogo_pedidos)
 
-                    # Lógica de exclusão com atualização imediata (LÓGICA REQUISITADA)
-                    # --- CORREÇÃO DA CHAVE DO BOTÃO APLICADA AQUI ---
-                    delete_button_key = f"del_{produto.get('ID', index)}_{index}"
-                    if st.button("🗑️ Excluir", key=delete_button_key, type="primary"):
-                        if excluir_produto(produto['ID']):
-                            st.success("Produto excluído!")
-                            st.session_state['data_version'] += 1 # 🔁 Força o reload do cache
-                            time.sleep(0.5)
-                            st.rerun()
-                        else:
-                            st.error("Falha ao excluir.")
 
 
 with tab_promocoes:
@@ -735,6 +667,7 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
 
 
