@@ -347,13 +347,17 @@ with tab_produtos:
     with st.expander("➕ Cadastrar Novo Produto", expanded=False):
         with st.form("form_novo_produto", clear_on_submit=True):
             col1, col2 = st.columns(2); nome_prod = col1.text_input("Nome do Produto*"); preco_prod = col1.number_input("Preço (R$)*", min_value=0.0, format="%.2f", step=0.50); link_imagem_prod = col1.text_input("URL da Imagem"); desc_curta_prod = col2.text_input("Descrição Curta"); desc_longa_prod = col2.text_area("Descrição Longa"); disponivel_prod = col2.selectbox("Disponível?", ("Sim", "Não"))
+            
+            # --- BLOCo ALTERADO ABAIXO ---
             if st.form_submit_button("Cadastrar Produto"):
-                if not nome_prod or preco_prod <= 0: st.warning("Preencha Nome e Preço.")
+                if not nome_prod or preco_prod <= 0: 
+                    st.warning("Preencha Nome e Preço.")
                 elif adicionar_produto(nome_prod, preco_prod, desc_curta_prod, desc_longa_prod, link_imagem_prod, disponivel_prod):
                     st.success("Produto cadastrado!")
-                    st.session_state['data_version'] += 1 
-                    st.rerun() 
-                else: st.error("Falha ao cadastrar.")
+                    st.session_state['data_version'] += 1  # Incrementa a versão
+                    st.rerun()  # Força o Streamlit a recarregar e usar a nova versão
+                else: 
+                    st.error("Falha ao cadastrar.")
     
     st.markdown("---")
     st.subheader("Catálogo Atual")
@@ -489,3 +493,4 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
