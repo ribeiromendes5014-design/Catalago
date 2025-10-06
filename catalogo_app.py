@@ -237,6 +237,14 @@ html, body, .main, .stApp {{
     background-attachment: fixed; 
 }}
 
+/* Esconde a barra de cabeçalho padrão do Streamlit */
+[data-testid="stHeader"] {{ visibility: hidden !important; }}
+/* Remove o padding padrão do Streamlit no contêiner principal */
+div[data-testid="stAppViewBlockContainer"] {{
+    padding-top: 0 !important;
+}}
+
+
 /* CORREÇÃO 1: FATOR CHAVE para fixar a barra e garantir que ela ocupe toda a largura */
 .pink-bar-container {{ 
     background-color: #E91E63; 
@@ -259,10 +267,6 @@ div.block-container {{
     padding-top: 160px !important; /* VALOR AUMENTADO E FORÇADO */
     margin-top: 0; /* Remove a margem superior desnecessária */
 }}
-
-/* Esconde o cabeçalho original (que pode estar duplicado/interferindo) */
-[data-testid="stHeader"] {{ visibility: hidden; }}
-
 /* ---------------------------------------------------- */
 /* OUTROS ESTILOS (MANTIDOS) */
 /* ---------------------------------------------------- */
@@ -286,7 +290,7 @@ st_autorefresh(interval=10000, key="auto_refresh_catalogo")
 # --- CABEÇALHO (REMOVIDO TÍTULO PARA EVITAR SOBREPOSIÇÃO) ---
 col_logo, col_titulo = st.columns([0.1, 5]); col_logo.markdown("<h3>💖</h3>", unsafe_allow_html=True); # Removido col_titulo.title(...)
 
-# --- BARRA ROSA (PESQUISA E CARRINHO) (MANTEVE O MARKDOWN PARA INJETAR O CONTÊINER FIXO) ---
+# --- BARRA ROSA (PESQUISA E CARRINHO) (AGORA DEVE ESTAR FIXA) ---
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
