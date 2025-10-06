@@ -212,7 +212,7 @@ st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sid
 
 # --- CSS PRINCIPAL E CARROSSEL CSS (TUDO JUNTO) ---
 # A estrutura de aspas triplas e a tag <style> garante que o Python ignore o CSS.
-CSS_GERAL = f"""
+CSS_GERAL = """
 <style>
     /* Estilos Streamlit e Globais */
     .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}); background-size: cover; background-attachment: fixed; }}
@@ -428,3 +428,4 @@ else:
         """, unsafe_allow_html=True)
         
         st.caption("✨ Role a barra abaixo (ou deslize a tela) para ver todos os produtos. Use a barra de pesquisa para encontrar e adicionar produtos.")
+
