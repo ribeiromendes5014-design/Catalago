@@ -158,24 +158,76 @@ def excluir_pedido(id_pedido):
     return write_csv_to_github(df, SHEET_NAME_PEDIDOS, commit_msg)
 
 
-def exibir_itens_pedido(pedido_json, df_catalogo):
+def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
+    """
+    Exibe os itens do pedido com um checkbox de separação e retorna a
+    porcentagem de itens separados.
+    """
     try:
         detalhes_pedido = json.loads(pedido_json)
-        for item in detalhes_pedido.get('itens', []):
+        itens = detalhes_pedido.get('itens', [])
+        total_itens = len(itens)
+        itens_separados = 0
+        
+        # Cria um estado de sessão para o progresso do pedido, se ainda não existir
+        key_progress = f'pedido_{id_pedido}_itens_separados'
+        if key_progress not in st.session_state:
+            # Inicializa a lista de checks: False para cada item
+            st.session_state[key_progress] = [False] * total_itens
+            
+        for i, item in enumerate(itens):
             link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
             item_id = pd.to_numeric(item.get('id'), errors='coerce')
             
+            # Busca link da imagem no catálogo
             if not df_catalogo.empty and not pd.isna(item_id) and not df_catalogo[df_catalogo['ID'] == int(item_id)].empty: 
                 link_na_tabela = str(df_catalogo[df_catalogo['ID'] == int(item_id)].iloc[0].get('LINKIMAGEM', link_imagem)).strip()
                 
                 if link_na_tabela.lower() != 'nan' and link_na_tabela:
                     link_imagem = link_na_tabela
 
-            col_img, col_detalhes = st.columns([1, 4]); col_img.image(link_imagem, width=100)
-            quantidade = item.get('qtd', item.get('quantidade', 0)); preco_unitario = float(item.get('preco', 0.0)); subtotal = item.get('subtotal')
+            col_check, col_img, col_detalhes = st.columns([0.5, 1, 3.5])
+            
+            # --- Lógica do Checkbox de Separação (Novo) ---
+            # Atualiza o estado da sessão quando o checkbox é clicado
+            checked = col_check.checkbox(
+                label="Separado",
+                value=st.session_state[key_progress][i],
+                key=f"check_{id_pedido}_{i}",
+            )
+            
+            # Armazena o estado do checkbox
+            if checked != st.session_state[key_progress][i]:
+                st.session_state[key_progress][i] = checked
+                # Forçar um pequeno rerun para a barra de progresso atualizar imediatamente
+                st.rerun() 
+            # --- Fim Lógica do Checkbox ---
+
+            col_img.image(link_imagem, width=100)
+            quantidade = item.get('qtd', item.get('quantidade', 0))
+            preco_unitario = float(item.get('preco', 0.0))
+            subtotal = item.get('subtotal')
             if subtotal is None: subtotal = preco_unitario * quantidade
-            col_detalhes.markdown(f"**Produto:** {item.get('nome', 'N/A')}\n\n**Quantidade:** {quantidade}\n\n**Subtotal:** R$ {subtotal:.2f}"); st.markdown("---")
-    except Exception as e: st.error(f"Erro ao processar itens do pedido: {e}")
+            
+            col_detalhes.markdown(
+                f"**Produto:** {item.get('nome', 'N/A')}\n\n"
+                f"**Quantidade:** {quantidade}\n\n"
+                f"**Subtotal:** R$ {subtotal:.2f}"
+            ); 
+            st.markdown("---")
+            
+            if st.session_state[key_progress][i]:
+                itens_separados += 1
+                
+        # Calcula e retorna a porcentagem de progresso
+        if total_itens > 0:
+            progresso = int((itens_separados / total_itens) * 100)
+            return progresso
+        return 0
+        
+    except Exception as e: 
+        st.error(f"Erro ao processar itens do pedido: {e}")
+        return 0 # Retorna 0% em caso de erro
 
 # --- FUNÇÕES CRUD PARA PRODUTOS (ESCRITA HABILITADA) ---
 
@@ -297,7 +349,12 @@ tab_pedidos, tab_produtos, tab_promocoes = st.tabs(["Pedidos", "Produtos", "🔥
 
 with tab_pedidos:
     st.header("📋 Pedidos Recebidos"); 
-    if st.button("Recarregar Pedidos"): st.rerun() 
+    if st.button("Recarregar Pedidos"): 
+        # Limpa o estado de separação dos itens ao recarregar
+        keys_to_delete = [k for k in st.session_state if k.startswith('pedido_') and k.endswith('_itens_separados')]
+        for k in keys_to_delete:
+            del st.session_state[k]
+        st.rerun() 
     
     df_pedidos_raw = carregar_dados(SHEET_NAME_PEDIDOS); 
     df_catalogo_pedidos = carregar_dados(SHEET_NAME_CATALOGO)
@@ -315,17 +372,33 @@ with tab_pedidos:
         if pedidos_pendentes.empty: st.info("Nenhum pedido pendente encontrado.")
         else:
             for index, pedido in pedidos_pendentes.iloc[::-1].iterrows():
+                id_pedido = pedido['ID_PEDIDO']
                 data_hora_str = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indisponível"
                 titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {data_hora_str} - Total: R$ {pedido['VALOR_TOTAL']}"
                 with st.expander(titulo):
-                    st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{pedido['ID_PEDIDO']}`")
-                    if st.button("✅ Finalizar Pedido", key=f"finalizar_{pedido['ID_PEDIDO']}"):
-                        if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status="Finalizado"): 
-                            st.success(f"Pedido {pedido['ID_PEDIDO']} finalizado!")
+                    st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{id_pedido}`")
+                    
+                    # --- NOVO: Exibe itens e retorna o progresso ---
+                    progresso_separacao = exibir_itens_pedido(id_pedido, pedido['ITENS_PEDIDO'], df_catalogo_pedidos)
+                    
+                    st.markdown(f"**Progresso de Separação:** {progresso_separacao}%")
+                    st.progress(progresso_separacao / 100) # Barra de progresso
+
+                    # O botão Finalizar Pedido só é habilitado se o progresso for 100%
+                    pode_finalizar = progresso_separacao == 100
+                    
+                    if st.button("✅ Finalizar Pedido", key=f"finalizar_{id_pedido}", disabled=not pode_finalizar):
+                        if atualizar_status_pedido(id_pedido, novo_status="Finalizado"): 
+                            st.success(f"Pedido {id_pedido} finalizado!")
+                            # Limpa o estado de separação após finalizar
+                            key_progress = f'pedido_{id_pedido}_itens_separados'
+                            if key_progress in st.session_state:
+                                del st.session_state[key_progress]
+                                
                             st.session_state['data_version'] += 1 
                             st.rerun() 
                         else: st.error("Falha ao finalizar pedido.")
-                    st.markdown("---"); exibir_itens_pedido(pedido['ITENS_PEDIDO'], df_catalogo_pedidos)
+        # O resto do código permanece igual para Pedidos Finalizados
         st.header("✅ Pedidos Finalizados")
         if pedidos_finalizados.empty: st.info("Nenhum pedido finalizado encontrado.")
         else:
@@ -349,17 +422,13 @@ with tab_pedidos:
                                 st.session_state['data_version'] += 1 
                                 st.rerun() 
                             else: st.error("Falha ao excluir o pedido.")
-                    st.markdown("---"); exibir_itens_pedido(pedido['ITENS_PEDIDO'], df_catalogo_pedidos)
+                    st.markdown("---"); exibir_itens_pedido(pedido['ID_PEDIDO'], pedido['ITENS_PEDIDO'], df_catalogo_pedidos)
 
 
 with tab_produtos:
     st.header("🛍️ Gerenciamento de Produtos")
     import time
     if int(time.time()) % 5 == 0:
-        # A remoção do st.rerun() a cada 5 segundos é recomendada aqui,
-        # pois pode causar recarregamento excessivo e problemas com o cache.
-        # Caso o recarregamento imediato seja estritamente necessário para o fluxo de trabalho, mantenha,
-        # mas para fins de estabilidade, esta linha foi removida.
         pass
         
     with st.expander("➕ Cadastrar Novo Produto", expanded=False):
@@ -404,13 +473,12 @@ with tab_produtos:
                     with st.popover("📝 Editar"):
                         with st.form(f"edit_form_{produto.get('ID', index)}", clear_on_submit=True):
                             st.markdown(f"Editando: **{produto.get('NOME', 'N/A')}**")
-                            # Conversão segura do PRECO para float
                             preco_val_str = str(produto.get('PRECO', '0')).replace(',','.')
                             try:
                                 preco_val = float(preco_val_str)
                             except ValueError:
                                 preco_val = 0.0
-
+                            
                             nome_edit = st.text_input("Nome", value=produto.get('NOME', ''))
                             preco_edit = st.number_input("Preço", value=preco_val, format="%.2f")
                             link_edit = st.text_input("Link Imagem", value=produto.get('LINKIMAGEM', ''))
@@ -456,7 +524,6 @@ with tab_promocoes:
             st.warning("Cadastre produtos antes de criar uma promoção.")
         else:
             with st.form("form_nova_promocao", clear_on_submit=True):
-                # Conversão segura do PRECO para float
                 df_catalogo_promo['PRECO_FLOAT'] = pd.to_numeric(df_catalogo_promo['PRECO'].astype(str).str.replace(',', '.'), errors='coerce') 
                 opcoes_produtos = {f"{row['NOME']} (R$ {row['PRECO_FLOAT']:.2f})": row['ID'] for _, row in df_catalogo_promo.dropna(subset=['PRECO_FLOAT', 'ID']).iterrows()}
                 
@@ -494,7 +561,7 @@ with tab_promocoes:
                 with st.popover("📝 Editar Promoção"):
                     with st.form(f"edit_promo_{promo.get('ID_PROMOCAO', index)}", clear_on_submit=True):
                         st.markdown(f"Editando: **{promo.get('NOME_PRODUTO', 'N/A')}**")
-                        # Conversão segura do PRECO_PROMOCIONAL
+                        
                         preco_promo_val_str = str(promo.get('PRECO_PROMOCIONAL', '0')).replace(',','.')
                         try:
                              preco_promo_val = float(preco_promo_val_str)
@@ -503,32 +570,28 @@ with tab_promocoes:
 
                         preco_promo_edit = st.number_input("Preço Promocional", value=preco_promo_val, format="%.2f")
                         
-                        # --- CORREÇÃO DO ERRO DE TYPE ERROR AQUI ---
+                        # --- CORREÇÃO DO ERRO DE TYPE ERROR (Já aplicada na versão anterior) ---
                         
-                        # Garante que DATA_INICIO é uma string válida para parsear
                         di_val_str = str(promo.get('DATA_INICIO', '')).strip()
                         if di_val_str and len(di_val_str) >= 10:
                             di_val = datetime.strptime(di_val_str, '%Y-%m-%d').date()
                         else:
                             di_val = datetime.now().date()
                             
-                        # Garante que DATA_FIM é uma string válida para parsear
                         df_val_str = str(promo.get('DATA_FIM', '')).strip()
                         if df_val_str and len(df_val_str) >= 10:
                             df_val = datetime.strptime(df_val_str, '%Y-%m-%d').date()
                         else:
-                            df_val = di_val # Se não houver data de fim, usa a data de início
+                            df_val = di_val 
 
                         data_inicio_edit = st.date_input("Data de Início", value=di_val, key=f"di_{promo.get('ID_PROMOCAO', index)}")
                         data_fim_edit = st.date_input("Data de Fim", value=df_val, min_value=data_inicio_edit, key=f"df_{promo.get('ID_PROMOCAO', index)}")
                         
-                        # --- FIM DA CORREÇÃO ---
-
                         status_edit = st.selectbox("Status", ["Ativa", "Inativa"], index=["Ativa", "Inativa"].index(promo.get('STATUS', 'Ativa')), key=f"st_{promo.get('ID_PROMOCAO', index)}")
                         
                         if st.form_submit_button("Salvar"):
-                            # Ajusta a data de fim para string vazia se for igual à data de início e a original era vazia
                             data_fim_para_salvar = ""
+                            # Salva a data de fim apenas se ela não era vazia ou se foi alterada para um valor válido
                             if df_val_str or data_fim_edit > data_inicio_edit:
                                 data_fim_para_salvar = data_fim_edit.strftime('%Y-%m-%d')
                                 
