@@ -31,32 +31,29 @@ if 'carrinho' not in st.session_state:
 
 # --- Headers para Autenticação do GitHub ---
 def get_github_headers(content_type='json'):
-    """Retorna os cabeçalhos de autorização e aceitação."""
+    """Retorna os cabeçalhos de autorização e aceitação para escrita."""
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
     }
-    if content_type == 'raw':
-        # Para leitura direta do conteúdo do arquivo raw.githubusercontent
-        headers["Accept"] = "application/vnd.github.v3.raw"
-    elif content_type == 'json':
-        # Para interações com a API de Conteúdo (leitura de SHA, escrita)
+    # Para interações com a API de Conteúdo (leitura de SHA, escrita)
+    if content_type == 'json':
         headers["Accept"] = "application/vnd.github.v3+json"
     
     return headers
 
-# --- Funções de Conexão GITHUB (LEITURA) ---
+# --- Funções de Conexão GITHUB (LEITURA PÚBLICA) ---
 
 def get_data_from_github(file_name):
     """
-    Faz a requisição HTTP para obter o conteúdo RAW do CSV do GitHub,
-    usando a URL raw.githubusercontent.com e Token.
+    Faz a requisição HTTP para obter o conteúdo RAW do CSV do GitHub.
+    Usa a URL pública (raw.githubusercontent.com) sem Token de leitura.
     """
-    # CORRIGIDO: Usa o REPO_NAME completo (owner/repo) e BRANCH
+    # URL completa, usando o REPO_NAME e BRANCH
     file_url = f"https://raw.githubusercontent.com/{REPO_NAME}/{BRANCH}/{file_name}"
     
     try:
-        # Usa o header 'raw' para obter o conteúdo de texto diretamente
-        response = requests.get(file_url, headers=get_github_headers(content_type='raw'))
+        # Requisição pública (sem o header 'Authorization')
+        response = requests.get(file_url) 
         response.raise_for_status() 
         
         # Lê o conteúdo de texto retornado
@@ -65,17 +62,12 @@ def get_data_from_github(file_name):
 
     except requests.exceptions.HTTPError as e:
         if response.status_code == 404:
-            st.error(f"Erro 404: Arquivo '{file_name}' não encontrado. URL: {file_url}")
-        elif response.status_code == 403:
-             st.error(f"Erro 403 (Limite de Taxa): O limite do Token do GitHub foi atingido ou o token não tem permissão de leitura. URL: {file_url}")
+            st.error(f"Erro 404: Arquivo '{file_name}' não encontrado. Verifique se o nome do arquivo/repo está 100% correto.")
         else:
-            st.error(f"Erro ao acessar o GitHub. Status {response.status_code}. URL: {file_url}")
-        return None
-    except KeyError:
-        st.error("Erro de Token: Verifique se a chave 'token' está configurada corretamente no secrets.toml.")
+            st.error(f"Erro ao acessar o GitHub. Status {response.status_code}. URL: {file_url}. Detalhe: {e}")
         return None
     except Exception as e:
-        st.error(f"Ocorreu um erro ao carregar o arquivo '{file_name}': {e}")
+        st.error(f"Ocorreu um erro na leitura do CSV: {e}")
         return None
 
 @st.cache_data(ttl=5)
@@ -134,6 +126,7 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
     headers_get = get_github_headers(content_type='json')
     
     try:
+        # A requisição GET AQUI DEVE USAR AUTENTICAÇÃO, pois a Content API exige.
         response_get = requests.get(api_url, headers=headers_get)
         response_get.raise_for_status()
         
@@ -146,7 +139,7 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
         if response_get.status_code == 404:
             st.error(f"Erro 404: O arquivo '{file_path}' não existe. Crie um CSV vazio com os cabeçalhos para pedidos: 'timestamp,data_hora,nome_cliente,contato,itens_json,valor_total'")
             return False
-        st.error(f"Erro ao obter o SHA do arquivo no GitHub: {e}")
+        st.error(f"Erro ao obter o SHA do arquivo no GitHub (Leitura para Escrita): {e}")
         return False
     except Exception as e:
         st.error(f"Erro na decodificação do CSV: {e}")
@@ -155,7 +148,6 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
     # 2. Adicionar o novo pedido ao conteúdo (garantindo que o JSON esteja entre aspas)
     novo_registro = f"\n{int(datetime.now().timestamp())},\"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\",\"{nome_cliente}\",\"{contato_cliente}\",\"{itens_json.replace('"', '""')}\",\"{valor_total:.2f}\""
     
-    # Remove espaços em branco do início/fim para garantir que o CSV fique limpo
     new_content = current_content.strip() + novo_registro + "\n"
     
     # 3. Codificar o novo conteúdo em Base64
