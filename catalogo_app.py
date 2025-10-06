@@ -112,25 +112,44 @@ def carregar_promocoes():
 
 @st.cache_data(ttl=2)
 def carregar_catalogo():
-    """Carrega o catálogo, aplica as promoções e prepara o DataFrame."""
+    """Carrega o catálogo, aplica promoções e prepara o DataFrame de forma robusta."""
     df_produtos = get_data_from_github(SHEET_NAME_CATALOGO_CSV)
     
     if df_produtos is None or df_produtos.empty:
         st.warning("Catálogo indisponível. Verifique o arquivo 'produtos_estoque.csv' no GitHub.")
         return pd.DataFrame()
     
-    colunas_essenciais = ['PRECOVISTA', 'ID', 'NOME', 'FOTOURL']
-    for col in colunas_essenciais:
-        if col not in df_produtos.columns:
-            st.error(f"Coluna essencial '{col}' não encontrada no 'produtos_estoque.csv'. Verifique o cabeçalho.")
-            return pd.DataFrame()
-        
-    df_produtos.rename(columns={
-        'PRECOVISTA': 'PRECO',
-        'FOTOURL': 'LINKIMAGEM',
-        'MARCA': 'DESCRICAOCURTA',
-    }, inplace=True)
+    # --- LÓGICA ROBUSTA PARA ENCONTRAR E RENOMEAR COLUNAS ---
     
+    # 1. Checa o mínimo necessário para o app funcionar
+    colunas_minimas = ['PRECOVISTA', 'ID', 'NOME']
+    for col in colunas_minimas:
+        if col not in df_produtos.columns:
+            st.error(f"Coluna essencial '{col}' não encontrada no 'produtos_estoque.csv'. O aplicativo não pode continuar.")
+            return pd.DataFrame()
+
+    # 2. Busca automática pela coluna de imagem
+    coluna_foto_encontrada = None
+    nomes_possiveis_foto = ['FOTOURL', 'LINKIMAGEM', 'FOTO_URL', 'IMAGEM', 'URL_FOTO', 'LINK']
+    for nome in nomes_possiveis_foto:
+        if nome in df_produtos.columns:
+            coluna_foto_encontrada = nome
+            break
+            
+    # 3. Cria o mapa de renomeação dinamicamente
+    mapa_renomeacao = {
+        'PRECOVISTA': 'PRECO',
+        'MARCA': 'DESCRICAOCURTA',
+    }
+    if coluna_foto_encontrada:
+        mapa_renomeacao[coluna_foto_encontrada] = 'LINKIMAGEM'
+    else:
+        st.warning("Nenhuma coluna de imagem encontrada (Ex: FOTOURL, IMAGEM). Os produtos serão exibidos sem fotos.")
+        df_produtos['LINKIMAGEM'] = "" # Cria coluna vazia para evitar erros
+
+    df_produtos.rename(columns=mapa_renomeacao, inplace=True)
+    # --- FIM DA LÓGICA ROBUSTA ---
+
     if 'DISPONIVEL' not in df_produtos.columns:
         df_produtos['DISPONIVEL'] = 'SIM'
     if 'DESCRICAOLONGA' not in df_produtos.columns:
@@ -211,10 +230,10 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
     
     novo_registro = f'\n"{id_pedido}","{data_hora}","{nome_cliente}","{contato_cliente}","{itens_pedido_vazio}","{valor_total:.2f}","{link_imagem}","{status}","{escaped_itens_json}"'
     
-    if current_content.strip() == novo_cabecalho:
+    if current_content.strip() and current_content.strip() != novo_cabecalho:
         new_content = current_content.strip() + novo_registro
     else:
-        new_content = current_content.strip() + novo_registro
+        new_content = novo_cabecalho + novo_registro
     
     encoded_content = base64.b64encode(new_content.encode('utf-8')).decode('utf-8')
     
@@ -347,7 +366,6 @@ with col_carrinho:
                 contato = st.text_input("Seu Contato (WhatsApp/E-mail):")
                 if st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True):
                     if nome and contato:
-                        # CORREÇÃO: Adiciona o campo 'imagem' ao JSON salvo
                         detalhes = {
                             "total": total_acumulado,
                             "itens": [
@@ -411,7 +429,6 @@ def render_product_card(prod_id, row, key_prefix):
                 st.markdown(f"<h4 style='color: #880E4F; margin:0; line-height:2.5;'>R$ {preco_final:.2f}</h4>", unsafe_allow_html=True)
                 
         with col_botao:
-            # CORREÇÃO: Passa a linha inteira 'row' para a função
             if st.button("➕ Adicionar", key=key_prefix, use_container_width=True):
                 adicionar_ao_carrinho(prod_id, row)
                 st.rerun()
