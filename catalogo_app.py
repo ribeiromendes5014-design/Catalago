@@ -241,7 +241,7 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 
 
 # --- ATUALIZAÇÃO AUTOMÁTICA (MANTIDO) ---
-st_autorefresh(interval=60000, key="auto_refresh_catalogo")
+st_autorefresh(interval=5000, key="auto_refresh_catalogo")
 
 
 # --- CABEÇALHO (MANTIDO) ---
@@ -360,5 +360,6 @@ else:
         product_id = row['ID'] 
         with cols[i % 4]: 
             render_product_card(product_id, row, key_prefix='prod')
+
 
 
