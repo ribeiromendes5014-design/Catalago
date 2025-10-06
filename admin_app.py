@@ -7,7 +7,6 @@ import time
 import requests 
 import base64
 import numpy as np 
-from streamlit_autorefresh import st_autorefresh
 import random
 from io import StringIO
 
@@ -507,6 +506,7 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
 
 
