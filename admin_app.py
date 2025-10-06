@@ -46,11 +46,9 @@ except KeyError:
 @st.cache_data(ttl=5)
 def fetch_github_data_v2(sheet_name, version_control):
     """Carrega dados de um CSV do GitHub via API (sem cache da CDN)."""
-    # Renomeia o nome do arquivo para o novo padrão se for o catálogo
-    if sheet_name == "produtos": # Verifica o nome da sheet passada, se for o antigo, usa o novo
-        csv_filename = f"{SHEET_NAME_CATALOGO}.csv"
-    else:
-        csv_filename = f"{sheet_name}.csv"
+    
+    # Define o nome do arquivo a ser buscado no GitHub
+    csv_filename = f"{sheet_name}.csv"
     
     # --- Lógica para Repositório de Pedidos Externo (AJUSTADO) ---
     if sheet_name == SHEET_NAME_PEDIDOS:
@@ -60,7 +58,6 @@ def fetch_github_data_v2(sheet_name, version_control):
         repo_to_use = REPO_NAME_FULL
         branch_to_use = BRANCH
         
-    # ATENÇÃO: Se sheet_name for "produtos_estoque", csv_filename será "produtos_estoque.csv"
     api_url = f"https://api.github.com/repos/{repo_to_use}/contents/{csv_filename}?ref={branch_to_use}"
 
     try:
@@ -111,19 +108,15 @@ def write_csv_to_github(df, sheet_name, commit_message):
     """Obtém o SHA do arquivo e faz o commit do novo DataFrame no GitHub."""
     
     # Determina o nome do arquivo no GitHub (usa o nome real da planilha)
-    if sheet_name == "produtos": 
-        csv_filename = f"{SHEET_NAME_CATALOGO}.csv"
+    csv_filename = f"{sheet_name}.csv"
+        
+    # --- NOVO: Define o repositório e URL API para escrita ---
+    if sheet_name == SHEET_NAME_PEDIDOS:
+        repo_to_write = PEDIDOS_REPO_FULL
+        branch_to_write = PEDIDOS_BRANCH
+    else:
         repo_to_write = REPO_NAME_FULL
         branch_to_write = BRANCH
-    else:
-        csv_filename = f"{sheet_name}.csv"
-        # --- NOVO: Define o repositório e URL API para escrita ---
-        if sheet_name == SHEET_NAME_PEDIDOS:
-            repo_to_write = PEDIDOS_REPO_FULL
-            branch_to_write = PEDIDOS_BRANCH
-        else:
-            repo_to_write = REPO_NAME_FULL
-            branch_to_write = BRANCH
         
     GITHUB_API_BASE_URL_WRITE = f"https://api.github.com/repos/{repo_to_write}/contents"
     api_url = f"{GITHUB_API_BASE_URL_WRITE}/{csv_filename}"
@@ -504,8 +497,11 @@ with tab_produtos:
                 
                 link_imagem_produto = str(produto.get("LINKIMAGEM")).strip() 
                 
+                # NOVO CÓDIGO DE VERIFICAÇÃO DE URL (Corrige MediaFileStorageError)
+                is_valid_url = link_imagem_produto.lower().startswith("http")
+                
                 with col1:
-                    if link_imagem_produto.lower() == 'nan' or not link_imagem_produto:
+                    if not is_valid_url:
                           img_url = "https://via.placeholder.com/150?text=Sem+Imagem"
                     else:
                           img_url = link_imagem_produto
