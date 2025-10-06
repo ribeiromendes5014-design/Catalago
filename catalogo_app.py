@@ -77,7 +77,7 @@ def get_data_from_github(file_name):
         st.error(f"Ocorreu um erro na leitura do CSV: {e}")
         return None
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=5)
 def carregar_promocoes():
     """Carrega as promoções do 'promocoes.csv' do GitHub. (MANTIDO)"""
     df = get_data_from_github(SHEET_NAME_PROMOCOES_CSV)
@@ -92,7 +92,7 @@ def carregar_promocoes():
     return df_essencial.dropna(subset=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
 
 
-@st.cache_data(ttl=8)
+@st.cache_data(ttl=2)
 def carregar_catalogo():
     """Carrega o catálogo do 'produtos.csv' do GitHub, aplica as promoções e prepara o DataFrame."""
     df_produtos = get_data_from_github(SHEET_NAME_CATALOGO_CSV)
@@ -352,3 +352,4 @@ else:
         product_id = row['ID'] 
         with cols[i % 4]: 
             render_product_card(product_id, row, key_prefix='prod')
+
