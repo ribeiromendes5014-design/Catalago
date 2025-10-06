@@ -6,18 +6,20 @@ import json
 import time
 from streamlit_autorefresh import st_autorefresh
 import requests 
-
-# --- Bibliotecas do Google Sheets Mantidas para SALVAMENTO ---
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+import base64 # NOVO: Necessário para codificar o conteúdo para a API do GitHub
+from io import StringIO # NOVO: Para manipular o conteúdo CSV
 
 # --- Variáveis de Configuração ---
-GITHUB_REPO_URL = "https://raw.githubusercontent.com/ribeiromendes5014-design/Catalago/main/"
+GITHUB_TOKEN = st.secrets["github"]["token"]
+REPO_NAME = st.secrets["github"]["repo_name"]
+BRANCH = st.secrets["github"]["branch"]
+GITHUB_BASE_API = f"https://api.github.com/repos/{REPO_NAME}/contents/"
+
 # Fontes de Leitura
 SHEET_NAME_CATALOGO_CSV = "produtos.csv" 
 SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
-# Fonte de Escrita (Google Sheets)
-SHEET_NAME_PEDIDOS = "pedidos" 
+# Fonte de Escrita
+SHEET_NAME_PEDIDOS_CSV = "pedidos.csv" 
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
 
 
@@ -25,69 +27,41 @@ BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
 if 'carrinho' not in st.session_state:
     st.session_state.carrinho = {} 
 
-# --- Funções de Conexão GSpread (APENAS PARA ESCRITA) ---
+# --- Headers para Autenticação do GitHub ---
+def get_github_headers():
+    return {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3.raw, application/vnd.github.v3+json"
+    }
 
-def get_gspread_client():
-    """Cria um cliente GSpread autenticado (necessário para salvar pedidos)."""
-    try:
-        gcp_sa_credentials = {
-            "type": st.secrets["gsheets"]["type"],
-            "project_id": st.secrets["gsheets"]["project_id"],
-            "private_key_id": st.secrets["gsheets"]["private_key_id"],
-            "private_key": st.secrets["gsheets"]["private_key"],
-            "client_email": st.secrets["gsheets"]["client_email"],
-            "client_id": st.secrets["gsheets"]["client_id"],
-            "auth_uri": st.secrets["gsheets"]["auth_uri"],
-            "token_uri": st.secrets["gsheets"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["gsheets"]["auth_provider_x509_cert_url"],
-            "client_x509_cert_url": st.secrets["gsheets"]["client_x509_cert_url"]
-        }
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(gcp_sa_credentials, scope)
-        client = gspread.authorize(creds)
-        sh = client.open_by_url(st.secrets["gsheets"]["sheet_url"])
-        return sh
-    except Exception as e:
-        st.error(f"Erro na autenticação do Google Sheets (Salvar Pedido). Detalhe: {e}")
-        st.stop()
-
-
-# --- Funções de Conexão GITHUB (LEITURA COM TOKEN) ---
+# --- Funções de Conexão GITHUB (LEITURA) ---
 
 def get_data_from_github(file_name):
     """Faz a requisição HTTP para obter o conteúdo RAW do CSV do GitHub, usando Token."""
-    file_url = f"{GITHUB_REPO_URL}{file_name}"
+    file_url = f"https://raw.githubusercontent.com/{REPO_NAME.split('/')[-1]}/main/{file_name}"
     
-    # NOVO: Adiciona o cabeçalho de autorização com o Token do GitHub
-    headers = {
-        "Authorization": f"token {st.secrets['github']['token']}",
-        "Accept": "application/vnd.github.v3.raw"
-    }
-
     try:
-        response = requests.get(file_url, headers=headers)
+        response = requests.get(file_url, headers=get_github_headers())
         response.raise_for_status() 
         
-        # O Pandas pode ler o conteúdo de texto retornado
-        from io import StringIO
+        # Lê o conteúdo de texto retornado
         csv_data = StringIO(response.text)
         return pd.read_csv(csv_data, sep=',', encoding='utf-8') 
 
     except requests.exceptions.HTTPError as e:
         if response.status_code == 404:
-            st.error(f"Erro 404: Arquivo '{file_name}' não encontrado no repositório.")
+            st.error(f"Erro 404: Arquivo '{file_name}' não encontrado no repositório. Verifique se o nome está correto.")
         elif response.status_code == 403:
-             st.error(f"Erro 403 (Limite de Taxa): O Token do GitHub está ativo, mas o limite foi atingido. Tente novamente em 1 minuto. Detalhe: {response.text}")
+             st.error(f"Erro 403 (Limite de Taxa): O Token do GitHub está ativo, mas o limite foi atingido. Tente novamente em 1 minuto.")
         else:
             st.error(f"Erro ao acessar o GitHub. Status {response.status_code}: {e}")
         return None
     except KeyError:
-        st.error("Erro de Token: Verifique se a chave 'token' está configurada corretamente na seção '[github]' do secrets.toml.")
+        st.error("Erro de Token: Verifique se a chave 'token' está configurada corretamente no secrets.toml.")
         return None
     except Exception as e:
         st.error(f"Ocorreu um erro ao carregar o arquivo '{file_name}': {e}")
         return None
-
 
 @st.cache_data(ttl=5)
 def carregar_promocoes():
@@ -96,7 +70,6 @@ def carregar_promocoes():
     if df is None or df.empty:
         return pd.DataFrame(columns=['ID_PRODUTO', 'PRECO_PROMOCIONAL'])
 
-    # Padronização de Colunas
     df.columns = [col.upper().replace(' ', '_') for col in df.columns]
     
     df_essencial = df[['ID_PRODUTO', 'PRECO_PROMOCIONAL']].copy()
@@ -114,20 +87,16 @@ def carregar_catalogo():
         st.warning("Catálogo indisponível. Verifique o arquivo 'produtos.csv' no GitHub.")
         return pd.DataFrame()
     
-    # Padroniza nomes de colunas
     df_produtos.columns = [col.upper().replace(' ', '_') for col in df_produtos.columns]
 
-    # Tratamento dos dados 
     df_produtos['PRECO'] = pd.to_numeric(df_produtos['PRECO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
     df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
     
-    # Filtra e define o índice
     df_produtos = df_produtos[df_produtos['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
     df_produtos.set_index('ID', inplace=True)
     
     df_promocoes = carregar_promocoes()
     
-    # Aplica Promoções (Lógica original de merge)
     if not df_promocoes.empty:
         df_final = pd.merge(df_produtos.reset_index(), df_promocoes, left_on='ID', right_on='ID_PRODUTO', how='left').set_index('ID')
         df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO'])
@@ -139,22 +108,67 @@ def carregar_catalogo():
     return df_final.reset_index()
 
 
-# --- Funções do Aplicativo (SALVAR PEDIDO NO SHEETS) ---
+# --- Funções do Aplicativo (SALVAR PEDIDO NO GITHUB) ---
 
 def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
-    """Salva o pedido na aba 'pedidos' do Google Sheets usando gspread."""
-    # MANTIDO: Escrita no Sheets é mais simples e confiável para transações.
+    """
+    Salva o novo pedido no 'pedidos.csv' do GitHub usando a Content API.
+    Isto requer ler o arquivo, adicionar a linha, e reescrever o arquivo com o SHA.
+    """
+    file_path = SHEET_NAME_PEDIDOS_CSV
+    api_url = f"{GITHUB_BASE_API}{file_path}?ref={BRANCH}"
+    
+    # 1. Obter o conteúdo atual do arquivo (e o SHA)
+    headers_get = get_github_headers()
+    headers_get["Accept"] = "application/vnd.github.v3+json" # Garante que recebemos o JSON completo
+    
     try:
-        sh = get_gspread_client()
-        worksheet = sh.worksheet(SHEET_NAME_PEDIDOS)
-        novo_registro = [ int(datetime.now().timestamp()), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), nome_cliente, contato_cliente, itens_json, f"{valor_total:.2f}".replace('.', ',')]
-        worksheet.append_row(novo_registro)
-        return True
-    except Exception as e:
-        st.error(f"Erro ao salvar o pedido no Google Sheets: {e}")
-        return False
+        response_get = requests.get(api_url, headers=headers_get)
+        response_get.raise_for_status()
         
-# --- Resto do código (adicionar/remover carrinho, layout e renderização) PERMANECE O MESMO ---
+        file_data = response_get.json()
+        current_sha = file_data['sha']
+        content_base64 = file_data['content']
+        current_content = base64.b64decode(content_base64).decode('utf-8')
+
+    except requests.exceptions.HTTPError as e:
+        if response_get.status_code == 404:
+            st.error(f"Erro 404: O arquivo '{file_path}' não existe. Crie um CSV vazio com os cabeçalhos para pedidos.")
+            return False
+        st.error(f"Erro ao obter o SHA do arquivo no GitHub: {e}")
+        return False
+    except Exception as e:
+        st.error(f"Erro na decodificação do CSV: {e}")
+        return False
+
+    # 2. Adicionar o novo pedido ao conteúdo
+    novo_registro = f"\n{int(datetime.now().timestamp())},\"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\",\"{nome_cliente}\",\"{contato_cliente}\",\"{itens_json}\",\"{valor_total:.2f}\""
+    new_content = current_content.strip() + novo_registro + "\n"
+    
+    # 3. Codificar o novo conteúdo em Base64
+    encoded_content = base64.b64encode(new_content.encode('utf-8')).decode('utf-8')
+    
+    # 4. Enviar o novo conteúdo (PUT)
+    commit_data = {
+        "message": f"PEDIDO: Novo pedido de {nome_cliente} em {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        "content": encoded_content,
+        "sha": current_sha,
+        "branch": BRANCH
+    }
+    
+    headers_put = get_github_headers()
+    headers_put["Content-Type"] = "application/json"
+
+    try:
+        response_put = requests.put(api_url, headers=headers_put, data=json.dumps(commit_data))
+        response_put.raise_for_status()
+        return True
+    except requests.exceptions.HTTPError as e:
+        st.error(f"Erro ao salvar o pedido (Commit no GitHub). Verifique as permissões do seu PAT (Precisa de 'repo'). Detalhe: {e}")
+        return False
+    except Exception as e:
+        st.error(f"Erro desconhecido ao enviar o pedido: {e}")
+        return False
 
 def adicionar_ao_carrinho(produto_id, produto_nome, produto_preco):
     if produto_id in st.session_state.carrinho:
@@ -240,6 +254,7 @@ with col_carrinho:
                 nome=st.text_input("Seu Nome Completo:");contato=st.text_input("Seu Contato (WhatsApp/E-mail):")
                 if st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True):
                     if nome and contato:
+                        # O ID precisa ser string (para o carrinho) mas garantimos que é um número para o JSON
                         detalhes={"total":total_acumulado,"itens":[{"id":int(k),"nome":v['nome'],"preco":v['preco'],"quantidade":v['quantidade']} for k,v in st.session_state.carrinho.items()]}
                         if salvar_pedido(nome,contato,total_acumulado,json.dumps(detalhes,ensure_ascii=False)):
                             st.balloons();st.success("🎉 Pedido enviado com sucesso!");st.session_state.carrinho={};st.rerun()
