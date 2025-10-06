@@ -9,6 +9,7 @@ import base64
 import numpy as np 
 from streamlit_autorefresh import st_autorefresh
 import random
+from io import StringIO
 
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos"
@@ -39,38 +40,49 @@ except KeyError:
 
 # --- Funções Base do GitHub para Leitura e Escrita ---
 
-# MANTIDO: Cache controlado por versão (CHAVE para o reload forçado)
-@st.cache_data(ttl=5) 
+@st.cache_data(ttl=5)
 def fetch_github_data_v2(sheet_name, version_control):
-    """Carrega dados de um CSV do GitHub. O 'version_control' força o reload."""
+    """Carrega dados de um CSV do GitHub via API (sem cache da CDN)."""
     csv_filename = f"{sheet_name}.csv"
-    url = f"{GITHUB_RAW_BASE_URL}/{csv_filename}?nocache={random.randint(1, 999999)}"
-    
-    try:
-        df = pd.read_csv(url, sep=',') 
-        
-        df.columns = df.columns.str.strip().str.upper() 
+    api_url = f"https://api.github.com/repos/{REPO_NAME_FULL}/contents/{csv_filename}?ref={BRANCH}"
 
-        if 'COLUNA' in df.columns:
-            df.drop(columns=['COLUNA'], inplace=True)
-            
-        if 'PRECO' in df.columns:
-            df['PRECO'] = df['PRECO'].astype(str).str.replace('.', ',', regex=False)
-            
-        if sheet_name == SHEET_NAME_PEDIDOS and 'STATUS' not in df.columns: df['STATUS'] = ''
-        if sheet_name == SHEET_NAME_CATALOGO and 'ID' in df.columns: 
-            df['ID'] = pd.to_numeric(df['ID'], errors='coerce') 
-            df.dropna(subset=['ID'], inplace=True) 
-            df['ID'] = df['ID'].astype(int)
+    try:
+        # Faz a requisição diretamente à API do GitHub
+        response = requests.get(api_url, headers=HEADERS)
+        if response.status_code != 200:
+            st.warning(f"Erro ao buscar '{csv_filename}': {response.status_code}")
+            return pd.DataFrame()
+
+        # Decodifica o conteúdo base64 retornado pela API
+        content = base64.b64decode(response.json()["content"]).decode("utf-8")
+
+        # Converte o conteúdo em DataFrame
+        from io import StringIO
+        df = pd.read_csv(StringIO(content), sep=",")
+
+        # Padroniza as colunas
+        df.columns = df.columns.str.strip().str.upper()
+
+        if "COLUNA" in df.columns:
+            df.drop(columns=["COLUNA"], inplace=True)
+
+        if "PRECO" in df.columns:
+            df["PRECO"] = df["PRECO"].astype(str).str.replace(".", ",", regex=False)
+
+        if sheet_name == SHEET_NAME_PEDIDOS and "STATUS" not in df.columns:
+            df["STATUS"] = ""
+
+        if sheet_name == SHEET_NAME_CATALOGO and "ID" in df.columns:
+            df["ID"] = pd.to_numeric(df["ID"], errors="coerce")
+            df.dropna(subset=["ID"], inplace=True)
+            df["ID"] = df["ID"].astype(int)
 
         return df
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 404:
-            st.warning(f"Arquivo CSV '{csv_filename}' não encontrado na URL: {url}"); return pd.DataFrame()
-        else:
-            st.error(f"Erro HTTP ao carregar dados de '{csv_filename}': {e}"); return pd.DataFrame()
+
     except Exception as e:
-        st.error(f"Erro ao carregar dados de '{csv_filename}': {e}"); return pd.DataFrame()
+        st.error(f"Erro ao carregar dados de '{csv_filename}': {e}")
+        return pd.DataFrame()
+
 
 # Função auxiliar para o app usar o nome antigo e passar a versão
 def carregar_dados(sheet_name):
@@ -495,6 +507,7 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
 
 
