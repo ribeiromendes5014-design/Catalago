@@ -21,7 +21,8 @@ BRANCH = os.environ.get("BRANCH")
 GITHUB_BASE_API = f"https://api.github.com/repos/{DATA_REPO_NAME}/contents/"
 
 # Fontes de Dados (CSV no GitHub)
-SHEET_NAME_CATALOGO_CSV = "produtos_estoque.csv"
+# AJUSTE 1: Alterado o nome do arquivo para o correto.
+SHEET_NAME_CATALOGO_CSV = "gestao_produtos.csv" 
 SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
 SHEET_NAME_PEDIDOS_CSV = "pedidos.csv"
 SHEET_NAME_VIDEOS_CSV = "video.csv"
@@ -117,14 +118,14 @@ def carregar_catalogo():
     df_produtos = get_data_from_github(SHEET_NAME_CATALOGO_CSV)
     
     if df_produtos is None or df_produtos.empty:
-        st.warning("Catálogo indisponível. Verifique o arquivo 'produtos_estoque.csv' no GitHub.")
+        st.warning(f"Catálogo indisponível. Verifique o arquivo '{SHEET_NAME_CATALOGO_CSV}' no GitHub.")
         return pd.DataFrame()
     
     # --- LÓGICA ROBUSTA PARA ENCONTRAR E RENOMEAR COLUNAS ---
     colunas_minimas = ['PRECOVISTA', 'ID', 'NOME']
     for col in colunas_minimas:
         if col not in df_produtos.columns:
-            st.error(f"Coluna essencial '{col}' não encontrada no 'produtos_estoque.csv'. O aplicativo não pode continuar.")
+            st.error(f"Coluna essencial '{col}' não encontrada no '{SHEET_NAME_CATALOGO_CSV}'. O aplicativo não pode continuar.")
             return pd.DataFrame()
 
     coluna_foto_encontrada = None
@@ -178,12 +179,10 @@ def carregar_catalogo():
     if df_videos is not None and not df_videos.empty:
         if 'ID_PRODUTO' in df_videos.columns and 'YOUTUBE_URL' in df_videos.columns:
             df_final = pd.merge(df_final, df_videos[['ID_PRODUTO', 'YOUTUBE_URL']], left_on='ID', right_on='ID_PRODUTO', how='left')
-            df_final.drop(columns=['ID_PRODUTO_y'], inplace=True, errors='ignore') # Ajuste para evitar colunas duplicadas
+            df_final.drop(columns=['ID_PRODUTO_y'], inplace=True, errors='ignore') 
             df_final.rename(columns={'ID_PRODUTO_x': 'ID_PRODUTO'}, inplace=True, errors='ignore')
         else:
             st.warning("Arquivo 'video.csv' encontrado, mas as colunas 'ID_PRODUTO' ou 'YOUTUBE_URL' estão faltando.")
-            
-   
             
     return df_final.set_index('ID').reset_index()
 
@@ -227,21 +226,18 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
         st.error(f"Erro na decodificação ou leitura do arquivo 'pedidos.csv'. Detalhe: {e}")
         return False
 
-    # --- Cria o novo registro ---
     timestamp = int(datetime.now().timestamp())
     data_hora = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     id_pedido = timestamp
     status = "NOVO"
     link_imagem = ""
 
-    # Gera um resumo legível dos itens (ex: "2x Caneca Floral; 1x Vela")
     try:
         itens_data = json.loads(itens_json)
         resumo_itens = "; ".join([f"{i['quantidade']}x {i['nome']}" for i in itens_data.get('itens', [])])
     except Exception:
         resumo_itens = "Erro ao gerar resumo"
 
-    # Escapa o JSON para manter compatibilidade com CSV
     escaped_itens_json = itens_json.replace('"', '""')
 
     novo_registro = (
@@ -282,7 +278,6 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
         return False
 
 def adicionar_ao_carrinho(produto_id, produto_row):
-    """Adiciona um produto ao carrinho, salvando também a URL da imagem."""
     produto_nome = produto_row['NOME']
     produto_preco = produto_row['PRECO_FINAL']
     produto_imagem = produto_row.get('LINKIMAGEM', '')
@@ -318,12 +313,9 @@ st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sid
 # --- CSS ---
 st.markdown(f"""
 <style>
-/* Oculta elementos padrão do Streamlit */
 #MainMenu, footer, [data-testid="stSidebar"] {{visibility: hidden;}}
 [data-testid="stSidebarHeader"], [data-testid="stToolbar"], a[data-testid="stAppDeployButton"], [data-testid="stStatusWidget"], [data-testid="stDecoration"] {{ display: none !important; }}
 div[data-testid="stPopover"] > div:first-child > button {{ display: none; }}
-
-/* Estilos Gerais */
 .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
 div.block-container {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 10px; padding: 2rem; margin-top: 1rem; }}
 .pink-bar-container {{ background-color: #E91E63; padding: 20px 0; width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
@@ -339,14 +331,10 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 """, unsafe_allow_html=True)
 
 
-# --- Atualização Automática ---
 st_autorefresh(interval=5000, key="auto_refresh_catalogo")
 
-
-# --- Cabeçalho ---
 col_logo, col_titulo = st.columns([0.1, 5]); col_logo.markdown("<h3>💖</h3>", unsafe_allow_html=True); col_titulo.title("Catálogo de Pedidos Doce&Bella")
 
-# --- Barra Superior (Pesquisa e Carrinho) ---
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
@@ -407,7 +395,6 @@ with col_carrinho:
                         st.warning("Preencha seu nome e contato.")
 st.markdown("</div></div>", unsafe_allow_html=True)
 
-# --- Seção de Produtos ---
 st.markdown("---")
 df_catalogo = carregar_catalogo()
 
@@ -415,10 +402,8 @@ def render_product_card(prod_id, row, key_prefix):
     """Renderiza um card de produto com suporte para abas de foto e vídeo."""
     with st.container(border=True):
         
-        # Pega a URL do YouTube do DataFrame
         youtube_url = row.get('YOUTUBE_URL')
         
-        # --- LÓGICA DE ABAS (TABS) ---
         if youtube_url and isinstance(youtube_url, str) and youtube_url.strip().startswith('http'):
             tab_foto, tab_video = st.tabs(["📷 Foto", "▶️ Vídeo"])
             with tab_foto:
@@ -428,8 +413,6 @@ def render_product_card(prod_id, row, key_prefix):
         else:
             render_product_image(row.get('LINKIMAGEM'))
 
-        # --- O RESTANTE DO CÓDIGO DO CARD CONTINUA IGUAL ---
-        
         preco_final = row['PRECO_FINAL']
         preco_original = row['PRECO']
         is_promotion = pd.notna(row.get('PRECO_PROMOCIONAL'))
@@ -452,15 +435,19 @@ def render_product_card(prod_id, row, key_prefix):
         col_preco, col_botao = st.columns([2, 2])
         
         with col_preco:
-            # --- LÓGICA DO CASHBACK AJUSTADA ---
-            cashback_valor = pd.to_numeric(row.get('CASHBACK'), errors='coerce')
+            # --- AJUSTE 2: LÓGICA DO CASHBACK ALTERADA ---
+            # Procura pela coluna 'CASHBACKPERCENT' e calcula o valor.
+            cashback_percent = pd.to_numeric(row.get('CASHBACKPERCENT'), errors='coerce')
             cashback_html = "" 
 
-            if pd.notna(cashback_valor) and cashback_valor > 0:
-                # AQUI FOI FEITA A MUDANÇA: COR, EMOJI E TEXTO
+            if pd.notna(cashback_percent) and cashback_percent > 0:
+                # Calcula o valor monetário do cashback
+                cashback_valor_calculado = (cashback_percent / 100) * preco_final
+                
+                # Cria o HTML para exibir o valor calculado
                 cashback_html = f"""
                 <span style='color: #D32F2F; font-size: 0.8rem; font-weight: bold;'>
-                    🔥 R$ {cashback_valor:.2f} de volta
+                    🔥 R$ {cashback_valor_calculado:.2f} de volta
                 </span>
                 """
             # --- FIM DA LÓGICA DO CASHBACK ---
@@ -486,7 +473,6 @@ def render_product_card(prod_id, row, key_prefix):
                 adicionar_ao_carrinho(prod_id, row)
                 st.rerun()
 
-# --- Filtragem e Renderização ---
 termo = st.session_state.get('termo_pesquisa_barra', '').lower()
 if termo:
     df_filtrado = df_catalogo[df_catalogo.apply(lambda row: termo in str(row['NOME']).lower() or termo in str(row['DESCRICAOLONGA']).lower(), axis=1)]
