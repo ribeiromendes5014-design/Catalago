@@ -113,7 +113,7 @@ def carregar_promocoes():
 
 @st.cache_data(ttl=2)
 def carregar_catalogo():
-    """Carrega o catálogo, aplica promoções e prepara o DataFrame de forma robusta."""
+    """Carrega o catálogo, aplica promoções e vídeos, e prepara o DataFrame."""
     df_produtos = get_data_from_github(SHEET_NAME_CATALOGO_CSV)
     
     if df_produtos is None or df_produtos.empty:
@@ -121,15 +121,12 @@ def carregar_catalogo():
         return pd.DataFrame()
     
     # --- LÓGICA ROBUSTA PARA ENCONTRAR E RENOMEAR COLUNAS ---
-    
-    # 1. Checa o mínimo necessário para o app funcionar
     colunas_minimas = ['PRECOVISTA', 'ID', 'NOME']
     for col in colunas_minimas:
         if col not in df_produtos.columns:
             st.error(f"Coluna essencial '{col}' não encontrada no 'produtos_estoque.csv'. O aplicativo não pode continuar.")
             return pd.DataFrame()
 
-    # 2. Busca automática pela coluna de imagem
     coluna_foto_encontrada = None
     nomes_possiveis_foto = ['FOTOURL', 'LINKIMAGEM', 'FOTO_URL', 'IMAGEM', 'URL_FOTO', 'LINK']
     for nome in nomes_possiveis_foto:
@@ -137,16 +134,12 @@ def carregar_catalogo():
             coluna_foto_encontrada = nome
             break
             
-    # 3. Cria o mapa de renomeação dinamicamente
-    mapa_renomeacao = {
-        'PRECOVISTA': 'PRECO',
-        'MARCA': 'DESCRICAOCURTA',
-    }
+    mapa_renomeacao = {'PRECOVISTA': 'PRECO', 'MARCA': 'DESCRICAOCURTA'}
     if coluna_foto_encontrada:
         mapa_renomeacao[coluna_foto_encontrada] = 'LINKIMAGEM'
     else:
         st.warning("Nenhuma coluna de imagem encontrada (Ex: FOTOURL, IMAGEM). Os produtos serão exibidos sem fotos.")
-        df_produtos['LINKIMAGEM'] = "" # Cria coluna vazia para evitar erros
+        df_produtos['LINKIMAGEM'] = ""
 
     df_produtos.rename(columns=mapa_renomeacao, inplace=True)
     # --- FIM DA LÓGICA ROBUSTA ---
@@ -167,18 +160,33 @@ def carregar_catalogo():
     
     df_produtos.set_index('ID', inplace=True)
     
+    # Carrega promoções
     df_promocoes = carregar_promocoes()
     
     if not df_promocoes.empty:
-        df_final = pd.merge(df_produtos.reset_index(), df_promocoes[['ID_PRODUTO', 'PRECO_PROMOCIONAL']], left_on='ID', right_on='ID_PRODUTO', how='left').set_index('ID')
+        df_final = pd.merge(df_produtos.reset_index(), df_promocoes[['ID_PRODUTO', 'PRECO_PROMOCIONAL']], left_on='ID', right_on='ID_PRODUTO', how='left')
         df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO'])
         df_final.drop(columns=['ID_PRODUTO'], inplace=True, errors='ignore')
     else:
-        df_final = df_produtos
+        df_final = df_produtos.reset_index()
         df_final['PRECO_FINAL'] = df_final['PRECO']
         df_final['PRECO_PROMOCIONAL'] = None
 
-    return df_final.reset_index()
+    # --- NOVA PARTE PARA CARREGAR E JUNTAR OS VÍDEOS ---
+    df_videos = get_data_from_github(SHEET_NAME_VIDEOS_CSV)
+    
+    # Se o arquivo de vídeos existir e não estiver vazio
+    if df_videos is not None and not df_videos.empty:
+        # Garante que as colunas essenciais do vídeo existem
+        if 'ID_PRODUTO' in df_videos.columns and 'YOUTUBE_URL' in df_videos.columns:
+            # Junta o DataFrame final com o DataFrame de vídeos
+            # 'how="left"' garante que todos os produtos continuem na lista, mesmo sem vídeo
+            df_final = pd.merge(df_final, df_videos[['ID_PRODUTO', 'YOUTUBE_URL']], left_on='ID', right_on='ID_PRODUTO', how='left')
+            df_final.drop(columns=['ID_PRODUTO'], inplace=True, errors='ignore')
+        else:
+            st.warning("Arquivo 'video.csv' encontrado, mas as colunas 'ID_PRODUTO' ou 'YOUTUBE_URL' estão faltando.")
+            
+    return df_final.set_index('ID').reset_index()
 
 
 # --- Funções do Aplicativo ---
@@ -472,6 +480,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
