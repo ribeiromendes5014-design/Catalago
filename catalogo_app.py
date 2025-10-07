@@ -483,9 +483,9 @@ if df_filtrado.empty:
 else:
     st.subheader("✨ Nossos Produtos")
 
-    # --- ALTERADO: WIDGET DE ORDENAÇÃO para ser menor e minimalista ---
-    # Usamos colunas para limitar a largura do selectbox. A segunda coluna vazia empurra a primeira para a esquerda.
-    col_select, _ = st.columns([1, 2])
+    # --- AJUSTE FINAL: WIDGET DE ORDENAÇÃO para ser menor e minimalista ---
+    # Usamos uma proporção maior na segunda coluna para deixar a primeira (com o selectbox) mais estreita.
+    col_select, _ = st.columns([1, 4])
 
     with col_select:
         opcoes_ordem = ['Lançamento', 'Promoção', 'Menor Preço', 'Maior Preço', 'Nome do Produto (A-Z)']
