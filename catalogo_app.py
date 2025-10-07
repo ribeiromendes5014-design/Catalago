@@ -21,7 +21,7 @@ BRANCH = os.environ.get("BRANCH")
 GITHUB_BASE_API = f"https://api.github.com/repos/{DATA_REPO_NAME}/contents/"
 
 # Fontes de Dados (CSV no GitHub)
-SHEET_NAME_CATALOGO_CSV = "produtos_estoque.csv" 
+SHEET_NAME_CATALOGO_CSV = "produtos_estoque.csv"
 SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
 SHEET_NAME_PEDIDOS_CSV = "pedidos.csv"
 SHEET_NAME_VIDEOS_CSV = "video.csv"
@@ -49,17 +49,17 @@ def get_data_from_github(file_name):
     Garante que sempre trará a versão mais recente do arquivo.
     """
     api_url = f"{GITHUB_BASE_API}{file_name}?ref={BRANCH}"
-    
+
     try:
         headers_content = {
             "Authorization": f"token {GITHUB_TOKEN}",
         }
         response = requests.get(api_url, headers=headers_content)
-        
+
         if response.status_code == 404:
             st.error(f"Erro 404: Arquivo '{file_name}' não encontrado no repositório '{DATA_REPO_NAME}' na branch '{BRANCH}'. Verifique o nome do arquivo/branch/repo.")
             return None
-        
+
         response.raise_for_status()
 
         try:
@@ -92,7 +92,7 @@ def get_data_from_github(file_name):
 def carregar_promocoes():
     """Carrega as promoções do 'promocoes.csv' do GitHub."""
     df = get_data_from_github(SHEET_NAME_PROMOCOES_CSV)
-    
+
     colunas_essenciais = ['ID_PRODUTO', 'PRECO_PROMOCIONAL', 'STATUS']
     if df is None or df.empty:
         return pd.DataFrame(columns=colunas_essenciais)
@@ -101,13 +101,13 @@ def carregar_promocoes():
         if col not in df.columns:
             st.error(f"Coluna essencial '{col}' não encontrada no 'promocoes.csv'. Verifique o cabeçalho.")
             return pd.DataFrame(columns=colunas_essenciais)
-        
+
     df = df[df['STATUS'].astype(str).str.strip().str.upper() == 'ATIVO'].copy()
     df_essencial = df[colunas_essenciais].copy()
-    
+
     df_essencial['PRECO_PROMOCIONAL'] = pd.to_numeric(df_essencial['PRECO_PROMOCIONAL'].astype(str).str.replace(',', '.'), errors='coerce')
     df_essencial['ID_PRODUTO'] = pd.to_numeric(df_essencial['ID_PRODUTO'], errors='coerce').astype('Int64')
-    
+
     return df_essencial.dropna(subset=['ID_PRODUTO', 'PRECO_PROMOCIONAL']).reset_index(drop=True)
 
 
@@ -115,15 +115,15 @@ def carregar_promocoes():
 def carregar_catalogo():
     """Carrega o catálogo, aplica promoções e vídeos, e prepara o DataFrame."""
     df_produtos = get_data_from_github(SHEET_NAME_CATALOGO_CSV)
-    
+
     if df_produtos is None or df_produtos.empty:
         st.warning(f"Catálogo indisponível. Verifique o arquivo '{SHEET_NAME_CATALOGO_CSV}' no GitHub.")
         return pd.DataFrame()
-    
+
     # --- NOVO: Adiciona coluna de recência para ordenação "Lançamento" ---
     # Assume que produtos mais abaixo no CSV são mais recentes.
     df_produtos['RECENCIA'] = range(len(df_produtos), 0, -1)
-    
+
     # --- LÓGICA ROBUSTA PARA ENCONTRAR E RENOMEAR COLUNAS ---
     colunas_minimas = ['PRECOVISTA', 'ID', 'NOME']
     for col in colunas_minimas:
@@ -137,7 +137,7 @@ def carregar_catalogo():
         if nome in df_produtos.columns:
             coluna_foto_encontrada = nome
             break
-            
+
     mapa_renomeacao = {'PRECOVISTA': 'PRECO', 'MARCA': 'DESCRICAOCURTA'}
     if coluna_foto_encontrada:
         mapa_renomeacao[coluna_foto_encontrada] = 'LINKIMAGEM'
@@ -152,21 +152,21 @@ def carregar_catalogo():
         df_produtos['DISPONIVEL'] = 'SIM'
     if 'DESCRICAOLONGA' not in df_produtos.columns:
         df_produtos['DESCRICAOLONGA'] = df_produtos.get('CATEGORIA', '')
-    
+
     df_produtos['PRECO'] = pd.to_numeric(df_produtos['PRECO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
     df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
-    
+
     df_produtos = df_produtos[df_produtos['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
-    
+
     if 'QUANTIDADE' in df_produtos.columns:
         df_produtos['QUANTIDADE'] = pd.to_numeric(df_produtos['QUANTIDADE'], errors='coerce').fillna(0)
         df_produtos = df_produtos[df_produtos['QUANTIDADE'] > 0].copy()
-    
+
     df_produtos.set_index('ID', inplace=True)
-    
+
     # Carrega promoções
     df_promocoes = carregar_promocoes()
-    
+
     if not df_promocoes.empty:
         df_final = pd.merge(df_produtos.reset_index(), df_promocoes[['ID_PRODUTO', 'PRECO_PROMOCIONAL']], left_on='ID', right_on='ID_PRODUTO', how='left')
         df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO'])
@@ -178,15 +178,15 @@ def carregar_catalogo():
 
     # --- NOVA PARTE PARA CARREGAR E JUNTAR OS VÍDEOS ---
     df_videos = get_data_from_github(SHEET_NAME_VIDEOS_CSV)
-    
+
     if df_videos is not None and not df_videos.empty:
         if 'ID_PRODUTO' in df_videos.columns and 'YOUTUBE_URL' in df_videos.columns:
             df_final = pd.merge(df_final, df_videos[['ID_PRODUTO', 'YOUTUBE_URL']], left_on='ID', right_on='ID_PRODUTO', how='left')
-            df_final.drop(columns=['ID_PRODUTO_y'], inplace=True, errors='ignore') 
+            df_final.drop(columns=['ID_PRODUTO_y'], inplace=True, errors='ignore')
             df_final.rename(columns={'ID_PRODUTO_x': 'ID_PRODUTO'}, inplace=True, errors='ignore')
         else:
             st.warning("Arquivo 'video.csv' encontrado, mas as colunas 'ID_PRODUTO' ou 'YOUTUBE_URL' estão faltando.")
-            
+
     return df_final.set_index('ID').reset_index()
 
 
@@ -196,22 +196,22 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
     """Salva o novo pedido no 'pedidos.csv' do GitHub usando a Content API."""
     file_path = SHEET_NAME_PEDIDOS_CSV
     api_url = f"{GITHUB_BASE_API}{file_path}"
-    
+
     novo_cabecalho = 'ID_PEDIDO,DATA_HORA,NOME_CLIENTE,CONTATO_CLIENTE,ITENS_PEDIDO,VALOR_TOTAL,LINKIMAGEM,STATUS,itens_json'
 
     headers_get = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json"
     }
-    
+
     try:
         response_get = requests.get(f"{api_url}?ref={BRANCH}", headers=headers_get)
         response_get.raise_for_status()
-        
+
         file_data = response_get.json()
         current_sha = file_data['sha']
         content_base64 = file_data.get('content', '')
-        
+
         if not content_base64:
             current_content = novo_cabecalho
         else:
@@ -403,9 +403,9 @@ df_catalogo = carregar_catalogo()
 def render_product_card(prod_id, row, key_prefix):
     """Renderiza um card de produto com suporte para abas de foto e vídeo."""
     with st.container(border=True):
-        
+
         youtube_url = row.get('YOUTUBE_URL')
-        
+
         if youtube_url and isinstance(youtube_url, str) and youtube_url.strip().startswith('http'):
             tab_foto, tab_video = st.tabs(["📷 Foto", "▶️ Vídeo"])
             with tab_foto:
@@ -427,18 +427,18 @@ def render_product_card(prod_id, row, key_prefix):
                 </span>
             </div>
             """, unsafe_allow_html=True)
-        
+
         st.markdown(f"**{row['NOME']}**")
         st.caption(row.get('DESCRICAOCURTA', ''))
-        
+
         with st.expander("Ver detalhes"):
             st.markdown(row.get('DESCRICAOLONGA', 'Sem descrição detalhada.'))
-            
+
         col_preco, col_botao = st.columns([2, 2])
-        
+
         with col_preco:
             cashback_percent = pd.to_numeric(row.get('CASHBACKPERCENT'), errors='coerce')
-            cashback_html = "" 
+            cashback_html = ""
 
             if pd.notna(cashback_percent) and cashback_percent > 0:
                 cashback_valor_calculado = (cashback_percent / 100) * preco_final
@@ -453,17 +453,17 @@ def render_product_card(prod_id, row, key_prefix):
                 <div style="line-height: 1.2;">
                     <span style='text-decoration: line-through; color: #757575; font-size: 0.9rem;'>R$ {preco_original:.2f}</span>
                     <h4 style='color: #D32F2F; margin:0;'>R$ {preco_final:.2f}</h4>
-                    {cashback_html} 
+                    {cashback_html}
                 </div>
-                """, unsafe_allow_html=True) 
+                """, unsafe_allow_html=True)
             else:
                 st.markdown(f"""
                 <div style='display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px;'>
                     <h4 style='color: #880E4F; margin:0; line-height:1;'>R$ {preco_final:.2f}</h4>
                     {cashback_html}
                 </div>
-                """, unsafe_allow_html=True) 
-                
+                """, unsafe_allow_html=True)
+
         with col_botao:
             if st.button("➕ Adicionar", key=key_prefix, use_container_width=True):
                 adicionar_ao_carrinho(prod_id, row)
@@ -483,15 +483,20 @@ if df_filtrado.empty:
 else:
     st.subheader("✨ Nossos Produtos")
 
-    # --- NOVO: WIDGET DE ORDENAÇÃO ---
-    opcoes_ordem = ['Lançamento', 'Promoção', 'Menor Preço', 'Maior Preço', 'Nome do Produto (A-Z)']
-    ordem_selecionada = st.selectbox(
-        "Ordenar por:",
-        opcoes_ordem,
-        key='ordem_produtos'
-    )
-    
-    # --- NOVO: LÓGICA DE ORDENAÇÃO ---
+    # --- ALTERADO: WIDGET DE ORDENAÇÃO para ser menor e minimalista ---
+    # Usamos colunas para limitar a largura do selectbox. A segunda coluna vazia empurra a primeira para a esquerda.
+    col_select, _ = st.columns([1, 2])
+
+    with col_select:
+        opcoes_ordem = ['Lançamento', 'Promoção', 'Menor Preço', 'Maior Preço', 'Nome do Produto (A-Z)']
+        ordem_selecionada = st.selectbox(
+            "Ordenar por:",
+            opcoes_ordem,
+            key='ordem_produtos'
+        )
+    # --- FIM DA ALTERAÇÃO ---
+
+    # --- LÓGICA DE ORDENAÇÃO (permanece a mesma) ---
     df_filtrado['EM_PROMOCAO'] = df_filtrado['PRECO_PROMOCIONAL'].notna()
 
     if ordem_selecionada == 'Lançamento':
