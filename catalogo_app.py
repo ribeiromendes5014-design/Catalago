@@ -436,12 +436,14 @@ def render_product_card(prod_id, row, key_prefix):
         st.markdown(f"**{row['NOME']}**")
         st.caption(row.get('DESCRICAOCURTA', ''))
 
+        # --- LINHA ALTERADA ---
         with st.expander("Ver detalhes"):
-            st.markdown(row.get('DETALHESGRADE', 'Sem detalhes de grade.'))
+            st.markdown(row.get('DETALHESGRADE', 'Sem detalhes de grade.')) # <-- AQUI ESTÁ A MUDANÇA
 
         col_preco, col_botao = st.columns([2, 2])
 
         with col_preco:
+            # ... (o restante do código para preço e cashback continua igual)
             cashback_percent = pd.to_numeric(row.get('CASHBACKPERCENT'), errors='coerce')
             cashback_html = ""
 
@@ -532,6 +534,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
