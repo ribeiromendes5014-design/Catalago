@@ -452,13 +452,12 @@ def render_product_card(prod_id, row, key_prefix):
         col_preco, col_botao = st.columns([2, 2])
         
         with col_preco:
-            # --- NOVA LÓGICA PARA O CASHBACK ---
-            # 1. Tenta converter o valor da coluna 'CASHBACK' para um número.
+            # --- LÓGICA DO CASHBACK AJUSTADA ---
             cashback_valor = pd.to_numeric(row.get('CASHBACK'), errors='coerce')
-            cashback_html = "" # Inicia a variável de cashback como vazia
+            cashback_html = "" 
 
-            # 2. Se o cashback for um número válido e maior que zero, cria o HTML para exibi-lo.
             if pd.notna(cashback_valor) and cashback_valor > 0:
+                # AQUI FOI FEITA A MUDANÇA: COR, EMOJI E TEXTO
                 cashback_html = f"""
                 <span style='color: #D32F2F; font-size: 0.8rem; font-weight: bold;'>
                     🔥 R$ {cashback_valor:.2f} de volta
@@ -473,14 +472,14 @@ def render_product_card(prod_id, row, key_prefix):
                     <h4 style='color: #D32F2F; margin:0;'>R$ {preco_final:.2f}</h4>
                     {cashback_html} 
                 </div>
-                """, unsafe_allow_html=True) # Adiciona o cashback aqui
+                """, unsafe_allow_html=True) 
             else:
                 st.markdown(f"""
                 <div style='display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px;'>
                     <h4 style='color: #880E4F; margin:0; line-height:1;'>R$ {preco_final:.2f}</h4>
                     {cashback_html}
                 </div>
-                """, unsafe_allow_html=True) # E adiciona o cashback aqui também
+                """, unsafe_allow_html=True) 
                 
         with col_botao:
             if st.button("➕ Adicionar", key=key_prefix, use_container_width=True):
@@ -507,14 +506,3 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
-
-
-
-
-
-
-
-
-
-
-
