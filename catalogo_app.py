@@ -439,7 +439,26 @@ def render_product_card(prod_id, row, key_prefix):
 
         # --- LINHA ALTERADA ---
         with st.expander("Ver detalhes"):
-            st.markdown(row.get('DETALHESGRADE', 'Sem detalhes de grade.')) # <-- AQUI ESTÁ A MUDANÇA
+            detalhes_str = row.get('DETALHESGRADE')
+            
+            # Verifica se existe algum texto e se ele parece ser um dicionário
+            if detalhes_str and isinstance(detalhes_str, str) and detalhes_str.strip().startswith('{'):
+                try:
+                    # Converte o texto para um dicionário de verdade
+                    detalhes_dict = ast.literal_eval(detalhes_str)
+                    
+                    # Cria uma linha formatada para cada item (ex: Cor, Tamanho)
+                    texto_formatado = ""
+                    for chave, valor in detalhes_dict.items():
+                        texto_formatado += f"**{chave.strip()}**: {str(valor).strip()}  \n"
+                    
+                    st.markdown(texto_formatado)
+                except (ValueError, SyntaxError):
+                    # Se der erro na conversão, mostra o texto original
+                    st.markdown(detalhes_str)
+            else:
+                # Se a célula estiver vazia ou não for um dicionário, mostra mensagem padrão
+                st.markdown('Sem detalhes de grade.')
 
         col_preco, col_botao = st.columns([2, 2])
 
@@ -535,6 +554,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
