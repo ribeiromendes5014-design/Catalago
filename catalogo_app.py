@@ -415,16 +415,34 @@ st.markdown("---")
 df_catalogo = carregar_catalogo()
 
 def render_product_card(prod_id, row, key_prefix):
-    """Renderiza um card de produto."""
+    """Renderiza um card de produto com suporte para abas de foto e vídeo."""
     with st.container(border=True):
-        # 1. EXIBE A FOTO (chamando outra função)
-        render_product_image(row.get('LINKIMAGEM'))
+        
+        # Pega a URL do YouTube do DataFrame
+        youtube_url = row.get('YOUTUBE_URL')
+        
+        # --- LÓGICA DE ABAS (TABS) ---
+        # Se a URL do YouTube existir e for uma string válida, cria as abas
+        if youtube_url and isinstance(youtube_url, str) and youtube_url.strip().startswith('http'):
+            tab_foto, tab_video = st.tabs(["📷 Foto", "▶️ Vídeo"])
+            
+            with tab_foto:
+                render_product_image(row.get('LINKIMAGEM'))
+            
+            with tab_video:
+                # O st.video do Streamlit já cria o player do YouTube automaticamente
+                st.video(youtube_url)
+
+        # Se não houver URL de vídeo, mostra a imagem como antes
+        else:
+            render_product_image(row.get('LINKIMAGEM'))
+
+        # --- O RESTANTE DO CÓDIGO DO CARD CONTINUA IGUAL ---
         
         preco_final = row['PRECO_FINAL']
         preco_original = row['PRECO']
         is_promotion = pd.notna(row.get('PRECO_PROMOCIONAL'))
 
-        # Mostra o selo de "PROMOÇÃO" se aplicável
         if is_promotion:
             st.markdown(f"""
             <div style="margin-bottom: 0.5rem;">
@@ -434,17 +452,14 @@ def render_product_card(prod_id, row, key_prefix):
             </div>
             """, unsafe_allow_html=True)
         
-        # 2. NOME E DESCRIÇÃO CURTA
         st.markdown(f"**{row['NOME']}**")
         st.caption(row.get('DESCRICAOCURTA', ''))
         
-        # 3. DETALHES (DESCRIÇÃO LONGA) EM UM EXPANSOR
         with st.expander("Ver detalhes"):
             st.markdown(row.get('DESCRICAOLONGA', 'Sem descrição detalhada.'))
             
         col_preco, col_botao = st.columns([2, 2])
         
-        # Lógica para mostrar o preço (normal ou promocional)
         with col_preco:
             if is_promotion:
                 st.markdown(f"""
@@ -456,7 +471,6 @@ def render_product_card(prod_id, row, key_prefix):
             else:
                 st.markdown(f"<h4 style='color: #880E4F; margin:0; line-height:2.5;'>R$ {preco_final:.2f}</h4>", unsafe_allow_html=True)
                 
-        # Botão para adicionar ao carrinho
         with col_botao:
             if st.button("➕ Adicionar", key=key_prefix, use_container_width=True):
                 adicionar_ao_carrinho(prod_id, row)
@@ -482,6 +496,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
