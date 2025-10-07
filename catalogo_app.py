@@ -339,7 +339,7 @@ st_autorefresh(interval=5000, key="auto_refresh_catalogo")
 
 # --- LOGO E TÍTULO (Alterado) ---
 col_logo, col_titulo = st.columns([1.5, 4.5])
-col_logo.image(LOGO_DOCEBELLA_URL, width=500)
+col_logo.image(LOGO_DOCEBELLA_URL, width=200)
 col_titulo.title("Catálogo de Pedidos Doce&Bella")
 # --- FIM DA ALTERAÇÃO ---
 
@@ -532,6 +532,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
