@@ -419,18 +419,12 @@ def render_product_card(prod_id, row, key_prefix):
         youtube_url = row.get('YOUTUBE_URL')
         
         # --- LÓGICA DE ABAS (TABS) ---
-        # Se a URL do YouTube existir e for uma string válida, cria as abas
         if youtube_url and isinstance(youtube_url, str) and youtube_url.strip().startswith('http'):
             tab_foto, tab_video = st.tabs(["📷 Foto", "▶️ Vídeo"])
-            
             with tab_foto:
                 render_product_image(row.get('LINKIMAGEM'))
-            
             with tab_video:
-                # O st.video do Streamlit já cria o player do YouTube automaticamente
                 st.video(youtube_url)
-
-        # Se não houver URL de vídeo, mostra a imagem como antes
         else:
             render_product_image(row.get('LINKIMAGEM'))
 
@@ -458,15 +452,35 @@ def render_product_card(prod_id, row, key_prefix):
         col_preco, col_botao = st.columns([2, 2])
         
         with col_preco:
+            # --- NOVA LÓGICA PARA O CASHBACK ---
+            # 1. Tenta converter o valor da coluna 'CASHBACK' para um número.
+            cashback_valor = pd.to_numeric(row.get('CASHBACK'), errors='coerce')
+            cashback_html = "" # Inicia a variável de cashback como vazia
+
+            # 2. Se o cashback for um número válido e maior que zero, cria o HTML para exibi-lo.
+            if pd.notna(cashback_valor) and cashback_valor > 0:
+                cashback_html = f"""
+                <span style='color: #D32F2F; font-size: 0.8rem; font-weight: bold;'>
+                    🔥 R$ {cashback_valor:.2f} de volta
+                </span>
+                """
+            # --- FIM DA LÓGICA DO CASHBACK ---
+
             if is_promotion:
                 st.markdown(f"""
                 <div style="line-height: 1.2;">
                     <span style='text-decoration: line-through; color: #757575; font-size: 0.9rem;'>R$ {preco_original:.2f}</span>
                     <h4 style='color: #D32F2F; margin:0;'>R$ {preco_final:.2f}</h4>
+                    {cashback_html} 
                 </div>
-                """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True) # Adiciona o cashback aqui
             else:
-                st.markdown(f"<h4 style='color: #880E4F; margin:0; line-height:2.5;'>R$ {preco_final:.2f}</h4>", unsafe_allow_html=True)
+                st.markdown(f"""
+                <div style='display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px;'>
+                    <h4 style='color: #880E4F; margin:0; line-height:1;'>R$ {preco_final:.2f}</h4>
+                    {cashback_html}
+                </div>
+                """, unsafe_allow_html=True) # E adiciona o cashback aqui também
                 
         with col_botao:
             if st.button("➕ Adicionar", key=key_prefix, use_container_width=True):
@@ -493,6 +507,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
