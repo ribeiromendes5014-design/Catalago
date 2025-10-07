@@ -21,7 +21,6 @@ BRANCH = os.environ.get("BRANCH")
 GITHUB_BASE_API = f"https://api.github.com/repos/{DATA_REPO_NAME}/contents/"
 
 # Fontes de Dados (CSV no GitHub)
-# AJUSTE 1: Alterado o nome do arquivo para o correto.
 SHEET_NAME_CATALOGO_CSV = "produtos_estoque.csv" 
 SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
 SHEET_NAME_PEDIDOS_CSV = "pedidos.csv"
@@ -120,6 +119,10 @@ def carregar_catalogo():
     if df_produtos is None or df_produtos.empty:
         st.warning(f"Catálogo indisponível. Verifique o arquivo '{SHEET_NAME_CATALOGO_CSV}' no GitHub.")
         return pd.DataFrame()
+    
+    # --- NOVO: Adiciona coluna de recência para ordenação "Lançamento" ---
+    # Assume que produtos mais abaixo no CSV são mais recentes.
+    df_produtos['RECENCIA'] = range(len(df_produtos), 0, -1)
     
     # --- LÓGICA ROBUSTA PARA ENCONTRAR E RENOMEAR COLUNAS ---
     colunas_minimas = ['PRECOVISTA', 'ID', 'NOME']
@@ -395,7 +398,6 @@ with col_carrinho:
                         st.warning("Preencha seu nome e contato.")
 st.markdown("</div></div>", unsafe_allow_html=True)
 
-st.markdown("---")
 df_catalogo = carregar_catalogo()
 
 def render_product_card(prod_id, row, key_prefix):
@@ -435,22 +437,16 @@ def render_product_card(prod_id, row, key_prefix):
         col_preco, col_botao = st.columns([2, 2])
         
         with col_preco:
-            # --- AJUSTE 2: LÓGICA DO CASHBACK ALTERADA ---
-            # Procura pela coluna 'CASHBACKPERCENT' e calcula o valor.
             cashback_percent = pd.to_numeric(row.get('CASHBACKPERCENT'), errors='coerce')
             cashback_html = "" 
 
             if pd.notna(cashback_percent) and cashback_percent > 0:
-                # Calcula o valor monetário do cashback
                 cashback_valor_calculado = (cashback_percent / 100) * preco_final
-                
-                # Cria o HTML para exibir o valor calculado
                 cashback_html = f"""
                 <span style='color: #D32F2F; font-size: 0.8rem; font-weight: bold;'>
                     🔥 R$ {cashback_valor_calculado:.2f}
                 </span>
                 """
-            # --- FIM DA LÓGICA DO CASHBACK ---
 
             if is_promotion:
                 st.markdown(f"""
@@ -478,7 +474,7 @@ if termo:
     df_filtrado = df_catalogo[df_catalogo.apply(lambda row: termo in str(row['NOME']).lower() or termo in str(row['DESCRICAOLONGA']).lower(), axis=1)]
 else:
     df_filtrado = df_catalogo
-    
+
 if df_filtrado.empty:
     if termo:
         st.info(f"Nenhum produto encontrado com o termo '{termo}'.")
@@ -486,11 +482,43 @@ if df_filtrado.empty:
         st.warning("O catálogo está vazio ou indisponível no momento.")
 else:
     st.subheader("✨ Nossos Produtos")
+
+    # --- NOVO: WIDGET DE ORDENAÇÃO ---
+    opcoes_ordem = ['Lançamento', 'Promoção', 'Menor Preço', 'Maior Preço', 'Nome do Produto (A-Z)']
+    ordem_selecionada = st.selectbox(
+        "Ordenar por:",
+        opcoes_ordem,
+        key='ordem_produtos'
+    )
+    
+    # --- NOVO: LÓGICA DE ORDENAÇÃO ---
+    df_filtrado['EM_PROMOCAO'] = df_filtrado['PRECO_PROMOCIONAL'].notna()
+
+    if ordem_selecionada == 'Lançamento':
+        # Prioriza promoções, depois ordena pelos mais recentes (maior 'RECENCIA')
+        df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'RECENCIA'], ascending=[False, False])
+    elif ordem_selecionada == 'Promoção':
+        # Filtra e ordena promoções pela mais recente
+        df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'RECENCIA'], ascending=[False, False])
+    elif ordem_selecionada == 'Menor Preço':
+        # Prioriza promoções, depois ordena pelo menor preço final
+        df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'PRECO_FINAL'], ascending=[False, True])
+    elif ordem_selecionada == 'Maior Preço':
+        # Prioriza promoções, depois ordena pelo maior preço final
+        df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'PRECO_FINAL'], ascending=[False, False])
+    elif ordem_selecionada == 'Nome do Produto (A-Z)':
+        # Prioriza promoções, depois ordena por nome
+        df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'NOME'], ascending=[False, True])
+    else:
+        df_ordenado = df_filtrado
+
+    df_filtrado = df_ordenado
+    # --- FIM DA LÓGICA DE ORDENAÇÃO ---
+
     cols = st.columns(4)
-    for i, row in df_filtrado.iterrows():
+    # Usamos .reset_index() para iterar sobre o dataframe ordenado corretamente
+    for i, row in df_filtrado.reset_index(drop=True).iterrows():
         product_id = row['ID']
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
-
-
