@@ -11,6 +11,21 @@ import base64
 from io import StringIO
 import os
 
+# --- LOGO E TÍTULO ---
+
+# Defina a URL da sua logo
+LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
+
+# Defina as colunas para o logo e o título
+col_logo, col_titulo = st.columns([0.1, 5]) 
+
+# Adicione sua logo na primeira coluna usando a variável
+col_logo.image(LOGO_DOCEBELLA_URL, width=60) # Ajuste o valor de width se precisar
+
+# Adicione o título na segunda coluna
+col_titulo.title("Catálogo de Pedidos Doce&Bella")
+
+# --- FIM DO TRECHO ---
 
 # --- Variáveis de Configuração ---
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
@@ -527,5 +542,6 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
