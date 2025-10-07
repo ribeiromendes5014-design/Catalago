@@ -22,7 +22,7 @@ GITHUB_BASE_API = f"https://api.github.com/repos/{DATA_REPO_NAME}/contents/"
 
 # Fontes de Dados (CSV no GitHub)
 # AJUSTE 1: Alterado o nome do arquivo para o correto.
-SHEET_NAME_CATALOGO_CSV = "gestao_produtos.csv" 
+SHEET_NAME_CATALOGO_CSV = "produtos_estoque.csv" 
 SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
 SHEET_NAME_PEDIDOS_CSV = "pedidos.csv"
 SHEET_NAME_VIDEOS_CSV = "video.csv"
@@ -492,3 +492,4 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
