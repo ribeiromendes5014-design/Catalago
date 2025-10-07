@@ -437,7 +437,7 @@ def render_product_card(prod_id, row, key_prefix):
         st.caption(row.get('DESCRICAOCURTA', ''))
 
         with st.expander("Ver detalhes"):
-            st.markdown(row.get('DESCRICAOLONGA', 'Sem descrição detalhada.'))
+            st.markdown(row.get('DETALHESGRADE', 'Sem detalhes de grade.'))
 
         col_preco, col_botao = st.columns([2, 2])
 
@@ -532,6 +532,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
