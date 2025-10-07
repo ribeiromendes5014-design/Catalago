@@ -175,16 +175,18 @@ def carregar_catalogo():
     # --- NOVA PARTE PARA CARREGAR E JUNTAR OS VÍDEOS ---
     df_videos = get_data_from_github(SHEET_NAME_VIDEOS_CSV)
     
-    # Se o arquivo de vídeos existir e não estiver vazio
     if df_videos is not None and not df_videos.empty:
-        # Garante que as colunas essenciais do vídeo existem
         if 'ID_PRODUTO' in df_videos.columns and 'YOUTUBE_URL' in df_videos.columns:
-            # Junta o DataFrame final com o DataFrame de vídeos
-            # 'how="left"' garante que todos os produtos continuem na lista, mesmo sem vídeo
             df_final = pd.merge(df_final, df_videos[['ID_PRODUTO', 'YOUTUBE_URL']], left_on='ID', right_on='ID_PRODUTO', how='left')
-            df_final.drop(columns=['ID_PRODUTO'], inplace=True, errors='ignore')
+            df_final.drop(columns=['ID_PRODUTO_y'], inplace=True, errors='ignore') # Ajuste para evitar colunas duplicadas
+            df_final.rename(columns={'ID_PRODUTO_x': 'ID_PRODUTO'}, inplace=True, errors='ignore')
         else:
             st.warning("Arquivo 'video.csv' encontrado, mas as colunas 'ID_PRODUTO' ou 'YOUTUBE_URL' estão faltando.")
+            
+    # --- DEBUG: MOSTRAR A TABELA FINAL ---
+    st.header("--- MODO DEBUG ---")
+    st.dataframe(df_final)
+    # ------------------------------------
             
     return df_final.set_index('ID').reset_index()
 
@@ -480,6 +482,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
