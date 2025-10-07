@@ -447,7 +447,7 @@ def render_product_card(prod_id, row, key_prefix):
                 # Cria o HTML para exibir o valor calculado
                 cashback_html = f"""
                 <span style='color: #D32F2F; font-size: 0.8rem; font-weight: bold;'>
-                    🔥 R$ {cashback_valor_calculado:.2f} de volta
+                    🔥 R$ {cashback_valor_calculado:.2f}
                 </span>
                 """
             # --- FIM DA LÓGICA DO CASHBACK ---
@@ -492,4 +492,5 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
