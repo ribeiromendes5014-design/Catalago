@@ -351,7 +351,21 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 
 st_autorefresh(interval=5000, key="auto_refresh_catalogo")
 
-col_logo, col_titulo = st.columns([0.1, 5]); col_logo.markdown("<h3>💖</h3>", unsafe_allow_html=True); col_titulo.title("Catálogo de Pedidos Doce&Bella")
+c# --- LOGO E TÍTULO ---
+
+# Defina a URL da sua logo
+LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
+
+# Defina as colunas para o logo e o título
+col_logo, col_titulo = st.columns([0.1, 5]) 
+
+# Adicione sua logo na primeira coluna usando a variável
+col_logo.image(LOGO_DOCEBELLA_URL, width=60) # Ajuste o valor de width se precisar
+
+# Adicione o título na segunda coluna
+col_titulo.title("Catálogo de Pedidos Doce&Bella")
+
+# --- FIM DO TRECHO ---
 
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
@@ -542,6 +556,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
