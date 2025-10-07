@@ -11,21 +11,6 @@ import base64
 from io import StringIO
 import os
 
-# --- LOGO E TÍTULO ---
-
-# Defina a URL da sua logo
-LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
-
-# Defina as colunas para o logo e o título
-col_logo, col_titulo = st.columns([0.1, 5]) 
-
-# Adicione sua logo na primeira coluna usando a variável
-col_logo.image(LOGO_DOCEBELLA_URL, width=60) # Ajuste o valor de width se precisar
-
-# Adicione o título na segunda coluna
-col_titulo.title("Catálogo de Pedidos Doce&Bella")
-
-# --- FIM DO TRECHO ---
 
 # --- Variáveis de Configuração ---
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
@@ -41,6 +26,7 @@ SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
 SHEET_NAME_PEDIDOS_CSV = "pedidos.csv"
 SHEET_NAME_VIDEOS_CSV = "video.csv"
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
+LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
 
 
 # Inicialização do Carrinho de Compras e Estado
@@ -351,21 +337,11 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 
 st_autorefresh(interval=5000, key="auto_refresh_catalogo")
 
-c# --- LOGO E TÍTULO ---
-
-# Defina a URL da sua logo
-LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
-
-# Defina as colunas para o logo e o título
+# --- LOGO E TÍTULO (Alterado) ---
 col_logo, col_titulo = st.columns([0.1, 5]) 
-
-# Adicione sua logo na primeira coluna usando a variável
-col_logo.image(LOGO_DOCEBELLA_URL, width=60) # Ajuste o valor de width se precisar
-
-# Adicione o título na segunda coluna
+col_logo.image(LOGO_DOCEBELLA_URL, width=60)
 col_titulo.title("Catálogo de Pedidos Doce&Bella")
-
-# --- FIM DO TRECHO ---
+# --- FIM DA ALTERAÇÃO ---
 
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
@@ -514,7 +490,7 @@ else:
 
     # --- AJUSTE FINAL: WIDGET DE ORDENAÇÃO para ser menor e minimalista ---
     # Usamos uma proporção maior na segunda coluna para deixar a primeira (com o selectbox) mais estreita.
-    col_select, _ = st.columns([1, 7])
+    col_select, _ = st.columns([1, 4])
 
     with col_select:
         opcoes_ordem = ['Lançamento', 'Promoção', 'Menor Preço', 'Maior Preço', 'Nome do Produto (A-Z)']
@@ -556,7 +532,3 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
-
-
-
-
