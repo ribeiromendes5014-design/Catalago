@@ -183,10 +183,7 @@ def carregar_catalogo():
         else:
             st.warning("Arquivo 'video.csv' encontrado, mas as colunas 'ID_PRODUTO' ou 'YOUTUBE_URL' estão faltando.")
             
-    # --- DEBUG: MOSTRAR A TABELA FINAL ---
-    st.header("--- MODO DEBUG ---")
-    st.dataframe(df_final)
-    # ------------------------------------
+   
             
     return df_final.set_index('ID').reset_index()
 
@@ -496,6 +493,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
