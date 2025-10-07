@@ -485,7 +485,7 @@ else:
 
     # --- AJUSTE FINAL: WIDGET DE ORDENAÇÃO para ser menor e minimalista ---
     # Usamos uma proporção maior na segunda coluna para deixar a primeira (com o selectbox) mais estreita.
-    col_select, _ = st.columns([1, 2])
+    col_select, _ = st.columns([1, 7])
 
     with col_select:
         opcoes_ordem = ['Lançamento', 'Promoção', 'Menor Preço', 'Maior Preço', 'Nome do Produto (A-Z)']
@@ -527,4 +527,5 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
