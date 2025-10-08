@@ -135,6 +135,21 @@ def carregar_catalogo():
     if 'ID' in df_produtos.columns:
         # Converte ID para numérico para garantir a ordenação correta
         df_produtos['RECENCIA'] = pd.to_numeric(df_produtos['ID'], errors='coerce')
+        
+        # === INÍCIO DA CORREÇÃO DE DUPLICATAS ===
+        df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
+        
+        # AQUI É A CORREÇÃO: Remove duplicatas na coluna 'ID', mantendo a primeira ocorrência
+        # Isso garante que df_produtos.set_index('ID') não falhe
+        duplicatas_removidas = df_produtos['ID'].duplicated().sum()
+        if duplicatas_removidas > 0:
+            st.warning(f"⚠️ Atenção: {duplicatas_removidas} produtos duplicados (mesmo ID) foram removidos do catálogo.")
+            df_produtos.drop_duplicates(subset=['ID'], keep='first', inplace=True)
+            
+        # Garante que as linhas sem ID válido (NaN após to_numeric) sejam removidas antes de usar como índice
+        df_produtos.dropna(subset=['ID'], inplace=True)
+        # === FIM DA CORREÇÃO DE DUPLICATAS ===
+
     else:
         # fallback: se não houver coluna ID, usa a ordem das linhas (do último para o primeiro)
         df_produtos['RECENCIA'] = range(len(df_produtos), 0, -1)
@@ -170,21 +185,19 @@ def carregar_catalogo():
         df_produtos['DESCRICAOLONGA'] = df_produtos.get('CATEGORIA', '')
 
     df_produtos['PRECO'] = pd.to_numeric(df_produtos['PRECO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
-    df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
+    # A conversão de ID foi movida para cima e combinada com a limpeza de duplicatas.
+    # df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64') 
 
     df_produtos = df_produtos[df_produtos['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
     
-    # === MUDANÇAS NOVAS ===
     # Garante que a coluna QUANTIDADE exista e seja numérica
     if 'QUANTIDADE' in df_produtos.columns:
         df_produtos['QUANTIDADE'] = pd.to_numeric(df_produtos['QUANTIDADE'], errors='coerce').fillna(0)
     else:
         # Se não houver coluna QUANTIDADE, assume estoque infinito (ou muito alto) para não filtrar
         df_produtos['QUANTIDADE'] = 999999
-    # Não vamos mais filtrar aqui, vamos exibir o "Esgotado" no card.
-    # df_produtos = df_produtos[df_produtos['QUANTIDADE'] > 0].copy() 
-    # === FIM DAS MUDANÇAS NOVAS ===
-
+    
+    # Define o ID como índice, o que agora é seguro
     df_produtos.set_index('ID', inplace=True)
 
     # Carrega promoções
@@ -195,8 +208,9 @@ def carregar_catalogo():
         df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO'])
         df_final.drop(columns=['ID_PRODUTO'], inplace=True, errors='ignore')
     else:
+        # Este trecho agora funciona porque df_produtos não tem mais IDs duplicados
         df_final = df_produtos.reset_index()
-        df_final['PRECO_FINAL'] = df_produtos['PRECO']
+        df_final['PRECO_FINAL'] = df_final['PRECO'] # A atribuição deve usar df_final['PRECO']
         df_final['PRECO_PROMOCIONAL'] = None
 
     # --- NOVA PARTE PARA CARREGAR E JUNTAR OS VÍDEOS ---
@@ -204,6 +218,8 @@ def carregar_catalogo():
 
     if df_videos is not None and not df_videos.empty:
         if 'ID_PRODUTO' in df_videos.columns and 'YOUTUBE_URL' in df_videos.columns:
+            # Garante que as colunas de merge sejam consistentes
+            df_videos['ID_PRODUTO'] = pd.to_numeric(df_videos['ID_PRODUTO'], errors='coerce').astype('Int64')
             df_final = pd.merge(df_final, df_videos[['ID_PRODUTO', 'YOUTUBE_URL']], left_on='ID', right_on='ID_PRODUTO', how='left')
             df_final.drop(columns=['ID_PRODUTO_y'], inplace=True, errors='ignore')
             df_final.rename(columns={'ID_PRODUTO_x': 'ID_PRODUTO'}, inplace=True, errors='ignore')
@@ -757,3 +773,4 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
