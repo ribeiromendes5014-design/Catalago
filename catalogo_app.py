@@ -443,25 +443,54 @@ def render_product_card(prod_id, row, key_prefix):
         st.markdown(f"**{row['NOME']}**")
         st.caption(row.get('DESCRICAOCURTA', ''))
 
-        # --- LINHA ALTERADA ---
+        # --- SEÇÃO ATUALIZADA: ORGANIZAÇÃO DOS DETALHES ---
         with st.expander("Ver detalhes"):
+            
+            # 1. PUXAR A DESCRIÇÃO LONGA
+            descricao_principal = row.get('DESCRICAOLONGA')
             detalhes_str = row.get('DETALHESGRADE')
             
-            # Verifica se existe algum texto e se ele parece ser um dicionário
-            if detalhes_str and isinstance(detalhes_str, str) and detalhes_str.strip().startswith('{'):
-                try:
-                    # Converte o texto para um dicionário de verdade
-                    detalhes_dict = ast.literal_eval(detalhes_str)
+            tem_descricao = descricao_principal and isinstance(descricao_principal, str) and descricao_principal.strip()
+            tem_detalhes = detalhes_str and isinstance(detalhes_str, str) and detalhes_str.strip()
+            
+            # Se não houver NENHUM conteúdo, exibe a mensagem de vazio
+            if not tem_descricao and not tem_detalhes:
+                st.info('Sem informações detalhadas disponíveis para este produto.')
+            else:
+                # 1. EXIBIR A DESCRIÇÃO LONGA
+                if tem_descricao:
+                    # Verifica se o conteúdo da Descrição Longa não é apenas uma repetição da Descrição Curta
+                    if descricao_principal.strip() != row.get('DESCRICAOCURTA', '').strip():
+                        st.subheader('Descrição')
+                        st.markdown(descricao_principal)
+                        
+                        # Adiciona separador se houver detalhes da grade em seguida
+                        if tem_detalhes:
+                            st.markdown('---') 
                     
-                    # Cria uma linha formatada para cada item (ex: Cor, Tamanho)
-                    texto_formatado = ""
-                    for chave, valor in detalhes_dict.items():
-                        texto_formatado += f"**{chave.strip()}**: {str(valor).strip()}  \n"
+                # 2. EXIBIR OS DETALHES DA GRADE/ESPECIFICAÇÕES
+                if tem_detalhes:
+                    st.subheader('Especificações')
                     
-                    st.markdown(texto_formatado)
-                except (ValueError, SyntaxError):
-                    # Se der erro na conversão, mostra o texto original
-                    st.markdown(detalhes_str)
+                    # Tenta formatar a coluna DETALHESGRADE como lista de especificações (dicionário)
+                    if detalhes_str.strip().startswith('{'):
+                        try:
+                            # Tenta converter o JSON/dicionário para formato de lista
+                            detalhes_dict = ast.literal_eval(detalhes_str)
+                            
+                            texto_formatado = ""
+                            for chave, valor in detalhes_dict.items():
+                                # Cria uma lista de itens formatada com bullet points
+                                texto_formatado += f"* **{chave.strip()}**: {str(valor).strip()}\n"
+                            
+                            st.markdown(texto_formatado)
+                            
+                        except (ValueError, SyntaxError):
+                            # Se der erro na conversão (formato inválido), exibe o conteúdo como texto bruto
+                            st.markdown(detalhes_str)
+                    else:
+                        # Se não for um dicionário, exibe o texto bruto da célula
+                        st.markdown(detalhes_str)
             else:
                 # Se a célula estiver vazia ou não for um dicionário, mostra mensagem padrão
                 st.markdown('Sem detalhes de grade.')
@@ -565,3 +594,4 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
