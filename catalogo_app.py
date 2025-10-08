@@ -42,39 +42,7 @@ if 'pedido_confirmado' not in st.session_state:
 # === FIM DAS MUDANÇAS NOVAS ---
 
 
-# --- Headers para Autenticação do GitHub ---
-def get_github_headers(content_type='json'):
-    """Retorna os cabeçalhos de autorização e aceitação para escrita."""
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-    }
-    if content_type == 'json':
-        headers["Accept"] = "application/vnd.github.com.v3.raw"
-    return headers
-
 # --- Funções de Conexão GITHUB ---
-@st.cache_data(ttl=2)
-def carregar_promocoes():
-    """Carrega as promoções do 'promocoes.csv' do GitHub."""
-    df = get_data_from_github(SHEET_NAME_PROMOCOES_CSV)
-
-    colunas_essenciais = ['ID_PRODUTO', 'PRECO_PROMOCIONAL', 'STATUS']
-    if df is None or df.empty:
-        return pd.DataFrame(columns=colunas_essenciais)
-
-    for col in colunas_essenciais:
-        if col not in df.columns:
-            st.error(f"Coluna essencial '{col}' não encontrada no 'promocoes.csv'. Verifique o cabeçalho.")
-            return pd.DataFrame(columns=colunas_essenciais)
-
-    df = df[df['STATUS'].astype(str).str.strip().str.upper() == 'ATIVO'].copy()
-    df_essencial = df[colunas_essenciais].copy()
-
-    df_essencial['PRECO_PROMOCIONAL'] = pd.to_numeric(df_essencial['PRECO_PROMOCIONAL'].astype(str).str.replace(',', '.'), errors='coerce')
-    df_essencial['ID_PRODUTO'] = pd.to_numeric(df_essencial['ID_PRODUTO'], errors='coerce').astype('Int64')
-
-    return df_essencial.dropna(subset=['ID_PRODUTO', 'PRECO_PROMOCIONAL']).reset_index(drop=True)
-
 def get_data_from_github(file_name):
     """
     Lê o conteúdo de um CSV do GitHub diretamente via API (sem cache da CDN).
@@ -120,6 +88,29 @@ def get_data_from_github(file_name):
         return None
 
 
+@st.cache_data(ttl=5)
+def carregar_promocoes():
+    """Carrega as promoções do 'promocoes.csv' do GitHub."""
+    df = get_data_from_github(SHEET_NAME_PROMOCOES_CSV)
+
+    colunas_essenciais = ['ID_PRODUTO', 'PRECO_PROMOCIONAL', 'STATUS']
+    if df is None or df.empty:
+        return pd.DataFrame(columns=colunas_essenciais)
+
+    for col in colunas_essenciais:
+        if col not in df.columns:
+            st.error(f"Coluna essencial '{col}' não encontrada no 'promocoes.csv'. Verifique o cabeçalho.")
+            return pd.DataFrame(columns=colunas_essenciais)
+
+    df = df[df['STATUS'].astype(str).str.strip().str.upper() == 'ATIVO'].copy()
+    df_essencial = df[colunas_essenciais].copy()
+
+    df_essencial['PRECO_PROMOCIONAL'] = pd.to_numeric(df_essencial['PRECO_PROMOCIONAL'].astype(str).str.replace(',', '.'), errors='coerce')
+    df_essencial['ID_PRODUTO'] = pd.to_numeric(df_essencial['ID_PRODUTO'], errors='coerce').astype('Int64')
+
+    return df_essencial.dropna(subset=['ID_PRODUTO', 'PRECO_PROMOCIONAL']).reset_index(drop=True)
+
+
 @st.cache_data(ttl=2)
 def carregar_catalogo():
     """Carrega o catálogo, aplica promoções e vídeos, e prepara o DataFrame."""
@@ -130,23 +121,15 @@ def carregar_catalogo():
         return pd.DataFrame()
 
     # --- CORREÇÃO DE RECÊNCIA: usa o ID como base da recência para maior precisão ---
-    # Produtos com IDs maiores são considerados lançamentos mais recentes.
     if 'ID' in df_produtos.columns:
-        # Converte ID para numérico para garantir a ordenação correta
         df_produtos['RECENCIA'] = pd.to_numeric(df_produtos['ID'], errors='coerce')
         
-        # === INÍCIO DA CORREÇÃO DE DUPLICATAS (REMOÇÃO DO AVISO E DO DROP) ===
+        # === CORREÇÃO DE DUPLICATAS (Sem remoção e sem aviso, conforme solicitado) ===
         df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
-        
-        # AÇÃO REMOVIDA: df_produtos.drop_duplicates(subset=['ID'], keep='first', inplace=True)
-        # O catálogo AGORA MOSTRA IDs duplicados.
-
-        # A única remoção é para garantir que o índice seja numérico e não falhe o app.
         df_produtos.dropna(subset=['ID'], inplace=True)
-        # === FIM DA CORREÇÃO DE DUPLICATAS (REMOÇÃO DO AVISO E DO DROP) ===
+        # === FIM DA CORREÇÃO DE DUPLICATAS ===
 
     else:
-        # fallback: se não houver coluna ID, usa a ordem das linhas (do último para o primeiro)
         df_produtos['RECENCIA'] = range(len(df_produtos), 0, -1)
     # --- FIM DA CORREÇÃO DE RECÊNCIA ---
 
@@ -180,21 +163,15 @@ def carregar_catalogo():
         df_produtos['DESCRICAOLONGA'] = df_produtos.get('CATEGORIA', '')
 
     df_produtos['PRECO'] = pd.to_numeric(df_produtos['PRECO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
-    # A conversão de ID foi movida para cima e combinada com a limpeza de duplicatas.
-
     df_produtos = df_produtos[df_produtos['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
     
-    # Garante que a coluna QUANTIDADE exista e seja numérica
     if 'QUANTIDADE' in df_produtos.columns:
         df_produtos['QUANTIDADE'] = pd.to_numeric(df_produtos['QUANTIDADE'], errors='coerce').fillna(0)
     else:
-        # Se não houver coluna QUANTIDADE, assume estoque infinito (ou muito alto) para não filtrar
         df_produtos['QUANTIDADE'] = 999999
     
-    # Define o ID como índice, o que agora é seguro
     df_produtos.set_index('ID', inplace=True)
 
-    # Carrega promoções
     df_promocoes = carregar_promocoes()
 
     if not df_promocoes.empty:
@@ -202,17 +179,14 @@ def carregar_catalogo():
         df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO'])
         df_final.drop(columns=['ID_PRODUTO'], inplace=True, errors='ignore')
     else:
-        # Este trecho agora funciona porque df_produtos não tem mais IDs que não são números
         df_final = df_produtos.reset_index()
         df_final['PRECO_FINAL'] = df_final['PRECO']
         df_final['PRECO_PROMOCIONAL'] = None
 
-    # --- NOVA PARTE PARA CARREGAR E JUNTAR OS VÍDEOS ---
     df_videos = get_data_from_github(SHEET_NAME_VIDEOS_CSV)
 
     if df_videos is not None and not df_videos.empty:
         if 'ID_PRODUTO' in df_videos.columns and 'YOUTUBE_URL' in df_videos.columns:
-            # Garante que as colunas de merge sejam consistentes
             df_videos['ID_PRODUTO'] = pd.to_numeric(df_videos['ID_PRODUTO'], errors='coerce').astype('Int64')
             df_final = pd.merge(df_final, df_videos[['ID_PRODUTO', 'YOUTUBE_URL']], left_on='ID', right_on='ID_PRODUTO', how='left')
             df_final.drop(columns=['ID_PRODUTO_y'], inplace=True, errors='ignore')
@@ -220,7 +194,6 @@ def carregar_catalogo():
         else:
             st.warning("Arquivo 'video.csv' encontrado, mas as colunas 'ID_PRODUTO' ou 'YOUTUBE_URL' estão faltando.")
 
-    # Garante que 'CATEGORIA' exista para o filtro, se não existir, cria uma coluna vazia.
     if 'CATEGORIA' not in df_final.columns:
          df_final['CATEGORIA'] = 'Geral'
          
@@ -363,7 +336,7 @@ def adicionar_ao_carrinho(produto_id, produto_row):
 def remover_do_carrinho(produto_id):
     if produto_id in st.session_state.carrinho:
         nome = st.session_state.carrinho[produto_id]['nome']
-        del st.session_state.carrinho[produto_id]
+        del st.session_state.carrinho[prod_id]
         st.toast(f"❌ {nome} removido.", icon="🗑️")
 
 def render_product_image(link_imagem):
@@ -517,6 +490,187 @@ def render_product_card(prod_id, row, key_prefix):
                         # Chama a nova função de adição
                         adicionar_qtd_ao_carrinho(prod_id, row, qtd_a_adicionar)
                         st.rerun()
+        # === FIM SELETOR DE QUANTIDADE ===
+# === FIM DA FUNÇÃO RENDER_PRODUCT_CARD ===
+
+
+# --- Layout do Aplicativo (CONTINUAÇÃO) ---
+st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
+
+# --- CSS ---
+st.markdown(f"""
+<style>
+#MainMenu, footer, [data-testid="stSidebar"] {{visibility: hidden;}}
+[data-testid="stSidebarHeader"], [data-testid="stToolbar"], a[data-testid="stAppDeployButton"], [data-testid="stStatusWidget"], [data-testid="stDecoration"] {{ display: none !important; }}
+div[data-testid="stPopover"] > div:first-child > button {{ display: none; }}
+.stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
+div.block-container {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 10px; padding: 2rem; margin-top: 1rem; }}
+.pink-bar-container {{ background-color: #E91E63; padding: 20px 0; width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
+.pink-bar-content {{ width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; }}
+.cart-badge-button {{ background-color: #C2185B; color: white; border-radius: 12px; padding: 8px 15px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; transition: background-color 0.3s; display: inline-flex; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-width: 150px; justify-content: center; }}
+.cart-badge-button:hover {{ background-color: #C2185B; }}
+.cart-count {{ background-color: white; color: #E91E63; border-radius: 50%; padding: 2px 7px; margin-left: 8px; font-size: 14px; line-height: 1; }}
+div[data-testid="stButton"] > button {{ background-color: #E91E63; color: white; border-radius: 10px; border: 1px solid #C2185B; font-weight: bold; }}
+div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: white; border: 1px solid #E91E63; }}
+.product-image-container {{ height: 220px; display: flex; align-items: center; justify-content: center; margin-bottom: 1rem; overflow: hidden; }}
+.product-image-container img {{ max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }}
+.esgotado-badge {{ background-color: #757575; color: white; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
+.estoque-baixo-badge {{ background-color: #FFC107; color: black; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
+</style>
+""", unsafe_allow_html=True)
+
+# === MUDANÇAS NOVAS (JS para copiar o resumo do pedido) ===
+# Função JS para copiar texto (usada após o envio do pedido)
+def copy_to_clipboard_js(text_to_copy):
+    js_code = f"""
+    <script>
+    function copyTextToClipboard(text) {{
+      if (navigator.clipboard) {{
+        navigator.clipboard.writeText(text).then(function() {{
+          // St.toast não está disponível em JS, mas podemos usar um alerta simples
+          alert('Resumo do pedido copiado!');
+        }}, function(err) {{
+          console.error('Não foi possível copiar o texto: ', err);
+          alert('Erro ao copiar o texto. Tente novamente.');
+        }});
+      }} else {{
+        // Fallback para navegadores mais antigos (usando um textarea temporário)
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {{
+          document.execCommand('copy');
+          alert('Resumo do pedido copiado!');
+        }} catch (err) {{
+          console.error('Fallback: Não foi possível copiar o texto: ', err);
+          alert('Erro ao copiar o texto. Tente novamente.');
+        }}
+        document.body.removeChild(textArea);
+      }}
+    }}
+    // Chama a função ao renderizar o botão, mas de forma segura com onclick
+    // O botão deve ser gerado separadamente com um ID
+    </script>
+    """
+    st.markdown(js_code, unsafe_allow_html=True)
+# === FIM DAS MUDANÇAS NOVAS ===
+
+
+st_autorefresh(interval=5000, key="auto_refresh_catalogo")
+
+# --- LÓGICA DE CONFIRMAÇÃO DE PEDIDO (Nova Seção) ---
+if st.session_state.pedido_confirmado:
+    st.balloons()
+    st.success("🎉 Pedido enviado com sucesso! Utilize o resumo abaixo para confirmar o pedido pelo WhatsApp.")
+    
+    pedido = st.session_state.pedido_confirmado
+    itens_formatados = '\n'.join([
+        f"- {item['quantidade']}x {item['nome']} (R$ {item['preco']:.2f} un.)" 
+        for item in pedido['itens']
+    ])
+
+    resumo_texto = (
+        f"***📝 RESUMO DO PEDIDO - DOCE&BELLA ***\n\n"
+        f"🛒 Cliente: {pedido['nome']}\n"
+        f"📞 Contato: {pedido['contato']}\n\n"
+        f"📦 Itens Pedidos:\n"
+        f"{itens_formatados}\n\n"
+        f"💰 VALOR TOTAL: R$ {pedido['total']:.2f}\n\n"
+        f"Obrigado por seu pedido!"
+    )
+
+    st.text_area("Resumo do Pedido (Clique para copiar)", resumo_texto, height=300)
+    
+    # Botão de Copiar (usando JS)
+    copy_to_clipboard_js(resumo_texto)
+    st.markdown(
+        f'<button class="cart-badge-button" style="background-color: #25D366; width: 100%; margin-bottom: 15px;" onclick="copyTextToClipboard(\'{resumo_texto.replace("'", "\\'")}\')">✅ Copiar Resumo</button>',
+        unsafe_allow_html=True
+    )
+    
+    # Após exibir, limpa a variável de confirmação
+    if st.button("Voltar ao Catálogo"):
+        st.session_state.pedido_confirmado = None
+        st.rerun()
+    st.stop()
+# --- FIM DA LÓGICA DE CONFIRMAÇÃO ---
+
+# --- LOGO E TÍTULO (Alterado) ---
+col_logo, col_titulo = st.columns([1.5, 4.5])
+col_logo.image(LOGO_DOCEBELLA_URL, width=200)
+col_titulo.title("Catálogo de Pedidos Doce&Bella")
+# --- FIM DA ALTERAÇÃO ---
+
+total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
+num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
+carrinho_vazio = not st.session_state.carrinho
+
+st.markdown("<div class='pink-bar-container'><div class='pink-bar-content'>", unsafe_allow_html=True)
+
+# A busca principal está na barra rosa, mas usaremos o novo filtro na seção de produtos.
+col_pesquisa, col_carrinho = st.columns([5, 1])
+with col_pesquisa:
+    st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
+
+with col_carrinho:
+    custom_cart_button = f"""
+        <div class='cart-badge-button' onclick='document.querySelector("[data-testid=\\"stPopover\\"] > div:first-child > button").click();'>
+            🛒 SEU PEDIDO
+            <span class='cart-count'>{num_itens}</span>
+        </div>
+    """
+    st.markdown(custom_cart_button, unsafe_allow_html=True)
+    with st.popover(" ", use_container_width=False, help="Clique para ver os itens e finalizar o pedido"):
+        st.header("🛒 Detalhes do Pedido")
+        if carrinho_vazio:
+            st.info("Seu carrinho está vazio.")
+        else:
+            st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
+            st.markdown("---")
+            
+            df_catalogo_completo = carregar_catalogo().set_index('ID')
+            
+            for prod_id, item in list(st.session_state.carrinho.items()):
+                # === CORREÇÃO DO NAMEERROR: DEFINIÇÃO DE COLUNAS ===
+                c1, c2, c3, c4 = st.columns([3, 1.5, 2, 1])
+                # === FIM DA CORREÇÃO ===
+                
+                c1.write(f"*{item['nome']}*")
+                
+                # === MUDANÇAS NOVAS (Edição de Quantidade e Estoque Máximo) ===
+                if prod_id in df_catalogo_completo.index:
+                    # Lida com IDs duplicados pegando o primeiro valor, se for uma Série
+                    max_qtd = df_catalogo_completo.loc[prod_id, 'QUANTIDADE']
+                    if isinstance(max_qtd, pd.Series):
+                         max_qtd = max_qtd.iloc[0]
+                else:
+                    max_qtd = 999999
+                
+                # Garante que seja um inteiro
+                max_qtd = int(max_qtd)
+
+                # Verifica se a quantidade atual no carrinho é maior que o estoque, ajusta se necessário
+                if item['quantidade'] > max_qtd:
+                    st.session_state.carrinho[prod_id]['quantidade'] = max_qtd
+                    item['quantidade'] = max_qtd
+                    st.toast(f"Ajustado: {item['nome']} ao estoque máximo de {max_qtd}.", icon="⚠️")
+                    st.rerun()
+
+                nova_quantidade = c2.number_input(
+                    label=f'Qtd_{prod_id}',
+                    min_value=1,
+                    max_value=max_qtd,
+                    value=item['quantidade'],
+                    step=1,
+                    key=f'qtd_{prod_id}_popover',
+                    label_visibility="collapsed"
+                )
+                
+                if nova_quantidade != item['quantidade']:
+                    st.session_state.carrinho[prod_id]['quantidade'] = nova_quantidade
+                    st.rerun()
                 # === FIM DAS MUDANÇAS NOVAS ===
 
                 c3.markdown(f"R$ {item['preco']*item['quantidade']:.2f}")
@@ -547,14 +701,12 @@ def render_product_card(prod_id, row, key_prefix):
                                     "imagem": v.get('imagem', '')
                                 } for k, v in st.session_state.carrinho.items()
                             ],
-                            # === MUDANÇAS NOVAS (Dados do Cliente para o resumo) ===
                             "nome": nome,
                             "contato": contato
-                            # === FIM DAS MUDANÇAS NOVAS ===
                         }
                         if salvar_pedido(nome, contato, total_acumulado, json.dumps(detalhes, ensure_ascii=False), detalhes):
                             st.session_state.carrinho = {}
-                            st.rerun() # Reruns para ir para a tela de confirmação
+                            st.rerun()
                     else:
                         st.warning("Preencha seu nome e contato.")
 st.markdown("</div></div>", unsafe_allow_html=True)
@@ -563,21 +715,20 @@ df_catalogo = carregar_catalogo()
 
 # --- NOVO BLOCO: FILTRO POR CATEGORIA E BUSCA AVANÇADA ---
 
-# 1. Obter todas as categorias únicas (garantindo que não haja valores NaN/vazios)
 if 'CATEGORIA' in df_catalogo.columns:
     categorias = df_catalogo['CATEGORIA'].dropna().astype(str).unique().tolist()
-    categorias.sort() # Ordena as categorias por nome
-    categorias.insert(0, "TODAS AS CATEGORIAS") # Opção padrão
+    categorias.sort()
+    categorias.insert(0, "TODAS AS CATEGORIAS")
 else:
     categorias = ["TODAS AS CATEGORIAS"]
-    if "Geral" not in df_catalogo.columns: # Evita double warning se for só 'Geral'
+    if "Geral" not in df_catalogo.columns:
          st.warning("A coluna 'CATEGORIA' não foi encontrada no seu arquivo de catálogo. O filtro não será exibido.")
 
 
 # 2. Widgets de Filtro e Ordenação
 col_filtro_cat, col_select_ordem, _ = st.columns([1, 1, 3])
 
-# Variável de termo da busca principal
+# Variável de termo da busca principal (capturada na barra rosa)
 termo = st.session_state.get('termo_pesquisa_barra', '').lower()
 
 with col_filtro_cat:
@@ -586,7 +737,6 @@ with col_filtro_cat:
         categorias,
         key='filtro_categoria_barra'
     )
-    # Se houver uma busca na barra superior, esta opção fica oculta (a busca é prioritária)
     if termo:
         st.markdown(f'<div style="font-size: 0.8rem; color: #E91E63;">Busca ativa desabilita filtro.</div>', unsafe_allow_html=True)
 
@@ -595,19 +745,14 @@ with col_filtro_cat:
 
 df_filtrado = df_catalogo.copy()
 
-# A. Filtrar por Categoria (Ignora se houver termo de busca, ou se for 'TODAS')
 if not termo and categoria_selecionada != "TODAS AS CATEGORIAS":
-    # Garante que a comparação seja feita com strings
     df_filtrado = df_filtrado[df_filtrado['CATEGORIA'].astype(str) == categoria_selecionada]
 
-# B. Filtrar por Termo de Busca (usando o termo capturado na barra principal)
 elif termo:
-    # Filtra por NOME ou DESCRICAOLONGA (igual à lógica anterior)
     df_filtrado = df_filtrado[df_filtrado.apply(
         lambda row: termo in str(row['NOME']).lower() or termo in str(row['DESCRICAOLONGA']).lower(), 
         axis=1
     )]
-
 # --- FIM DO NOVO BLOCO DE FILTRO ---
 
 
@@ -633,24 +778,14 @@ else:
     df_filtrado['EM_PROMOCAO'] = df_filtrado['PRECO_PROMOCIONAL'].notna()
 
     if ordem_selecionada == 'Lançamento':
-        # 1. PRIORIDADE: Recência (Mais novo primeiro - usando o ID como RECENCIA)
-        # 2. Desempate: Promoção (O item mais novo e em promoção aparece primeiro)
         df_ordenado = df_filtrado.sort_values(by=['RECENCIA', 'EM_PROMOCAO'], ascending=[False, False])
     elif ordem_selecionada == 'Promoção':
-        # 1. PRIORIDADE: Promoção (Só produtos em promoção aparecem primeiro)
-        # 2. Desempate: Recência (as promoções mais recentes aparecem primeiro)
         df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'RECENCIA'], ascending=[False, False])
     elif ordem_selecionada == 'Menor Preço':
-        # 1. Prioriza Promoção (True primeiro)
-        # 2. Depois, ordena pelo Menor Preço Final
         df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'PRECO_FINAL'], ascending=[False, True])
     elif ordem_selecionada == 'Maior Preço':
-        # 1. Prioriza Promoção (True primeiro)
-        # 2. Depois, ordena pelo Maior Preço Final
         df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'PRECO_FINAL'], ascending=[False, False])
     elif ordem_selecionada == 'Nome do Produto (A-Z)':
-        # 1. Prioriza Promoção (True primeiro)
-        # 2. Depois, ordena por Nome (A-Z)
         df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'NOME'], ascending=[False, True])
     else:
         df_ordenado = df_filtrado
@@ -659,10 +794,8 @@ else:
     # --- FIM DA LÓGICA DE ORDENAÇÃO ---
 
     cols = st.columns(4)
-    # Usamos .reset_index() para iterar sobre o dataframe ordenado corretamente
     for i, row in df_filtrado.reset_index(drop=True).iterrows():
         product_id = row['ID']
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
-
