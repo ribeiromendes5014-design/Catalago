@@ -136,18 +136,15 @@ def carregar_catalogo():
         # Converte ID para numérico para garantir a ordenação correta
         df_produtos['RECENCIA'] = pd.to_numeric(df_produtos['ID'], errors='coerce')
         
-        # === INÍCIO DA CORREÇÃO DE DUPLICATAS ===
+        # === INÍCIO DA CORREÇÃO DE DUPLICATAS (REMOÇÃO DO AVISO E DO DROP) ===
         df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
         
-        # AQUI É A CORREÇÃO: Remove duplicatas na coluna 'ID', mantendo a primeira ocorrência
-        duplicatas_removidas = df_produtos['ID'].duplicated().sum()
-        if duplicatas_removidas > 0:
-            st.warning(f"⚠️ Atenção: {duplicatas_removidas} produtos duplicados (mesmo ID) foram removidos do catálogo.")
-            df_produtos.drop_duplicates(subset=['ID'], keep='first', inplace=True)
-            
-        # Garante que as linhas sem ID válido (NaN após to_numeric) sejam removidas antes de usar como índice
+        # AÇÃO REMOVIDA: df_produtos.drop_duplicates(subset=['ID'], keep='first', inplace=True)
+        # O catálogo agora VAI MOSTRAR IDs duplicados, mas isso pode causar erros de alinhamento de dados.
+        
+        # A única remoção é para garantir que o índice seja numérico e não falhe o app.
         df_produtos.dropna(subset=['ID'], inplace=True)
-        # === FIM DA CORREÇÃO DE DUPLICATAS ===
+        # === FIM DA CORREÇÃO DE DUPLICATAS (REMOÇÃO DO AVISO E DO DROP) ===
 
     else:
         # fallback: se não houver coluna ID, usa a ordem das linhas (do último para o primeiro)
@@ -206,7 +203,7 @@ def carregar_catalogo():
         df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO'])
         df_final.drop(columns=['ID_PRODUTO'], inplace=True, errors='ignore')
     else:
-        # Este trecho agora funciona porque df_produtos não tem mais IDs duplicados
+        # Este trecho agora funciona porque df_produtos não tem mais IDs que não são números
         df_final = df_produtos.reset_index()
         df_final['PRECO_FINAL'] = df_final['PRECO']
         df_final['PRECO_PROMOCIONAL'] = None
