@@ -29,6 +29,9 @@ SHEET_NAME_CATALOGO_CSV = "produtos_estoque.csv"
 SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
 SHEET_NAME_PEDIDOS_CSV = "pedidos.csv"
 SHEET_NAME_VIDEOS_CSV = "video.csv"
+# === NOVO ARQUIVO: Clientes para consulta de Cashback ===
+SHEET_NAME_CLIENTES_CASHBACK_CSV = "clientes_cash.csv"
+# =======================================================
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-na-zvania-3.jpg'
 LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
 
@@ -200,6 +203,56 @@ def carregar_catalogo():
     return df_final.set_index('ID').reset_index()
 
 
+# =========================================================================
+# === NOVAS FUNÇÕES DE CASHBACK ===
+# =========================================================================
+
+@st.cache_data(ttl=1) 
+def carregar_clientes_cashback():
+    """Carrega os clientes do cashback, limpa o contato e renomeia as colunas para facilitar."""
+    df = get_data_from_github(SHEET_NAME_CLIENTES_CASHBACK_CSV)
+    
+    if df is None or df.empty:
+        return pd.DataFrame(columns=['NOME', 'CONTATO', 'CASHBACK_DISPONIVEL', 'NIVEL_ATUAL'])
+        
+    # Renomeia e padroniza as colunas conforme o schema do cashback_system.py
+    df.rename(columns={
+        'CASHBACK_DISPONÍVEL': 'CASHBACK_DISPONIVEL', 
+        'NIVEL_ATUAL': 'NIVEL_ATUAL', 
+        'TELEFONE': 'CONTATO',
+        'NOME': 'NOME'
+    }, inplace=True)
+    
+    # Limpa o telefone para ser usado como chave única
+    df['CONTATO'] = df['CONTATO'].astype(str).str.replace(r'\D', '', regex=True).str.strip() 
+    df['CASHBACK_DISPONIVEL'] = pd.to_numeric(df['CASHBACK_DISPONIVEL'], errors='coerce').fillna(0.0)
+    df['NIVEL_ATUAL'] = df['NIVEL_ATUAL'].fillna('Prata')
+    
+    return df[['NOME', 'CONTATO', 'CASHBACK_DISPONIVEL', 'NIVEL_ATUAL']].dropna(subset=['CONTATO'])
+
+DF_CLIENTES_CASH = carregar_clientes_cashback()
+
+
+def buscar_cliente_cashback(numero_contato, df_clientes_cash):
+    """Busca um cliente pelo número de contato (limpo) e retorna saldo e nível."""
+    # Limpa o contato do usuário para fazer a busca
+    contato_limpo = str(numero_contato).replace('(', '').replace(')', '').replace('-', '').replace(' ', '').strip()
+    
+    cliente = df_clientes_cash[df_clientes_cash['CONTATO'] == contato_limpo]
+    
+    if not cliente.empty:
+        saldo = cliente['CASHBACK_DISPONIVEL'].iloc[0]
+        nome = cliente['NOME'].iloc[0]
+        nivel = cliente['NIVEL_ATUAL'].iloc[0] 
+        return True, nome, saldo, nivel
+    else:
+        return False, None, 0.00, 'NENHUM'
+        
+# =========================================================================
+# FIM NOVAS FUNÇÕES DE CASHBACK
+# =========================================================================
+
+
 # --- Funções do Aplicativo ---
 
 def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json, pedido_data):
@@ -207,11 +260,12 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json, pedido
     file_path = SHEET_NAME_PEDIDOS_CSV
     api_url = f"{GITHUB_BASE_API}{file_path}"
 
+    # Adicione a coluna 'STATUS' no cabeçalho
     novo_cabecalho = 'ID_PEDIDO,DATA_HORA,NOME_CLIENTE,CONTATO_CLIENTE,ITENS_PEDIDO,VALOR_TOTAL,LINKIMAGEM,STATUS,itens_json'
 
     headers_get = {
         "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
+        "Accept": "application/vnd.github.com.v3+json"
     }
 
     try:
@@ -242,7 +296,9 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json, pedido
     timestamp = int(datetime.now().timestamp())
     data_hora = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     id_pedido = timestamp
-    status = "NOVO"
+    # === MUDANÇA CRÍTICA: Status inicial agora é PENDENTE ===
+    status = "PENDENTE"
+    # ======================================================
     link_imagem = ""
 
     try:
@@ -266,7 +322,7 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json, pedido
     encoded_content = base64.b64encode(new_content.encode('utf-8')).decode('utf-8')
 
     commit_data = {
-        "message": f"PEDIDO: Novo pedido de {nome_cliente} em {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        "message": f"PEDIDO: Novo pedido de {nome_cliente} - PENDENTE",
         "content": encoded_content,
         "branch": BRANCH
     }
@@ -583,7 +639,11 @@ if st.session_state.pedido_confirmado:
     resumo_texto = (
         f"***📝 RESUMO DO PEDIDO - DOCE&BELLA ***\n\n"
         f"🛒 Cliente: {pedido['nome']}\n"
-        f"📞 Contato: {pedido['contato']}\n\n"
+        f"📞 Contato: {pedido['contato']}\n"
+        # NOVO: Adiciona informações de Nível/Cashback na confirmação
+        f"💎 Nível Atual: {pedido.get('cliente_nivel_atual', 'N/A')}\n"
+        f"💰 Saldo Cashback: R$ {pedido.get('cliente_saldo_cashback', 0.00):.2f}\n\n"
+        # FIM NOVO
         f"📦 Itens Pedidos:\n"
         f"{itens_formatados}\n\n"
         f"💰 VALOR TOTAL: R$ {pedido['total']:.2f}\n\n"
@@ -702,12 +762,38 @@ with col_carrinho:
             st.markdown("---")
             # === FIM DAS MUDANÇAS NOVAS ===
             
+            # =========================================================================================
+            # === NOVO FORMULÁRIO DE FINALIZAÇÃO COM CONSULTA DE CASHBACK E NÍVEL ===
+            # =========================================================================================
             with st.form("form_finalizar_pedido", clear_on_submit=True):
                 st.subheader("Finalizar Pedido")
-                nome = st.text_input("Seu Nome Completo:")
-                contato = st.text_input("Seu Contato (WhatsApp/E-mail):")
+                
+                nome = st.text_input("Seu Nome Completo:", key='checkout_nome')
+                contato = st.text_input("Seu Contato (WhatsApp - apenas números, com DDD):", key='checkout_contato')
+                
+                # --- LÓGICA DE CONSULTA DE CASHBACK E NÍVEL ---
+                
+                nivel_cliente = 'N/A'
+                saldo_cashback = 0.00
+                
+                if nome and contato and DF_CLIENTES_CASH is not None and not DF_CLIENTES_CASH.empty:
+                    # Tenta buscar no DF de Clientes Cashback
+                    existe, nome_encontrado, saldo_cashback, nivel_cliente = buscar_cliente_cashback(contato, DF_CLIENTES_CASH)
+
+                    if existe:
+                        st.success(
+                            f"🎉 **Bem-vindo(a) de volta, {nome_encontrado}!** Seu Nível é: **{nivel_cliente.upper()}**."
+                            f"\n\nSeu saldo atual de Cashback é de **R$ {saldo_cashback:.2f}**."
+                        )
+                    elif contato.strip():
+                        st.info("👋 **Novo Cliente!** Você começará a acumular cashback após a finalização do seu primeiro pedido no painel de administração.")
+                # -----------------------------------------------
+                
                 if st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True):
                     if nome and contato:
+                        # Limpa o contato novamente para salvar no CSV
+                        contato_limpo = contato.replace('(', '').replace(')', '').replace('-', '').replace(' ', '').strip()
+                        
                         detalhes = {
                             "total": total_acumulado,
                             "itens": [
@@ -720,13 +806,22 @@ with col_carrinho:
                                 } for k, v in st.session_state.carrinho.items()
                             ],
                             "nome": nome,
-                            "contato": contato
+                            "contato": contato_limpo,
+                            # NOVO: Incluir o nível e saldo atual no JSON para referência no Admin
+                            "cliente_nivel_atual": nivel_cliente, 
+                            "cliente_saldo_cashback": saldo_cashback,
                         }
-                        if salvar_pedido(nome, contato, total_acumulado, json.dumps(detalhes, ensure_ascii=False), detalhes):
+                        
+                        # A função salvar_pedido foi alterada acima para usar STATUS: PENDENTE
+                        if salvar_pedido(nome, contato_limpo, total_acumulado, json.dumps(detalhes, ensure_ascii=False), detalhes):
                             st.session_state.carrinho = {}
                             st.rerun()
                     else:
                         st.warning("Preencha seu nome e contato.")
+            # =========================================================================================
+            # === FIM NOVO FORMULÁRIO ===
+            # =========================================================================================
+
 st.markdown("</div></div>", unsafe_allow_html=True)
 
 df_catalogo = carregar_catalogo()
@@ -801,7 +896,7 @@ else:
         df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'RECENCIA'], ascending=[False, False])
     elif ordem_selecionada == 'Menor Preço':
         df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'PRECO_FINAL'], ascending=[False, True])
-    elif ordem_selecionada == 'Maior Preço':
+    elif ordem_seleccionada == 'Maior Preço':
         df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'PRECO_FINAL'], ascending=[False, False])
     elif ordem_selecionada == 'Nome do Produto (A-Z)':
         df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'NOME'], ascending=[False, True])
@@ -817,5 +912,3 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
-
-
