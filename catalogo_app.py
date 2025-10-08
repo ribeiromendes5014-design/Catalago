@@ -275,7 +275,7 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json, pedido
 
     headers_put = {
         "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
+        "Accept": "application/vnd.github.com.v3+json"
     }
 
     try:
@@ -469,25 +469,34 @@ def render_product_card(prod_id, row, key_prefix):
 
         # === SELETOR DE QUANTIDADE NO CARD ===
         with col_botao:
+            item_ja_no_carrinho = prod_id in st.session_state.carrinho
+
             if esgotado:
                 st.empty() 
+                
+            elif item_ja_no_carrinho:
+                qtd_atual = st.session_state.carrinho[prod_id]['quantidade']
+                # Exibe o botão de indicador
+                st.button(
+                    f"✅ {qtd_atual}x NO PEDIDO", 
+                    key=f'btn_add_qtd_{key_prefix}', 
+                    use_container_width=True, 
+                    disabled=True 
+                )
             else:
-                # 1. Input de Quantidade (começa em 1, limitado pelo estoque)
+                # Se não esgotado E não está no carrinho, mostra o seletor normal
                 qtd_a_adicionar = st.number_input(
                     label=f'Qtd_Input_{key_prefix}',
                     min_value=1,
-                    # O valor máximo é o estoque atual (já é um int)
                     max_value=estoque_atual, 
-                    value=1, # Começa em 1 unidade
+                    value=1,
                     step=1,
                     key=f'qtd_input_{key_prefix}',
                     label_visibility="collapsed"
                 )
                 
-                # 2. Botão para adicionar a quantidade selecionada
                 if st.button(f"🛒 Adicionar {qtd_a_adicionar} un.", key=f'btn_add_qtd_{key_prefix}', use_container_width=True):
                     if qtd_a_adicionar >= 1:
-                        # Chama a nova função de adição
                         adicionar_qtd_ao_carrinho(prod_id, row, qtd_a_adicionar)
                         st.rerun()
         # === FIM SELETOR DE QUANTIDADE ===
@@ -634,24 +643,22 @@ with col_carrinho:
             
             for prod_id, item in list(st.session_state.carrinho.items()):
                 # === CORREÇÃO DO NAMEERROR: DEFINIÇÃO DE COLUNAS ===
-                c1, c2, c3, c4 = st.columns([3, 1.5, 2, 1])
+                # === IMPLEMENTAÇÃO: Mais espaço para o subtotal/preço unitário ===
+                c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
                 # === FIM DA CORREÇÃO ===
                 
                 c1.write(f"*{item['nome']}*")
                 
-                # === MUDANÇAS NOVAS (Edição de Quantidade e Estoque Máximo) ===
+                # === Lógica de Max Qtd no Carrinho ===
                 if prod_id in df_catalogo_completo.index:
-                    # Lida com IDs duplicados pegando o primeiro valor, se for uma Série
                     max_qtd = df_catalogo_completo.loc[prod_id, 'QUANTIDADE']
                     if isinstance(max_qtd, pd.Series):
                          max_qtd = max_qtd.iloc[0]
                 else:
                     max_qtd = 999999
                 
-                # Garante que seja um inteiro
                 max_qtd = int(max_qtd)
 
-                # Verifica se a quantidade atual no carrinho é maior que o estoque, ajusta se necessário
                 if item['quantidade'] > max_qtd:
                     st.session_state.carrinho[prod_id]['quantidade'] = max_qtd
                     item['quantidade'] = max_qtd
@@ -671,9 +678,12 @@ with col_carrinho:
                 if nova_quantidade != item['quantidade']:
                     st.session_state.carrinho[prod_id]['quantidade'] = nova_quantidade
                     st.rerun()
-                # === FIM DAS MUDANÇAS NOVAS ===
+                # === Fim Lógica de Max Qtd no Carrinho ===
 
-                c3.markdown(f"R$ {item['preco']*item['quantidade']:.2f}")
+                # === IMPLEMENTAÇÃO: Subtotal e Preço Unitário ===
+                c3.markdown(f"**R$ {item['preco']*item['quantidade']:.2f}**<br><span style='font-size: 0.8rem; color: #757575;'>(R$ {item['preco']:.2f} un.)</span>", unsafe_allow_html=True)
+                # === FIM DA IMPLEMENTAÇÃO ===
+                
                 if c4.button("X", key=f'rem_{prod_id}_popover'):
                     remover_do_carrinho(prod_id)
                     st.rerun()
