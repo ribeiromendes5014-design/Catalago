@@ -53,6 +53,28 @@ def get_github_headers(content_type='json'):
     return headers
 
 # --- Funções de Conexão GITHUB ---
+@st.cache_data(ttl=2)
+def carregar_promocoes():
+    """Carrega as promoções do 'promocoes.csv' do GitHub."""
+    df = get_data_from_github(SHEET_NAME_PROMOCOES_CSV)
+
+    colunas_essenciais = ['ID_PRODUTO', 'PRECO_PROMOCIONAL', 'STATUS']
+    if df is None or df.empty:
+        return pd.DataFrame(columns=colunas_essenciais)
+
+    for col in colunas_essenciais:
+        if col not in df.columns:
+            st.error(f"Coluna essencial '{col}' não encontrada no 'promocoes.csv'. Verifique o cabeçalho.")
+            return pd.DataFrame(columns=colunas_essenciais)
+
+    df = df[df['STATUS'].astype(str).str.strip().str.upper() == 'ATIVO'].copy()
+    df_essencial = df[colunas_essenciais].copy()
+
+    df_essencial['PRECO_PROMOCIONAL'] = pd.to_numeric(df_essencial['PRECO_PROMOCIONAL'].astype(str).str.replace(',', '.'), errors='coerce')
+    df_essencial['ID_PRODUTO'] = pd.to_numeric(df_essencial['ID_PRODUTO'], errors='coerce').astype('Int64')
+
+    return df_essencial.dropna(subset=['ID_PRODUTO', 'PRECO_PROMOCIONAL']).reset_index(drop=True)
+
 def get_data_from_github(file_name):
     """
     Lê o conteúdo de um CSV do GitHub diretamente via API (sem cache da CDN).
@@ -96,29 +118,6 @@ def get_data_from_github(file_name):
     except Exception as e:
         st.error(f"Erro ao carregar '{file_name}' via API do GitHub: {e}")
         return None
-
-
-@st.cache_data(ttl=5)
-def carregar_promocoes():
-    """Carrega as promoções do 'promocoes.csv' do GitHub."""
-    df = get_data_from_github(SHEET_NAME_PROMOCOES_CSV)
-
-    colunas_essenciais = ['ID_PRODUTO', 'PRECO_PROMOCIONAL', 'STATUS']
-    if df is None or df.empty:
-        return pd.DataFrame(columns=colunas_essenciais)
-
-    for col in colunas_essenciais:
-        if col not in df.columns:
-            st.error(f"Coluna essencial '{col}' não encontrada no 'promocoes.csv'. Verifique o cabeçalho.")
-            return pd.DataFrame(columns=colunas_essenciais)
-
-    df = df[df['STATUS'].astype(str).str.strip().str.upper() == 'ATIVO'].copy()
-    df_essencial = df[colunas_essenciais].copy()
-
-    df_essencial['PRECO_PROMOCIONAL'] = pd.to_numeric(df_essencial['PRECO_PROMOCIONAL'].astype(str).str.replace(',', '.'), errors='coerce')
-    df_essencial['ID_PRODUTO'] = pd.to_numeric(df_essencial['ID_PRODUTO'], errors='coerce').astype('Int64')
-
-    return df_essencial.dropna(subset=['ID_PRODUTO', 'PRECO_PROMOCIONAL']).reset_index(drop=True)
 
 
 @st.cache_data(ttl=2)
@@ -381,182 +380,143 @@ def limpar_carrinho():
     st.rerun()
 # === FIM DAS MUDANÇAS NOVAS ===
 
+# === INÍCIO DA FUNÇÃO RENDER_PRODUCT_CARD (MOVIMENTO PARA CIMA) ===
+def render_product_card(prod_id, row, key_prefix):
+    """Renderiza um card de produto com suporte para abas de foto e vídeo, seletor de quantidade e feedback de estoque."""
+    with st.container(border=True):
+        
+        # --- PREPARAÇÃO DE DADOS (Correção de tipo para segurança) ---
+        # Garante que NOME e DESCRICAOCURTA sejam sempre strings (Correção do float.strip)
+        produto_nome = str(row['NOME'])
+        descricao_curta = str(row.get('DESCRICAOCURTA', '')).strip()
+        
+        # === LÓGICA DE ESTOQUE ===
+        estoque_atual = int(row.get('QUANTIDADE', 999999)) 
+        esgotado = estoque_atual <= 0
+        estoque_baixo = estoque_atual > 0 and estoque_atual <= ESTOQUE_BAIXO_LIMITE
+        
+        if esgotado:
+            st.markdown('<span class="esgotado-badge">🚫 ESGOTADO</span>', unsafe_allow_html=True)
+        elif estoque_baixo:
+            st.markdown(f'<span class="estoque-baixo-badge">⚠️ Últimas {estoque_atual} Unidades!</span>', unsafe_allow_html=True)
+        # === FIM DA LÓGICA DE ESTOQUE ===
 
-# --- Layout do Aplicativo ---
-st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
+        youtube_url = row.get('YOUTUBE_URL')
 
-# --- CSS ---
-st.markdown(f"""
-<style>
-#MainMenu, footer, [data-testid="stSidebar"] {{visibility: hidden;}}
-[data-testid="stSidebarHeader"], [data-testid="stToolbar"], a[data-testid="stAppDeployButton"], [data-testid="stStatusWidget"], [data-testid="stDecoration"] {{ display: none !important; }}
-div[data-testid="stPopover"] > div:first-child > button {{ display: none; }}
-.stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
-div.block-container {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 10px; padding: 2rem; margin-top: 1rem; }}
-.pink-bar-container {{ background-color: #E91E63; padding: 20px 0; width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
-.pink-bar-content {{ width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; }}
-.cart-badge-button {{ background-color: #C2185B; color: white; border-radius: 12px; padding: 8px 15px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; transition: background-color 0.3s; display: inline-flex; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-width: 150px; justify-content: center; }}
-.cart-badge-button:hover {{ background-color: #C2185B; }}
-.cart-count {{ background-color: white; color: #E91E63; border-radius: 50%; padding: 2px 7px; margin-left: 8px; font-size: 14px; line-height: 1; }}
-div[data-testid="stButton"] > button {{ background-color: #E91E63; color: white; border-radius: 10px; border: 1px solid #C2185B; font-weight: bold; }}
-div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: white; border: 1px solid #E91E63; }}
-.product-image-container {{ height: 220px; display: flex; align-items: center; justify-content: center; margin-bottom: 1rem; overflow: hidden; }}
-.product-image-container img {{ max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }}
-.esgotado-badge {{ background-color: #757575; color: white; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
-.estoque-baixo-badge {{ background-color: #FFC107; color: black; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
-</style>
-""", unsafe_allow_html=True)
-
-# === MUDANÇAS NOVAS (JS para copiar o resumo do pedido) ===
-# Função JS para copiar texto (usada após o envio do pedido)
-def copy_to_clipboard_js(text_to_copy):
-    js_code = f"""
-    <script>
-    function copyTextToClipboard(text) {{
-      if (navigator.clipboard) {{
-        navigator.clipboard.writeText(text).then(function() {{
-          // St.toast não está disponível em JS, mas podemos usar um alerta simples
-          alert('Resumo do pedido copiado!');
-        }}, function(err) {{
-          console.error('Não foi possível copiar o texto: ', err);
-          alert('Erro ao copiar o texto. Tente novamente.');
-        }});
-      }} else {{
-        // Fallback para navegadores mais antigos (usando um textarea temporário)
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        try {{
-          document.execCommand('copy');
-          alert('Resumo do pedido copiado!');
-        }} catch (err) {{
-          console.error('Fallback: Não foi possível copiar o texto: ', err);
-          alert('Erro ao copiar o texto. Tente novamente.');
-        }}
-        document.body.removeChild(textArea);
-      }}
-    }}
-    // Chama a função ao renderizar o botão, mas de forma segura com onclick
-    // O botão deve ser gerado separadamente com um ID
-    </script>
-    """
-    st.markdown(js_code, unsafe_allow_html=True)
-# === FIM DAS MUDANÇAS NOVAS ===
-
-
-st_autorefresh(interval=5000, key="auto_refresh_catalogo")
-
-# --- LÓGICA DE CONFIRMAÇÃO DE PEDIDO (Nova Seção) ---
-if st.session_state.pedido_confirmado:
-    st.balloons()
-    st.success("🎉 Pedido enviado com sucesso! Utilize o resumo abaixo para confirmar o pedido pelo WhatsApp.")
-    
-    pedido = st.session_state.pedido_confirmado
-    itens_formatados = '\n'.join([
-        f"- {item['quantidade']}x {item['nome']} (R$ {item['preco']:.2f} un.)" 
-        for item in pedido['itens']
-    ])
-
-    resumo_texto = (
-        f"***📝 RESUMO DO PEDIDO - DOCE&BELLA ***\n\n"
-        f"🛒 Cliente: {pedido['nome']}\n"
-        f"📞 Contato: {pedido['contato']}\n\n"
-        f"📦 Itens Pedidos:\n"
-        f"{itens_formatados}\n\n"
-        f"💰 VALOR TOTAL: R$ {pedido['total']:.2f}\n\n"
-        f"Obrigado por seu pedido!"
-    )
-
-    st.text_area("Resumo do Pedido (Clique para copiar)", resumo_texto, height=300)
-    
-    # Botão de Copiar (usando JS)
-    copy_to_clipboard_js(resumo_texto)
-    st.markdown(
-        f'<button class="cart-badge-button" style="background-color: #25D366; width: 100%; margin-bottom: 15px;" onclick="copyTextToClipboard(\'{resumo_texto.replace("'", "\\'")}\')">✅ Copiar Resumo</button>',
-        unsafe_allow_html=True
-    )
-    
-    # Após exibir, limpa a variável de confirmação
-    if st.button("Voltar ao Catálogo"):
-        st.session_state.pedido_confirmado = None
-        st.rerun()
-    st.stop()
-# --- FIM DA LÓGICA DE CONFIRMAÇÃO ---
-
-# --- LOGO E TÍTULO (Alterado) ---
-col_logo, col_titulo = st.columns([1.5, 4.5])
-col_logo.image(LOGO_DOCEBELLA_URL, width=200)
-col_titulo.title("Catálogo de Pedidos Doce&Bella")
-# --- FIM DA ALTERAÇÃO ---
-
-total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
-num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
-carrinho_vazio = not st.session_state.carrinho
-
-st.markdown("<div class='pink-bar-container'><div class='pink-bar-content'>", unsafe_allow_html=True)
-
-# A busca principal está na barra rosa, mas usaremos o novo filtro na seção de produtos.
-# Removendo a coluna de pesquisa daqui, se ela for usada apenas para a barra superior.
-col_pesquisa, col_carrinho = st.columns([5, 1])
-with col_pesquisa:
-    # Mantendo o input na barra superior, mas o filtro de termo abaixo dará mais controle.
-    st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
-
-with col_carrinho:
-    custom_cart_button = f"""
-        <div class='cart-badge-button' onclick='document.querySelector("[data-testid=\\"stPopover\\"] > div:first-child > button").click();'>
-            🛒 SEU PEDIDO
-            <span class='cart-count'>{num_itens}</span>
-        </div>
-    """
-    st.markdown(custom_cart_button, unsafe_allow_html=True)
-    with st.popover(" ", use_container_width=False, help="Clique para ver os itens e finalizar o pedido"):
-        st.header("🛒 Detalhes do Pedido")
-        if carrinho_vazio:
-            st.info("Seu carrinho está vazio.")
+        if youtube_url and isinstance(youtube_url, str) and youtube_url.strip().startswith('http'):
+            tab_foto, tab_video = st.tabs(["📷 Foto", "▶️ Vídeo"])
+            with tab_foto:
+                render_product_image(row.get('LINKIMAGEM'))
+            with tab_video:
+                st.video(youtube_url)
         else:
-            st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
-            st.markdown("---")
-            
-            df_catalogo_completo = carregar_catalogo().set_index('ID')
-            
-            for prod_id, item in list(st.session_state.carrinho.items()):
-                c1, c2, c3, c4 = st.columns([3, 1.5, 2, 1])
-                c1.write(f"*{item['nome']}*")
-                
-                # === MUDANÇAS NOVAS (Edição de Quantidade e Estoque Máximo) ===
-                # Acessa o índice do DataFrame de forma segura, tratando possíveis IDs duplicados (pega o primeiro)
-                if prod_id in df_catalogo_completo.index:
-                    max_qtd = df_catalogo_completo.loc[prod_id, 'QUANTIDADE'].iloc[0] if isinstance(df_catalogo_completo.loc[prod_id, 'QUANTIDADE'], pd.Series) else df_catalogo_completo.loc[prod_id, 'QUANTIDADE']
-                else:
-                    max_qtd = 999999
-                
-                # Garante que seja um inteiro
-                max_qtd = int(max_qtd)
+            render_product_image(row.get('LINKIMAGEM'))
 
-                # Verifica se a quantidade atual no carrinho é maior que o estoque, ajusta se necessário
-                if item['quantidade'] > max_qtd:
-                    st.session_state.carrinho[prod_id]['quantidade'] = max_qtd
-                    item['quantidade'] = max_qtd
-                    st.toast(f"Ajustado: {item['nome']} ao estoque máximo de {max_qtd}.", icon="⚠️")
-                    st.rerun()
+        preco_final = row['PRECO_FINAL']
+        preco_original = row['PRECO']
+        is_promotion = pd.notna(row.get('PRECO_PROMOCIONAL'))
 
-                nova_quantidade = c2.number_input(
-                    label=f'Qtd_{prod_id}',
+        if is_promotion:
+            st.markdown(f"""
+            <div style="margin-bottom: 0.5rem;">
+                <span style="background-color: #D32F2F; color: white; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem;">
+                    🔥 PROMOÇÃO
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown(f"**{produto_nome}**")
+        st.caption(descricao_curta) # Usa a variável corrigida
+
+        with st.expander("Ver detalhes"):
+            # Lógica de Detalhes 
+            descricao_principal = row.get('DESCRICAOLONGA')
+            detalhes_str = row.get('DETALHESGRADE')
+            
+            tem_descricao = descricao_principal and isinstance(descricao_principal, str) and descricao_principal.strip()
+            tem_detalhes = detalhes_str and isinstance(detalhes_str, str) and detalhes_str.strip()
+            
+            if not tem_descricao and not tem_detalhes:
+                st.info('Sem informações detalhadas disponíveis para este produto.')
+            else:
+                if tem_descricao:
+                    # Usa 'descricao_curta' que já é string
+                    if descricao_principal.strip() != descricao_curta:
+                        st.subheader('Descrição')
+                        st.markdown(descricao_principal)
+                        if tem_detalhes:
+                            st.markdown('---') 
+                    
+                if tem_detalhes:
+                    st.subheader('Especificações')
+                    if detalhes_str.strip().startswith('{'):
+                        try:
+                            detalhes_dict = ast.literal_eval(detalhes_str)
+                            texto_formatado = ""
+                            for chave, valor in detalhes_dict.items():
+                                texto_formatado += f"* **{chave.strip()}**: {str(valor).strip()}\n"
+                            st.markdown(texto_formatado)
+                        except (ValueError, SyntaxError):
+                            st.markdown(detalhes_str)
+                    else:
+                        st.markdown(detalhes_str)
+
+
+        col_preco, col_botao = st.columns([2, 2])
+
+        with col_preco:
+            # Lógica de Preço e Cashback 
+            cashback_percent = pd.to_numeric(row.get('CASHBACKPERCENT'), errors='coerce')
+            cashback_html = ""
+
+            if pd.notna(cashback_percent) and cashback_percent > 0:
+                cashback_valor_calculado = (cashback_percent / 100) * preco_final
+                cashback_html = f"""
+                <span style='color: #D32F2F; font-size: 0.8rem; font-weight: bold;'>
+                    🔥 R$ {cashback_valor_calculado:.2f}
+                </span>
+                """
+
+            if is_promotion:
+                st.markdown(f"""
+                <div style="line-height: 1.2;">
+                    <span style='text-decoration: line-through; color: #757575; font-size: 0.9rem;'>R$ {preco_original:.2f}</span>
+                    <h4 style='color: #D32F2F; margin:0;'>R$ {preco_final:.2f}</h4>
+                    {cashback_html}
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div style='display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px;'>
+                    <h4 style='color: #880E4F; margin:0; line-height:1;'>R$ {preco_final:.2f}</h4>
+                    {cashback_html}
+                </div>
+                """, unsafe_allow_html=True)
+
+
+        # === SELETOR DE QUANTIDADE NO CARD ===
+        with col_botao:
+            if esgotado:
+                st.empty() 
+            else:
+                # 1. Input de Quantidade (começa em 1, limitado pelo estoque)
+                qtd_a_adicionar = st.number_input(
+                    label=f'Qtd_Input_{key_prefix}',
                     min_value=1,
-                    max_value=max_qtd,
-                    value=item['quantidade'],
+                    # O valor máximo é o estoque atual (já é um int)
+                    max_value=estoque_atual, 
+                    value=1, # Começa em 1 unidade
                     step=1,
-                    key=f'qtd_{prod_id}_popover',
+                    key=f'qtd_input_{key_prefix}',
                     label_visibility="collapsed"
                 )
                 
-                if nova_quantidade != item['quantidade']:
-                    # Atualiza a session_state e força um rerun (necessário para atualizar o total)
-                    st.session_state.carrinho[prod_id]['quantidade'] = nova_quantidade
-                    st.rerun()
+                # 2. Botão para adicionar a quantidade selecionada
+                if st.button(f"🛒 Adicionar {qtd_a_adicionar} un.", key=f'btn_add_qtd_{key_prefix}', use_container_width=True):
+                    if qtd_a_adicionar >= 1:
+                        # Chama a nova função de adição
+                        adicionar_qtd_ao_carrinho(prod_id, row, qtd_a_adicionar)
+                        st.rerun()
                 # === FIM DAS MUDANÇAS NOVAS ===
 
                 c3.markdown(f"R$ {item['preco']*item['quantidade']:.2f}")
@@ -705,3 +665,4 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
