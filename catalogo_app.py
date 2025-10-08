@@ -140,7 +140,6 @@ def carregar_catalogo():
         df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
         
         # AQUI É A CORREÇÃO: Remove duplicatas na coluna 'ID', mantendo a primeira ocorrência
-        # Isso garante que df_produtos.set_index('ID') não falhe
         duplicatas_removidas = df_produtos['ID'].duplicated().sum()
         if duplicatas_removidas > 0:
             st.warning(f"⚠️ Atenção: {duplicatas_removidas} produtos duplicados (mesmo ID) foram removidos do catálogo.")
@@ -186,7 +185,6 @@ def carregar_catalogo():
 
     df_produtos['PRECO'] = pd.to_numeric(df_produtos['PRECO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
     # A conversão de ID foi movida para cima e combinada com a limpeza de duplicatas.
-    # df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64') 
 
     df_produtos = df_produtos[df_produtos['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
     
@@ -210,7 +208,7 @@ def carregar_catalogo():
     else:
         # Este trecho agora funciona porque df_produtos não tem mais IDs duplicados
         df_final = df_produtos.reset_index()
-        df_final['PRECO_FINAL'] = df_final['PRECO'] # A atribuição deve usar df_final['PRECO']
+        df_final['PRECO_FINAL'] = df_final['PRECO']
         df_final['PRECO_PROMOCIONAL'] = None
 
     # --- NOVA PARTE PARA CARREGAR E JUNTAR OS VÍDEOS ---
@@ -322,31 +320,47 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json, pedido
         st.error(f"Erro desconhecido ao enviar o pedido: {e}")
         return False
 
-def adicionar_ao_carrinho(produto_id, produto_row):
+# === FUNÇÃO DE ADIÇÃO CORRIGIDA/NOVA (substituindo o antigo 'adicionar_ao_carrinho') ===
+def adicionar_qtd_ao_carrinho(produto_id, produto_row, quantidade):
     produto_nome = produto_row['NOME']
     produto_preco = produto_row['PRECO_FINAL']
     produto_imagem = produto_row.get('LINKIMAGEM', '')
     
-    # === MUDANÇAS NOVAS (Verificação de Estoque Máximo) ===
-    quantidade_max = produto_row.get('QUANTIDADE', 999999)
+    # Obtém o estoque máximo garantindo que seja um número inteiro positivo
+    quantidade_max = int(produto_row.get('QUANTIDADE', 999999))
+    
+    if quantidade_max <= 0:
+         st.warning(f"⚠️ Produto '{produto_nome}' está esgotado.")
+         return
+
     if produto_id in st.session_state.carrinho:
-        nova_quantidade = st.session_state.carrinho[produto_id]['quantidade'] + 1
+        # Soma a quantidade já existente + a quantidade a adicionar
+        nova_quantidade = st.session_state.carrinho[produto_id]['quantidade'] + quantidade
+        
         if nova_quantidade > quantidade_max:
-            st.warning(f"⚠️ Você atingiu o estoque máximo de {quantidade_max} unidades para '{produto_nome}'.")
+            disponivel = quantidade_max - st.session_state.carrinho[produto_id]['quantidade']
+            st.warning(f"⚠️ Você só pode adicionar mais {disponivel} unidades. Total disponível: {quantidade_max}.")
             return
+            
         st.session_state.carrinho[produto_id]['quantidade'] = nova_quantidade
     else:
-        if 1 > quantidade_max: # Checagem que é redundante aqui, mas útil em number_input
-             st.warning(f"⚠️ Produto '{produto_nome}' está esgotado.")
+        # Primeira adição
+        if quantidade > quantidade_max:
+             st.warning(f"⚠️ Quantidade solicitada ({quantidade}) excede o estoque ({quantidade_max}) para '{produto_nome}'.")
              return
         st.session_state.carrinho[produto_id] = {
             'nome': produto_nome,
             'preco': produto_preco,
-            'quantidade': 1,
+            'quantidade': quantidade,
             'imagem': produto_imagem
         }
-    # === FIM DAS MUDANÇAS NOVAS ===
-    st.toast(f"✅ {produto_nome} adicionado!", icon="🛍️"); time.sleep(0.1)
+    st.toast(f"✅ {quantidade}x {produto_nome} adicionado(s)!", icon="🛍️"); time.sleep(0.1)
+
+# O antigo 'adicionar_ao_carrinho' não será mais chamado no card do produto. 
+# Mantenha-o ou remova-o. Para a compatibilidade do código que você enviou, vou mantê-lo vazio.
+def adicionar_ao_carrinho(produto_id, produto_row):
+    # Esta função agora é um placeholder. O card usa adicionar_qtd_ao_carrinho.
+    pass
 
 def remover_do_carrinho(produto_id):
     if produto_id in st.session_state.carrinho:
@@ -577,21 +591,22 @@ st.markdown("</div></div>", unsafe_allow_html=True)
 
 df_catalogo = carregar_catalogo()
 
+# === FUNÇÃO render_product_card CORRIGIDA ===
 def render_product_card(prod_id, row, key_prefix):
-    """Renderiza um card de produto com suporte para abas de foto e vídeo e feedback de estoque."""
+    """Renderiza um card de produto com suporte para abas de foto e vídeo, seletor de quantidade e feedback de estoque."""
     with st.container(border=True):
         
-        # === MUDANÇAS NOVAS (Feedback de Estoque) ===
-        estoque_atual = row.get('QUANTIDADE', 999999)
+        # === CORREÇÃO: LÓGICA DE ESTOQUE ===
+        # Garante que QUANTIDADE é um inteiro para comparações seguras
+        estoque_atual = int(row.get('QUANTIDADE', 999999)) 
         esgotado = estoque_atual <= 0
         estoque_baixo = estoque_atual > 0 and estoque_atual <= ESTOQUE_BAIXO_LIMITE
         
         if esgotado:
             st.markdown('<span class="esgotado-badge">🚫 ESGOTADO</span>', unsafe_allow_html=True)
         elif estoque_baixo:
-            st.markdown(f'<span class="estoque-baixo-badge">⚠️ Últimas {int(estoque_atual)} Unidades!</span>', unsafe_allow_html=True)
-        # === FIM DAS MUDANÇAS NOVAS ===
-
+            st.markdown(f'<span class="estoque-baixo-badge">⚠️ Últimas {estoque_atual} Unidades!</span>', unsafe_allow_html=True)
+        # === FIM DA CORREÇÃO DE ESTOQUE ===
 
         youtube_url = row.get('YOUTUBE_URL')
 
@@ -620,61 +635,43 @@ def render_product_card(prod_id, row, key_prefix):
         st.markdown(f"**{row['NOME']}**")
         st.caption(row.get('DESCRICAOCURTA', ''))
 
-        # --- SEÇÃO CORRIGIDA E ORGANIZADA: DETALHES ---
         with st.expander("Ver detalhes"):
-            
-            # 1. PUXAR A DESCRIÇÃO LONGA
+            # Lógica de Detalhes (mantida)
             descricao_principal = row.get('DESCRICAOLONGA')
             detalhes_str = row.get('DETALHESGRADE')
             
             tem_descricao = descricao_principal and isinstance(descricao_principal, str) and descricao_principal.strip()
             tem_detalhes = detalhes_str and isinstance(detalhes_str, str) and detalhes_str.strip()
             
-            # Se não houver NENHUM conteúdo, exibe a mensagem de vazio
             if not tem_descricao and not tem_detalhes:
                 st.info('Sem informações detalhadas disponíveis para este produto.')
             else:
-                # 1. EXIBIR A DESCRIÇÃO LONGA
                 if tem_descricao:
-                    # Verifica se o conteúdo da Descrição Longa não é apenas uma repetição da Descrição Curta
                     if descricao_principal.strip() != row.get('DESCRICAOCURTA', '').strip():
                         st.subheader('Descrição')
                         st.markdown(descricao_principal)
-                        
-                        # Adiciona separador se houver detalhes da grade em seguida
                         if tem_detalhes:
                             st.markdown('---') 
                     
-                # 2. EXIBIR OS DETALHES DA GRADE/ESPECIFICAÇÕES
                 if tem_detalhes:
                     st.subheader('Especificações')
-                    
-                    # Tenta formatar a coluna DETALHESGRADE como lista de especificações (dicionário)
                     if detalhes_str.strip().startswith('{'):
                         try:
-                            # Tenta converter o JSON/dicionário para formato de lista
                             detalhes_dict = ast.literal_eval(detalhes_str)
-                            
                             texto_formatado = ""
                             for chave, valor in detalhes_dict.items():
-                                # Cria uma lista de itens formatada com bullet points
                                 texto_formatado += f"* **{chave.strip()}**: {str(valor).strip()}\n"
-                            
                             st.markdown(texto_formatado)
-                            
                         except (ValueError, SyntaxError):
-                            # Se der erro na conversão (formato inválido), exibe o conteúdo como texto bruto
                             st.markdown(detalhes_str)
                     else:
-                        # Se não for um dicionário, exibe o texto bruto da célula
                         st.markdown(detalhes_str)
 
-        # --- FIM DA SEÇÃO CORRIGIDA ---
 
         col_preco, col_botao = st.columns([2, 2])
 
         with col_preco:
-            # ... (o restante do código para preço e cashback continua igual)
+            # Lógica de Preço e Cashback (mantida)
             cashback_percent = pd.to_numeric(row.get('CASHBACKPERCENT'), errors='coerce')
             cashback_html = ""
 
@@ -702,12 +699,33 @@ def render_product_card(prod_id, row, key_prefix):
                 </div>
                 """, unsafe_allow_html=True)
 
+
+        # === SELETOR DE QUANTIDADE NO CARD ===
         with col_botao:
-            # === MUDANÇAS NOVAS (Desabilitar botão se esgotado) ===
-            if st.button("➕ Adicionar", key=key_prefix, use_container_width=True, disabled=esgotado):
-                adicionar_ao_carrinho(prod_id, row)
-                st.rerun()
-            # === FIM DAS MUDANÇAS NOVAS ===
+            if esgotado:
+                st.empty() 
+            else:
+                # 1. Input de Quantidade (começa em 1, limitado pelo estoque)
+                qtd_a_adicionar = st.number_input(
+                    label=f'Qtd_Input_{key_prefix}',
+                    min_value=1,
+                    # O valor máximo é o estoque atual (já é um int)
+                    max_value=estoque_atual, 
+                    value=1, # Começa em 1 unidade
+                    step=1,
+                    key=f'qtd_input_{key_prefix}',
+                    label_visibility="collapsed"
+                )
+                
+                # 2. Botão para adicionar a quantidade selecionada
+                if st.button(f"🛒 Adicionar {qtd_a_adicionar} un.", key=f'btn_add_qtd_{key_prefix}', use_container_width=True):
+                    if qtd_a_adicionar >= 1:
+                        # Chama a nova função de adição
+                        adicionar_qtd_ao_carrinho(prod_id, row, qtd_a_adicionar)
+                        st.rerun()
+        # === FIM SELETOR DE QUANTIDADE ===
+
+# === FIM FUNÇÃO render_product_card CORRIGIDA ===
 
 
 termo = st.session_state.get('termo_pesquisa_barra', '').lower()
@@ -773,4 +791,3 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
-
