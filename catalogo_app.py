@@ -229,7 +229,7 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
             return False
     except Exception as e:
         st.error(f"Erro na decodificação ou leitura do arquivo 'pedidos.csv'. Detalhe: {e}")
-            return False
+        return False
 
     timestamp = int(datetime.now().timestamp())
     data_hora = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
