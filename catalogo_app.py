@@ -443,7 +443,7 @@ def render_product_card(prod_id, row, key_prefix):
         st.markdown(f"**{row['NOME']}**")
         st.caption(row.get('DESCRICAOCURTA', ''))
 
-        # --- SEÇÃO ATUALIZADA: ORGANIZAÇÃO DOS DETALHES ---
+        # --- SEÇÃO CORRIGIDA E ORGANIZADA: DETALHES ---
         with st.expander("Ver detalhes"):
             
             # 1. PUXAR A DESCRIÇÃO LONGA
@@ -491,9 +491,8 @@ def render_product_card(prod_id, row, key_prefix):
                     else:
                         # Se não for um dicionário, exibe o texto bruto da célula
                         st.markdown(detalhes_str)
-            else:
-                # Se a célula estiver vazia ou não for um dicionário, mostra mensagem padrão
-                st.markdown('Sem detalhes de grade.')
+
+        # --- FIM DA SEÇÃO CORRIGIDA ---
 
         col_preco, col_botao = st.columns([2, 2])
 
@@ -594,4 +593,3 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
-
