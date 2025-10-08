@@ -532,9 +532,8 @@ else:
         # 2. Depois, ordena pelos Mais Recentes (maior 'RECENCIA' primeiro)
         df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'RECENCIA'], ascending=[False, False])
     elif ordem_selecionada == 'Promoção':
-        # 1. Prioriza Promoção (True primeiro)
-        # 2. Depois, ordena pelo Menor Preço Final (para ser diferente de 'Lançamento')
-        df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'PRECO_FINAL'], ascending=[False, True])
+        # CORRIGIDO: Apenas prioriza a promoção. O segundo critério é a ordem natural (RECENCIA), mas para forçar a ordem primária (Promoção), mantemos apenas um critério secundário que não altere muito o resto. Usaremos a ordem alfabética para o restante dos itens.
+        df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'NOME'], ascending=[False, True])
     elif ordem_selecionada == 'Menor Preço':
         # 1. Prioriza Promoção (True primeiro)
         # 2. Depois, ordena pelo Menor Preço Final
