@@ -17,6 +17,9 @@ import ast
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 DATA_REPO_NAME = os.environ.get("DATA_REPO_NAME", os.environ.get("REPO_NAME"))
 BRANCH = os.environ.get("BRANCH")
+# === MUDANÇAS NOVAS ===
+ESTOQUE_BAIXO_LIMITE = 5 # Define o limite para exibir o alerta de "Últimas Unidades"
+# === FIM DAS MUDANÇAS NOVAS ===
 
 # URLs da API
 GITHUB_BASE_API = f"https://api.github.com/repos/{DATA_REPO_NAME}/contents/"
@@ -33,6 +36,11 @@ LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
 # Inicialização do Carrinho de Compras e Estado
 if 'carrinho' not in st.session_state:
     st.session_state.carrinho = {}
+# === MUDANÇAS NOVAS ===
+if 'pedido_confirmado' not in st.session_state:
+    st.session_state.pedido_confirmado = None
+# === FIM DAS MUDANÇAS NOVAS ===
+
 
 # --- Headers para Autenticação do GitHub ---
 def get_github_headers(content_type='json'):
@@ -165,10 +173,17 @@ def carregar_catalogo():
     df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
 
     df_produtos = df_produtos[df_produtos['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
-
+    
+    # === MUDANÇAS NOVAS ===
+    # Garante que a coluna QUANTIDADE exista e seja numérica
     if 'QUANTIDADE' in df_produtos.columns:
         df_produtos['QUANTIDADE'] = pd.to_numeric(df_produtos['QUANTIDADE'], errors='coerce').fillna(0)
-        df_produtos = df_produtos[df_produtos['QUANTIDADE'] > 0].copy()
+    else:
+        # Se não houver coluna QUANTIDADE, assume estoque infinito (ou muito alto) para não filtrar
+        df_produtos['QUANTIDADE'] = 999999
+    # Não vamos mais filtrar aqui, vamos exibir o "Esgotado" no card.
+    # df_produtos = df_produtos[df_produtos['QUANTIDADE'] > 0].copy() 
+    # === FIM DAS MUDANÇAS NOVAS ===
 
     df_produtos.set_index('ID', inplace=True)
 
@@ -181,7 +196,7 @@ def carregar_catalogo():
         df_final.drop(columns=['ID_PRODUTO'], inplace=True, errors='ignore')
     else:
         df_final = df_produtos.reset_index()
-        df_final['PRECO_FINAL'] = df_final['PRECO']
+        df_final['PRECO_FINAL'] = df_produtos['PRECO']
         df_final['PRECO_PROMOCIONAL'] = None
 
     # --- NOVA PARTE PARA CARREGAR E JUNTAR OS VÍDEOS ---
@@ -200,7 +215,7 @@ def carregar_catalogo():
 
 # --- Funções do Aplicativo ---
 
-def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
+def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json, pedido_data):
     """Salva o novo pedido no 'pedidos.csv' do GitHub usando a Content API."""
     file_path = SHEET_NAME_PEDIDOS_CSV
     api_url = f"{GITHUB_BASE_API}{file_path}"
@@ -279,6 +294,9 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json):
     try:
         response_put = requests.put(api_url, headers=headers_put, data=json.dumps(commit_data))
         response_put.raise_for_status()
+        # === MUDANÇAS NOVAS ===
+        st.session_state.pedido_confirmado = pedido_data
+        # === FIM DAS MUDANÇAS NOVAS ===
         return True
     except requests.exceptions.HTTPError as e:
         st.error(f"Erro ao salvar o pedido (Commit no GitHub). Status {e.response.status_code}. "
@@ -292,16 +310,26 @@ def adicionar_ao_carrinho(produto_id, produto_row):
     produto_nome = produto_row['NOME']
     produto_preco = produto_row['PRECO_FINAL']
     produto_imagem = produto_row.get('LINKIMAGEM', '')
-
+    
+    # === MUDANÇAS NOVAS (Verificação de Estoque Máximo) ===
+    quantidade_max = produto_row.get('QUANTIDADE', 999999)
     if produto_id in st.session_state.carrinho:
-        st.session_state.carrinho[produto_id]['quantidade'] += 1
+        nova_quantidade = st.session_state.carrinho[produto_id]['quantidade'] + 1
+        if nova_quantidade > quantidade_max:
+            st.warning(f"⚠️ Você atingiu o estoque máximo de {quantidade_max} unidades para '{produto_nome}'.")
+            return
+        st.session_state.carrinho[produto_id]['quantidade'] = nova_quantidade
     else:
+        if 1 > quantidade_max: # Checagem que é redundante aqui, mas útil em number_input
+             st.warning(f"⚠️ Produto '{produto_nome}' está esgotado.")
+             return
         st.session_state.carrinho[produto_id] = {
             'nome': produto_nome,
             'preco': produto_preco,
             'quantidade': 1,
             'imagem': produto_imagem
         }
+    # === FIM DAS MUDANÇAS NOVAS ===
     st.toast(f"✅ {produto_nome} adicionado!", icon="🛍️"); time.sleep(0.1)
 
 def remover_do_carrinho(produto_id):
@@ -316,6 +344,13 @@ def render_product_image(link_imagem):
         st.markdown(f'<div class="product-image-container"><img src="{link_imagem}"></div>', unsafe_allow_html=True)
     else:
         st.markdown(placeholder_html, unsafe_allow_html=True)
+
+# === MUDANÇAS NOVAS (Função para limpar o carrinho) ===
+def limpar_carrinho():
+    st.session_state.carrinho = {}
+    st.toast("🗑️ Pedido limpo!", icon="🧹")
+    st.rerun()
+# === FIM DAS MUDANÇAS NOVAS ===
 
 
 # --- Layout do Aplicativo ---
@@ -338,11 +373,88 @@ div[data-testid="stButton"] > button {{ background-color: #E91E63; color: white;
 div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: white; border: 1px solid #E91E63; }}
 .product-image-container {{ height: 220px; display: flex; align-items: center; justify-content: center; margin-bottom: 1rem; overflow: hidden; }}
 .product-image-container img {{ max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }}
+.esgotado-badge {{ background-color: #757575; color: white; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
+.estoque-baixo-badge {{ background-color: #FFC107; color: black; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
 </style>
 """, unsafe_allow_html=True)
 
+# === MUDANÇAS NOVAS (JS para copiar o resumo do pedido) ===
+# Função JS para copiar texto (usada após o envio do pedido)
+def copy_to_clipboard_js(text_to_copy):
+    js_code = f"""
+    <script>
+    function copyTextToClipboard(text) {{
+      if (navigator.clipboard) {{
+        navigator.clipboard.writeText(text).then(function() {{
+          // St.toast não está disponível em JS, mas podemos usar um alerta simples
+          alert('Resumo do pedido copiado!');
+        }}, function(err) {{
+          console.error('Não foi possível copiar o texto: ', err);
+          alert('Erro ao copiar o texto. Tente novamente.');
+        }});
+      }} else {{
+        // Fallback para navegadores mais antigos (usando um textarea temporário)
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {{
+          document.execCommand('copy');
+          alert('Resumo do pedido copiado!');
+        }} catch (err) {{
+          console.error('Fallback: Não foi possível copiar o texto: ', err);
+          alert('Erro ao copiar o texto. Tente novamente.');
+        }}
+        document.body.removeChild(textArea);
+      }}
+    }}
+    // Chama a função ao renderizar o botão, mas de forma segura com onclick
+    // O botão deve ser gerado separadamente com um ID
+    </script>
+    """
+    st.markdown(js_code, unsafe_allow_html=True)
+# === FIM DAS MUDANÇAS NOVAS ===
+
 
 st_autorefresh(interval=5000, key="auto_refresh_catalogo")
+
+# --- LÓGICA DE CONFIRMAÇÃO DE PEDIDO (Nova Seção) ---
+if st.session_state.pedido_confirmado:
+    st.balloons()
+    st.success("🎉 Pedido enviado com sucesso! Utilize o resumo abaixo para confirmar o pedido pelo WhatsApp.")
+    
+    pedido = st.session_state.pedido_confirmado
+    itens_formatados = '\n'.join([
+        f"- {item['quantidade']}x {item['nome']} (R$ {item['preco']:.2f} un.)" 
+        for item in pedido['itens']
+    ])
+
+    resumo_texto = (
+        f"***📝 RESUMO DO PEDIDO - DOCE&BELLA ***\n\n"
+        f"🛒 Cliente: {pedido['nome']}\n"
+        f"📞 Contato: {pedido['contato']}\n\n"
+        f"📦 Itens Pedidos:\n"
+        f"{itens_formatados}\n\n"
+        f"💰 VALOR TOTAL: R$ {pedido['total']:.2f}\n\n"
+        f"Obrigado por seu pedido!"
+    )
+
+    st.text_area("Resumo do Pedido (Clique para copiar)", resumo_texto, height=300)
+    
+    # Botão de Copiar (usando JS)
+    copy_to_clipboard_js(resumo_texto)
+    st.markdown(
+        f'<button class="cart-badge-button" style="background-color: #25D366; width: 100%; margin-bottom: 15px;" onclick="copyTextToClipboard(\'{resumo_texto.replace("'", "\\'")}\')">✅ Copiar Resumo</button>',
+        unsafe_allow_html=True
+    )
+    
+    # Após exibir, limpa a variável de confirmação
+    if st.button("Voltar ao Catálogo"):
+        st.session_state.pedido_confirmado = None
+        st.rerun()
+    st.stop()
+# --- FIM DA LÓGICA DE CONFIRMAÇÃO ---
 
 # --- LOGO E TÍTULO (Alterado) ---
 col_logo, col_titulo = st.columns([1.5, 4.5])
@@ -374,15 +486,50 @@ with col_carrinho:
         else:
             st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
             st.markdown("---")
+            
+            df_catalogo_completo = carregar_catalogo().set_index('ID')
+            
             for prod_id, item in list(st.session_state.carrinho.items()):
                 c1, c2, c3, c4 = st.columns([3, 1.5, 2, 1])
                 c1.write(f"*{item['nome']}*")
-                c2.markdown(f"**{item['quantidade']}x**")
+                
+                # === MUDANÇAS NOVAS (Edição de Quantidade e Estoque Máximo) ===
+                max_qtd = df_catalogo_completo.loc[prod_id, 'QUANTIDADE'] if prod_id in df_catalogo_completo.index else 999999
+                
+                # Verifica se a quantidade atual no carrinho é maior que o estoque, ajusta se necessário
+                if item['quantidade'] > max_qtd:
+                    st.session_state.carrinho[prod_id]['quantidade'] = int(max_qtd)
+                    item['quantidade'] = int(max_qtd)
+                    st.toast(f"Ajustado: {item['nome']} ao estoque máximo de {max_qtd}.", icon="⚠️")
+                    st.rerun()
+
+                nova_quantidade = c2.number_input(
+                    label=f'Qtd_{prod_id}',
+                    min_value=1,
+                    max_value=int(max_qtd),
+                    value=item['quantidade'],
+                    step=1,
+                    key=f'qtd_{prod_id}_popover',
+                    label_visibility="collapsed"
+                )
+                
+                if nova_quantidade != item['quantidade']:
+                    # Atualiza a session_state e força um rerun (necessário para atualizar o total)
+                    st.session_state.carrinho[prod_id]['quantidade'] = nova_quantidade
+                    st.rerun()
+                # === FIM DAS MUDANÇAS NOVAS ===
+
                 c3.markdown(f"R$ {item['preco']*item['quantidade']:.2f}")
                 if c4.button("X", key=f'rem_{prod_id}_popover'):
                     remover_do_carrinho(prod_id)
                     st.rerun()
             st.markdown("---")
+            
+            # === MUDANÇAS NOVAS (Botão Limpar Carrinho) ===
+            st.button("🗑️ Limpar Pedido", on_click=limpar_carrinho, use_container_width=True)
+            st.markdown("---")
+            # === FIM DAS MUDANÇAS NOVAS ===
+            
             with st.form("form_finalizar_pedido", clear_on_submit=True):
                 st.subheader("Finalizar Pedido")
                 nome = st.text_input("Seu Nome Completo:")
@@ -399,13 +546,15 @@ with col_carrinho:
                                     "quantidade": v['quantidade'],
                                     "imagem": v.get('imagem', '')
                                 } for k, v in st.session_state.carrinho.items()
-                            ]
+                            ],
+                            # === MUDANÇAS NOVAS (Dados do Cliente para o resumo) ===
+                            "nome": nome,
+                            "contato": contato
+                            # === FIM DAS MUDANÇAS NOVAS ===
                         }
-                        if salvar_pedido(nome, contato, total_acumulado, json.dumps(detalhes, ensure_ascii=False)):
-                            st.balloons()
-                            st.success("🎉 Pedido enviado com sucesso!")
+                        if salvar_pedido(nome, contato, total_acumulado, json.dumps(detalhes, ensure_ascii=False), detalhes):
                             st.session_state.carrinho = {}
-                            st.rerun()
+                            st.rerun() # Reruns para ir para a tela de confirmação
                     else:
                         st.warning("Preencha seu nome e contato.")
 st.markdown("</div></div>", unsafe_allow_html=True)
@@ -413,8 +562,20 @@ st.markdown("</div></div>", unsafe_allow_html=True)
 df_catalogo = carregar_catalogo()
 
 def render_product_card(prod_id, row, key_prefix):
-    """Renderiza um card de produto com suporte para abas de foto e vídeo."""
+    """Renderiza um card de produto com suporte para abas de foto e vídeo e feedback de estoque."""
     with st.container(border=True):
+        
+        # === MUDANÇAS NOVAS (Feedback de Estoque) ===
+        estoque_atual = row.get('QUANTIDADE', 999999)
+        esgotado = estoque_atual <= 0
+        estoque_baixo = estoque_atual > 0 and estoque_atual <= ESTOQUE_BAIXO_LIMITE
+        
+        if esgotado:
+            st.markdown('<span class="esgotado-badge">🚫 ESGOTADO</span>', unsafe_allow_html=True)
+        elif estoque_baixo:
+            st.markdown(f'<span class="estoque-baixo-badge">⚠️ Últimas {int(estoque_atual)} Unidades!</span>', unsafe_allow_html=True)
+        # === FIM DAS MUDANÇAS NOVAS ===
+
 
         youtube_url = row.get('YOUTUBE_URL')
 
@@ -526,9 +687,12 @@ def render_product_card(prod_id, row, key_prefix):
                 """, unsafe_allow_html=True)
 
         with col_botao:
-            if st.button("➕ Adicionar", key=key_prefix, use_container_width=True):
+            # === MUDANÇAS NOVAS (Desabilitar botão se esgotado) ===
+            if st.button("➕ Adicionar", key=key_prefix, use_container_width=True, disabled=esgotado):
                 adicionar_ao_carrinho(prod_id, row)
                 st.rerun()
+            # === FIM DAS MUDANÇAS NOVAS ===
+
 
 termo = st.session_state.get('termo_pesquisa_barra', '').lower()
 if termo:
