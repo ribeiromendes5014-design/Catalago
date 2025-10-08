@@ -524,34 +524,33 @@ else:
     # --- FIM DA ALTERAÇÃO ---
 
     # --- LÓGICA DE ORDENAÇÃO CORRIGIDA E OTIMIZADA ---
-# A prioridade de promoção (EM_PROMOCAO) é o primeiro critério em todas as opções.
-df_filtrado['EM_PROMOCAO'] = df_filtrado['PRECO_PROMOCIONAL'].notna()
+    df_filtrado['EM_PROMOCAO'] = df_filtrado['PRECO_PROMOCIONAL'].notna()
 
-if ordem_selecionada == 'Lançamento':
-    # 1. PRIORIDADE MÁXIMA: Recência (maior 'RECENCIA' primeiro)
-    # 2. Desempate: Promoção (se dois produtos têm a mesma recência, o em promoção vem primeiro)
-    df_ordenado = df_filtrado.sort_values(by=['RECENCIA', 'EM_PROMOCAO'], ascending=[False, False])
-elif ordem_selecionada == 'Promoção':
-    # 1. PRIORIDADE MÁXIMA: Promoção (True primeiro)
-    # 2. Desempate: Recência (para mostrar as promoções mais recentes primeiro)
-    df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'RECENCIA'], ascending=[False, False])
-elif ordem_selecionada == 'Menor Preço':
-    # 1. Prioriza Promoção (True primeiro)
-    # 2. Depois, ordena pelo Menor Preço Final
-    df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'PRECO_FINAL'], ascending=[False, True])
-elif ordem_selecionada == 'Maior Preço':
-    # 1. Prioriza Promoção (True primeiro)
-    # 2. Depois, ordena pelo Maior Preço Final
-    df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'PRECO_FINAL'], ascending=[False, False])
-elif ordem_selecionada == 'Nome do Produto (A-Z)':
-    # 1. Prioriza Promoção (True primeiro)
-    # 2. Depois, ordena por Nome (A-Z)
-    df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'NOME'], ascending=[False, True])
-else:
-    df_ordenado = df_filtrado
+    if ordem_selecionada == 'Lançamento':
+        # 1. PRIORIDADE: Recência (Mais novo primeiro)
+        # 2. Desempate: Promoção (Se for o mesmo 'lançamento', o em promoção aparece primeiro)
+        df_ordenado = df_filtrado.sort_values(by=['RECENCIA', 'EM_PROMOCAO'], ascending=[False, False])
+    elif ordem_selecionada == 'Promoção':
+        # 1. PRIORIDADE: Promoção (Só produtos em promoção aparecem primeiro)
+        # 2. Desempate: Recência (as promoções mais recentes aparecem primeiro)
+        df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'RECENCIA'], ascending=[False, False])
+    elif ordem_selecionada == 'Menor Preço':
+        # 1. Prioriza Promoção (True primeiro)
+        # 2. Depois, ordena pelo Menor Preço Final
+        df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'PRECO_FINAL'], ascending=[False, True])
+    elif ordem_selecionada == 'Maior Preço':
+        # 1. Prioriza Promoção (True primeiro)
+        # 2. Depois, ordena pelo Maior Preço Final
+        df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'PRECO_FINAL'], ascending=[False, False])
+    elif ordem_selecionada == 'Nome do Produto (A-Z)':
+        # 1. Prioriza Promoção (True primeiro)
+        # 2. Depois, ordena por Nome (A-Z)
+        df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'NOME'], ascending=[False, True])
+    else:
+        df_ordenado = df_filtrado
 
-df_filtrado = df_ordenado
-# --- FIM DA LÓGICA DE ORDENAÇÃO ---
+    df_filtrado = df_ordenado
+    # --- FIM DA LÓGICA DE ORDENAÇÃO ---
 
     cols = st.columns(4)
     # Usamos .reset_index() para iterar sobre o dataframe ordenado corretamente
@@ -560,5 +559,3 @@ df_filtrado = df_ordenado
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
-
-
