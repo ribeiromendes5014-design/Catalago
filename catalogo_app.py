@@ -122,9 +122,15 @@ def carregar_catalogo():
         st.warning(f"Catálogo indisponível. Verifique o arquivo '{SHEET_NAME_CATALOGO_CSV}' no GitHub.")
         return pd.DataFrame()
 
-    # --- NOVO: Adiciona coluna de recência para ordenação "Lançamento" ---
-    # Assume que produtos mais abaixo no CSV são mais recentes.
-    df_produtos['RECENCIA'] = range(len(df_produtos), 0, -1)
+    # --- CORREÇÃO DE RECÊNCIA: usa o ID como base da recência para maior precisão ---
+    # Produtos com IDs maiores são considerados lançamentos mais recentes.
+    if 'ID' in df_produtos.columns:
+        # Converte ID para numérico para garantir a ordenação correta
+        df_produtos['RECENCIA'] = pd.to_numeric(df_produtos['ID'], errors='coerce')
+    else:
+        # fallback: se não houver coluna ID, usa a ordem das linhas (do último para o primeiro)
+        df_produtos['RECENCIA'] = range(len(df_produtos), 0, -1)
+    # --- FIM DA CORREÇÃO DE RECÊNCIA ---
 
     # --- LÓGICA ROBUSTA PARA ENCONTRAR E RENOMEAR COLUNAS ---
     colunas_minimas = ['PRECOVISTA', 'ID', 'NOME']
@@ -527,8 +533,8 @@ else:
     df_filtrado['EM_PROMOCAO'] = df_filtrado['PRECO_PROMOCIONAL'].notna()
 
     if ordem_selecionada == 'Lançamento':
-        # 1. PRIORIDADE: Recência (Mais novo primeiro)
-        # 2. Desempate: Promoção (Se for o mesmo 'lançamento', o em promoção aparece primeiro)
+        # 1. PRIORIDADE: Recência (Mais novo primeiro - usando o ID como RECENCIA)
+        # 2. Desempate: Promoção (O item mais novo e em promoção aparece primeiro)
         df_ordenado = df_filtrado.sort_values(by=['RECENCIA', 'EM_PROMOCAO'], ascending=[False, False])
     elif ordem_selecionada == 'Promoção':
         # 1. PRIORIDADE: Promoção (Só produtos em promoção aparecem primeiro)
