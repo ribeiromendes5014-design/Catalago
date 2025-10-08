@@ -530,7 +530,7 @@ else:
     if ordem_selecionada == 'Lançamento':
         # 1. Prioriza Promoção (True primeiro)
         # 2. Depois, ordena pelos Mais Recentes (maior 'RECENCIA' primeiro)
-        df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'RECENCIA'], ascending=[False, False])
+        df_ordenado = df_filtrado.sort_values(by=['RECENCIA'], ascending=[False, False])
     elif ordem_selecionada == 'Promoção':
         # CORRIGIDO: Apenas prioriza a promoção. O segundo critério é a ordem natural (RECENCIA), mas para forçar a ordem primária (Promoção), mantemos apenas um critério secundário que não altere muito o resto. Usaremos a ordem alfabética para o restante dos itens.
         df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'NOME'], ascending=[False, True])
@@ -559,3 +559,4 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
