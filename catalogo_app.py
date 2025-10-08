@@ -636,20 +636,27 @@ with col_carrinho:
         if carrinho_vazio:
             st.info("Seu carrinho está vazio.")
         else:
+            # AQUI ESTÁ O TOTAL GERAL DO PEDIDO (que deve aparecer no topo)
             st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
             st.markdown("---")
+            
+            # === NOVO CABEÇALHO PARA CLAREZA ===
+            col_h1, col_h2, col_h3, col_h4 = st.columns([3, 2, 2, 1])
+            col_h2.markdown("**Qtd**")
+            col_h3.markdown("**Subtotal**")
+            col_h4.markdown("")
+            st.markdown('<div style="margin-top: -10px; border-top: 1px solid #ccc;"></div>', unsafe_allow_html=True)
+            # ==================================
             
             df_catalogo_completo = carregar_catalogo().set_index('ID')
             
             for prod_id, item in list(st.session_state.carrinho.items()):
-                # === CORREÇÃO DO NAMEERROR: DEFINIÇÃO DE COLUNAS ===
-                # === IMPLEMENTAÇÃO: Mais espaço para o subtotal/preço unitário ===
+                # O c3 agora tem mais espaço para o subtotal e preço unitário
                 c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
-                # === FIM DA CORREÇÃO ===
                 
                 c1.write(f"*{item['nome']}*")
                 
-                # === Lógica de Max Qtd no Carrinho ===
+                # === Lógica de Max Qtd no Carrinho (mantida) ===
                 if prod_id in df_catalogo_completo.index:
                     max_qtd = df_catalogo_completo.loc[prod_id, 'QUANTIDADE']
                     if isinstance(max_qtd, pd.Series):
@@ -809,3 +816,4 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
