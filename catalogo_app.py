@@ -140,8 +140,8 @@ def carregar_catalogo():
         df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
         
         # AÇÃO REMOVIDA: df_produtos.drop_duplicates(subset=['ID'], keep='first', inplace=True)
-        # O catálogo agora VAI MOSTRAR IDs duplicados, mas isso pode causar erros de alinhamento de dados.
-        
+        # O catálogo AGORA MOSTRA IDs duplicados.
+
         # A única remoção é para garantir que o índice seja numérico e não falhe o app.
         df_produtos.dropna(subset=['ID'], inplace=True)
         # === FIM DA CORREÇÃO DE DUPLICATAS (REMOÇÃO DO AVISO E DO DROP) ===
@@ -317,7 +317,7 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json, pedido
         st.error(f"Erro desconhecido ao enviar o pedido: {e}")
         return False
 
-# === FUNÇÃO DE ADIÇÃO CORRIGIDA/NOVA (substituindo o antigo 'adicionar_ao_carrinho') ===
+# === FUNÇÃO DE ADIÇÃO DE QUANTIDADE (Usada no card e no carrinho) ===
 def adicionar_qtd_ao_carrinho(produto_id, produto_row, quantidade):
     produto_nome = produto_row['NOME']
     produto_preco = produto_row['PRECO_FINAL']
@@ -353,11 +353,9 @@ def adicionar_qtd_ao_carrinho(produto_id, produto_row, quantidade):
         }
     st.toast(f"✅ {quantidade}x {produto_nome} adicionado(s)!", icon="🛍️"); time.sleep(0.1)
 
-# O antigo 'adicionar_ao_carrinho' não será mais chamado no card do produto. 
-# Mantenha-o ou remova-o. Para a compatibilidade do código que você enviou, vou mantê-lo vazio.
+# Esta função agora é um placeholder e não é usada diretamente no card, mas é mantida por compatibilidade.
 def adicionar_ao_carrinho(produto_id, produto_row):
-    # Esta função agora é um placeholder. O card usa adicionar_qtd_ao_carrinho.
-    pass
+    pass 
 
 def remover_do_carrinho(produto_id):
     if produto_id in st.session_state.carrinho:
@@ -593,8 +591,12 @@ def render_product_card(prod_id, row, key_prefix):
     """Renderiza um card de produto com suporte para abas de foto e vídeo, seletor de quantidade e feedback de estoque."""
     with st.container(border=True):
         
-        # === CORREÇÃO: LÓGICA DE ESTOQUE ===
-        # Garante que QUANTIDADE é um inteiro para comparações seguras
+        # --- PREPARAÇÃO DE DADOS (Correção de tipo para segurança) ---
+        # Garante que NOME e DESCRICAOCURTA sejam sempre strings
+        produto_nome = str(row['NOME'])
+        descricao_curta = str(row.get('DESCRICAOCURTA', '')).strip()
+        
+        # === LÓGICA DE ESTOQUE ===
         estoque_atual = int(row.get('QUANTIDADE', 999999)) 
         esgotado = estoque_atual <= 0
         estoque_baixo = estoque_atual > 0 and estoque_atual <= ESTOQUE_BAIXO_LIMITE
@@ -603,7 +605,7 @@ def render_product_card(prod_id, row, key_prefix):
             st.markdown('<span class="esgotado-badge">🚫 ESGOTADO</span>', unsafe_allow_html=True)
         elif estoque_baixo:
             st.markdown(f'<span class="estoque-baixo-badge">⚠️ Últimas {estoque_atual} Unidades!</span>', unsafe_allow_html=True)
-        # === FIM DA CORREÇÃO DE ESTOQUE ===
+        # === FIM DA LÓGICA DE ESTOQUE ===
 
         youtube_url = row.get('YOUTUBE_URL')
 
@@ -629,8 +631,8 @@ def render_product_card(prod_id, row, key_prefix):
             </div>
             """, unsafe_allow_html=True)
 
-        st.markdown(f"**{row['NOME']}**")
-        st.caption(row.get('DESCRICAOCURTA', ''))
+        st.markdown(f"**{produto_nome}**")
+        st.caption(descricao_curta) # Usa a variável corrigida
 
         with st.expander("Ver detalhes"):
             # Lógica de Detalhes (mantida)
@@ -644,7 +646,8 @@ def render_product_card(prod_id, row, key_prefix):
                 st.info('Sem informações detalhadas disponíveis para este produto.')
             else:
                 if tem_descricao:
-                    if descricao_principal.strip() != row.get('DESCRICAOCURTA', '').strip():
+                    # O ERRO FOI CORRIGIDO ABAIXO (usando 'descricao_curta' que já é string)
+                    if descricao_principal.strip() != descricao_curta:
                         st.subheader('Descrição')
                         st.markdown(descricao_principal)
                         if tem_detalhes:
