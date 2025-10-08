@@ -29,7 +29,7 @@ SHEET_NAME_CATALOGO_CSV = "produtos_estoque.csv"
 SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
 SHEET_NAME_PEDIDOS_CSV = "pedidos.csv"
 SHEET_NAME_VIDEOS_CSV = "video.csv"
-BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-названия-3.jpg'
+BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-na-zvania-3.jpg'
 LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
 
 
@@ -39,7 +39,7 @@ if 'carrinho' not in st.session_state:
 # === MUDANÇAS NOVAS ===
 if 'pedido_confirmado' not in st.session_state:
     st.session_state.pedido_confirmado = None
-# === FIM DAS MUDANÇAS NOVAS ===
+# === FIM DAS MUDANÇAS NOVAS ---
 
 
 # --- Headers para Autenticação do GitHub ---
@@ -221,6 +221,10 @@ def carregar_catalogo():
         else:
             st.warning("Arquivo 'video.csv' encontrado, mas as colunas 'ID_PRODUTO' ou 'YOUTUBE_URL' estão faltando.")
 
+    # Garante que 'CATEGORIA' exista para o filtro, se não existir, cria uma coluna vazia.
+    if 'CATEGORIA' not in df_final.columns:
+         df_final['CATEGORIA'] = 'Geral'
+         
     return df_final.set_index('ID').reset_index()
 
 
@@ -492,8 +496,12 @@ num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values(
 carrinho_vazio = not st.session_state.carrinho
 
 st.markdown("<div class='pink-bar-container'><div class='pink-bar-content'>", unsafe_allow_html=True)
+
+# A busca principal está na barra rosa, mas usaremos o novo filtro na seção de produtos.
+# Removendo a coluna de pesquisa daqui, se ela for usada apenas para a barra superior.
 col_pesquisa, col_carrinho = st.columns([5, 1])
 with col_pesquisa:
+    # Mantendo o input na barra superior, mas o filtro de termo abaixo dará mais controle.
     st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
 
 with col_carrinho:
@@ -519,19 +527,26 @@ with col_carrinho:
                 c1.write(f"*{item['nome']}*")
                 
                 # === MUDANÇAS NOVAS (Edição de Quantidade e Estoque Máximo) ===
-                max_qtd = df_catalogo_completo.loc[prod_id, 'QUANTIDADE'] if prod_id in df_catalogo_completo.index else 999999
+                # Acessa o índice do DataFrame de forma segura, tratando possíveis IDs duplicados (pega o primeiro)
+                if prod_id in df_catalogo_completo.index:
+                    max_qtd = df_catalogo_completo.loc[prod_id, 'QUANTIDADE'].iloc[0] if isinstance(df_catalogo_completo.loc[prod_id, 'QUANTIDADE'], pd.Series) else df_catalogo_completo.loc[prod_id, 'QUANTIDADE']
+                else:
+                    max_qtd = 999999
                 
+                # Garante que seja um inteiro
+                max_qtd = int(max_qtd)
+
                 # Verifica se a quantidade atual no carrinho é maior que o estoque, ajusta se necessário
                 if item['quantidade'] > max_qtd:
-                    st.session_state.carrinho[prod_id]['quantidade'] = int(max_qtd)
-                    item['quantidade'] = int(max_qtd)
+                    st.session_state.carrinho[prod_id]['quantidade'] = max_qtd
+                    item['quantidade'] = max_qtd
                     st.toast(f"Ajustado: {item['nome']} ao estoque máximo de {max_qtd}.", icon="⚠️")
                     st.rerun()
 
                 nova_quantidade = c2.number_input(
                     label=f'Qtd_{prod_id}',
                     min_value=1,
-                    max_value=int(max_qtd),
+                    max_value=max_qtd,
                     value=item['quantidade'],
                     step=1,
                     key=f'qtd_{prod_id}_popover',
@@ -586,167 +601,66 @@ st.markdown("</div></div>", unsafe_allow_html=True)
 
 df_catalogo = carregar_catalogo()
 
-# === FUNÇÃO render_product_card CORRIGIDA ===
-def render_product_card(prod_id, row, key_prefix):
-    """Renderiza um card de produto com suporte para abas de foto e vídeo, seletor de quantidade e feedback de estoque."""
-    with st.container(border=True):
-        
-        # --- PREPARAÇÃO DE DADOS (Correção de tipo para segurança) ---
-        # Garante que NOME e DESCRICAOCURTA sejam sempre strings
-        produto_nome = str(row['NOME'])
-        descricao_curta = str(row.get('DESCRICAOCURTA', '')).strip()
-        
-        # === LÓGICA DE ESTOQUE ===
-        estoque_atual = int(row.get('QUANTIDADE', 999999)) 
-        esgotado = estoque_atual <= 0
-        estoque_baixo = estoque_atual > 0 and estoque_atual <= ESTOQUE_BAIXO_LIMITE
-        
-        if esgotado:
-            st.markdown('<span class="esgotado-badge">🚫 ESGOTADO</span>', unsafe_allow_html=True)
-        elif estoque_baixo:
-            st.markdown(f'<span class="estoque-baixo-badge">⚠️ Últimas {estoque_atual} Unidades!</span>', unsafe_allow_html=True)
-        # === FIM DA LÓGICA DE ESTOQUE ===
+# --- NOVO BLOCO: FILTRO POR CATEGORIA E BUSCA AVANÇADA ---
 
-        youtube_url = row.get('YOUTUBE_URL')
-
-        if youtube_url and isinstance(youtube_url, str) and youtube_url.strip().startswith('http'):
-            tab_foto, tab_video = st.tabs(["📷 Foto", "▶️ Vídeo"])
-            with tab_foto:
-                render_product_image(row.get('LINKIMAGEM'))
-            with tab_video:
-                st.video(youtube_url)
-        else:
-            render_product_image(row.get('LINKIMAGEM'))
-
-        preco_final = row['PRECO_FINAL']
-        preco_original = row['PRECO']
-        is_promotion = pd.notna(row.get('PRECO_PROMOCIONAL'))
-
-        if is_promotion:
-            st.markdown(f"""
-            <div style="margin-bottom: 0.5rem;">
-                <span style="background-color: #D32F2F; color: white; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem;">
-                    🔥 PROMOÇÃO
-                </span>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown(f"**{produto_nome}**")
-        st.caption(descricao_curta) # Usa a variável corrigida
-
-        with st.expander("Ver detalhes"):
-            # Lógica de Detalhes (mantida)
-            descricao_principal = row.get('DESCRICAOLONGA')
-            detalhes_str = row.get('DETALHESGRADE')
-            
-            tem_descricao = descricao_principal and isinstance(descricao_principal, str) and descricao_principal.strip()
-            tem_detalhes = detalhes_str and isinstance(detalhes_str, str) and detalhes_str.strip()
-            
-            if not tem_descricao and not tem_detalhes:
-                st.info('Sem informações detalhadas disponíveis para este produto.')
-            else:
-                if tem_descricao:
-                    # O ERRO FOI CORRIGIDO ABAIXO (usando 'descricao_curta' que já é string)
-                    if descricao_principal.strip() != descricao_curta:
-                        st.subheader('Descrição')
-                        st.markdown(descricao_principal)
-                        if tem_detalhes:
-                            st.markdown('---') 
-                    
-                if tem_detalhes:
-                    st.subheader('Especificações')
-                    if detalhes_str.strip().startswith('{'):
-                        try:
-                            detalhes_dict = ast.literal_eval(detalhes_str)
-                            texto_formatado = ""
-                            for chave, valor in detalhes_dict.items():
-                                texto_formatado += f"* **{chave.strip()}**: {str(valor).strip()}\n"
-                            st.markdown(texto_formatado)
-                        except (ValueError, SyntaxError):
-                            st.markdown(detalhes_str)
-                    else:
-                        st.markdown(detalhes_str)
-
-
-        col_preco, col_botao = st.columns([2, 2])
-
-        with col_preco:
-            # Lógica de Preço e Cashback (mantida)
-            cashback_percent = pd.to_numeric(row.get('CASHBACKPERCENT'), errors='coerce')
-            cashback_html = ""
-
-            if pd.notna(cashback_percent) and cashback_percent > 0:
-                cashback_valor_calculado = (cashback_percent / 100) * preco_final
-                cashback_html = f"""
-                <span style='color: #D32F2F; font-size: 0.8rem; font-weight: bold;'>
-                    🔥 R$ {cashback_valor_calculado:.2f}
-                </span>
-                """
-
-            if is_promotion:
-                st.markdown(f"""
-                <div style="line-height: 1.2;">
-                    <span style='text-decoration: line-through; color: #757575; font-size: 0.9rem;'>R$ {preco_original:.2f}</span>
-                    <h4 style='color: #D32F2F; margin:0;'>R$ {preco_final:.2f}</h4>
-                    {cashback_html}
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div style='display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px;'>
-                    <h4 style='color: #880E4F; margin:0; line-height:1;'>R$ {preco_final:.2f}</h4>
-                    {cashback_html}
-                </div>
-                """, unsafe_allow_html=True)
-
-
-        # === SELETOR DE QUANTIDADE NO CARD ===
-        with col_botao:
-            if esgotado:
-                st.empty() 
-            else:
-                # 1. Input de Quantidade (começa em 1, limitado pelo estoque)
-                qtd_a_adicionar = st.number_input(
-                    label=f'Qtd_Input_{key_prefix}',
-                    min_value=1,
-                    # O valor máximo é o estoque atual (já é um int)
-                    max_value=estoque_atual, 
-                    value=1, # Começa em 1 unidade
-                    step=1,
-                    key=f'qtd_input_{key_prefix}',
-                    label_visibility="collapsed"
-                )
-                
-                # 2. Botão para adicionar a quantidade selecionada
-                if st.button(f"🛒 Adicionar {qtd_a_adicionar} un.", key=f'btn_add_qtd_{key_prefix}', use_container_width=True):
-                    if qtd_a_adicionar >= 1:
-                        # Chama a nova função de adição
-                        adicionar_qtd_ao_carrinho(prod_id, row, qtd_a_adicionar)
-                        st.rerun()
-        # === FIM SELETOR DE QUANTIDADE ===
-
-# === FIM FUNÇÃO render_product_card CORRIGIDA ===
-
-
-termo = st.session_state.get('termo_pesquisa_barra', '').lower()
-if termo:
-    df_filtrado = df_catalogo[df_catalogo.apply(lambda row: termo in str(row['NOME']).lower() or termo in str(row['DESCRICAOLONGA']).lower(), axis=1)]
+# 1. Obter todas as categorias únicas (garantindo que não haja valores NaN/vazios)
+if 'CATEGORIA' in df_catalogo.columns:
+    categorias = df_catalogo['CATEGORIA'].dropna().astype(str).unique().tolist()
+    categorias.sort() # Ordena as categorias por nome
+    categorias.insert(0, "TODAS AS CATEGORIAS") # Opção padrão
 else:
-    df_filtrado = df_catalogo
+    categorias = ["TODAS AS CATEGORIAS"]
+    if "Geral" not in df_catalogo.columns: # Evita double warning se for só 'Geral'
+         st.warning("A coluna 'CATEGORIA' não foi encontrada no seu arquivo de catálogo. O filtro não será exibido.")
+
+
+# 2. Widgets de Filtro e Ordenação
+col_filtro_cat, col_select_ordem, _ = st.columns([1, 1, 3])
+
+# Variável de termo da busca principal
+termo = st.session_state.get('termo_pesquisa_barra', '').lower()
+
+with col_filtro_cat:
+    categoria_selecionada = st.selectbox(
+        "Filtrar por:",
+        categorias,
+        key='filtro_categoria_barra'
+    )
+    # Se houver uma busca na barra superior, esta opção fica oculta (a busca é prioritária)
+    if termo:
+        st.markdown(f'<div style="font-size: 0.8rem; color: #E91E63;">Busca ativa desabilita filtro.</div>', unsafe_allow_html=True)
+
+
+# 3. Lógica de Filtragem
+
+df_filtrado = df_catalogo.copy()
+
+# A. Filtrar por Categoria (Ignora se houver termo de busca, ou se for 'TODAS')
+if not termo and categoria_selecionada != "TODAS AS CATEGORIAS":
+    # Garante que a comparação seja feita com strings
+    df_filtrado = df_filtrado[df_filtrado['CATEGORIA'].astype(str) == categoria_selecionada]
+
+# B. Filtrar por Termo de Busca (usando o termo capturado na barra principal)
+elif termo:
+    # Filtra por NOME ou DESCRICAOLONGA (igual à lógica anterior)
+    df_filtrado = df_filtrado[df_filtrado.apply(
+        lambda row: termo in str(row['NOME']).lower() or termo in str(row['DESCRICAOLONGA']).lower(), 
+        axis=1
+    )]
+
+# --- FIM DO NOVO BLOCO DE FILTRO ---
+
 
 if df_filtrado.empty:
     if termo:
-        st.info(f"Nenhum produto encontrado com o termo '{termo}'.")
+        st.info(f"Nenhum produto encontrado com o termo '{termo}' na categoria '{categoria_selecionada}'.")
     else:
-        st.warning("O catálogo está vazio ou indisponível no momento.")
+        st.info(f"Nenhum produto encontrado na categoria '{categoria_selecionada}'.")
 else:
     st.subheader("✨ Nossos Produtos")
 
-    # --- AJUSTE FINAL: WIDGET DE ORDENAÇÃO para ser menor e minimalista ---
-    # Usamos uma proporção maior na segunda coluna para deixar a primeira (com o selectbox) mais estreita.
-    col_select, _ = st.columns([1, 4])
-
-    with col_select:
+    # --- WIDGET DE ORDENAÇÃO (movido para a coluna ao lado do filtro) ---
+    with col_select_ordem:
         opcoes_ordem = ['Lançamento', 'Promoção', 'Menor Preço', 'Maior Preço', 'Nome do Produto (A-Z)']
         ordem_selecionada = st.selectbox(
             "Ordenar por:",
