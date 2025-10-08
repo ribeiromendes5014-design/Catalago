@@ -641,7 +641,7 @@ with col_carrinho:
             st.markdown("---")
             
             # === NOVO CABEÇALHO PARA CLAREZA ===
-            col_h1, col_h2, col_h3, col_h4 = st.columns([3, 2, 2, 1])
+            col_h1, col_h2, col_h3, col_h4 = st.columns([3, 1.5, 2.5, 1]) # Proporção ajustada!
             col_h2.markdown("**Qtd**")
             col_h3.markdown("**Subtotal**")
             col_h4.markdown("")
@@ -651,8 +651,9 @@ with col_carrinho:
             df_catalogo_completo = carregar_catalogo().set_index('ID')
             
             for prod_id, item in list(st.session_state.carrinho.items()):
-                # O c3 agora tem mais espaço para o subtotal e preço unitário
-                c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
+                # === Proporção AJUSTADA e Correção do c3 ===
+                c1, c2, c3, c4 = st.columns([3, 1.5, 2.5, 1])
+                # === FIM DA CORREÇÃO ===
                 
                 c1.write(f"*{item['nome']}*")
                 
@@ -687,9 +688,9 @@ with col_carrinho:
                     st.rerun()
                 # === Fim Lógica de Max Qtd no Carrinho ===
 
-                # === IMPLEMENTAÇÃO: Subtotal e Preço Unitário ===
+                # === CORREÇÃO C3: Adicionado unsafe_allow_html=True ===
                 c3.markdown(f"**R$ {item['preco']*item['quantidade']:.2f}**<br><span style='font-size: 0.8rem; color: #757575;'>(R$ {item['preco']:.2f} un.)</span>", unsafe_allow_html=True)
-                # === FIM DA IMPLEMENTAÇÃO ===
+                # === FIM DA CORREÇÃO ===
                 
                 if c4.button("X", key=f'rem_{prod_id}_popover'):
                     remover_do_carrinho(prod_id)
@@ -816,4 +817,5 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
