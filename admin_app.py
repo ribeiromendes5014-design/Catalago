@@ -299,7 +299,7 @@ def calcular_cashback_a_creditar(pedido_json, df_catalogo):
     if not pedido_str or pedido_str.lower() in ('nan', '{}', ''):
         return 0.0
 
-    # 💡 Lógica de limpeza robusta
+    # 💡 CORREÇÃO: Lógica de limpeza robusta
     s_limpa = pedido_str
     if s_limpa.startswith('"') and s_limpa.endswith('"'):
         s_limpa = s_limpa[1:-1]
@@ -324,35 +324,48 @@ def calcular_cashback_a_creditar(pedido_json, df_catalogo):
     itens = detalhes_pedido.get('itens', [])
     
     for item in itens:
+        # --- 1. Extração e Conversão Inicial de Dados do Item ---
+        
+        # Converte o ID para inteiro de forma segura ANTES de usar no catálogo
         try:
             item_id = int(item.get('id', -1))
         except (TypeError, ValueError):
-            continue
+            continue  # Pula o item se o ID for inválido ou ausente
 
+        # 1️⃣ Tenta pegar do JSON do pedido primeiro
         cashback_percent_str = str(item.get('cashbackpercent', 0)).replace(',', '.')
         
+        # Conversão segura para float (Python nativo)
         try:
             cashback_percent = float(cashback_percent_str)
         except ValueError:
             cashback_percent = 0.0
 
         # --- 2. Busca no Catálogo se o Valor For Inválido ou Zero ---
+
+        # Condição melhorada para tratar 0 e falhas na conversão (ex: None, NaN)
+        # Atenção: df_catalogo['ID'] deve ser um INT para que a comparação funcione
         if cashback_percent == 0.0 and not df_catalogo.empty:
             
+            # Filtra o catálogo
             produto_catalogo = df_catalogo.loc[df_catalogo['ID'] == item_id]
             
             if not produto_catalogo.empty:
+                # Pega o valor do catálogo (primeira linha .iloc[0])
                 catalogo_cashback_str = str(produto_catalogo.iloc[0].get('CASHBACKPERCENT', 0)).replace(',', '.')
                 
+                # Atualiza o cashback_percent (Python nativo)
                 try:
                     cashback_percent = float(catalogo_cashback_str)
                 except ValueError:
-                    pass
+                    pass # Mantém 0.0
 
         # --- 3. Cálculo Normal do Cashback ---
+        
         if cashback_percent > 0:
             preco_unitario = float(item.get('preco', 0.0))
             
+            # Converte a quantidade com valor default seguro
             try:
                 quantidade = int(item.get('quantidade', 0))
             except (TypeError, ValueError):
@@ -361,7 +374,7 @@ def calcular_cashback_a_creditar(pedido_json, df_catalogo):
             valor_item = preco_unitario * quantidade
             valor_cashback_total += valor_item * (cashback_percent / 100)
         
-    return round(valor_cashback_total, 2)
+    return round(valor_cashback_total, 2) # Retorna com 2 casas decimais
 
 # --------------------------------------------------------------------------------
 # --- FUNÇÕES DE PEDIDOS (ESCRITA HABILITADA) ---
@@ -393,8 +406,6 @@ def atualizar_status_pedido(id_pedido, novo_status, df_catalogo):
             
             if pedido_json and contato_cliente and valor_cashback_credito > 0:
                 # 2. Lança o Crédito no sistema de Clientes Cashback
-                # ATENÇÃO: A função lancar_venda_cashback precisa do valor de venda BRUTO 
-                # OU apenas do valor do cashback. Mantive o valor do cashback por enquanto.
                 if not lancar_venda_cashback(nome_cliente_pedido, contato_cliente, valor_cashback_credito):
                     st.warning("Falha ao lançar cashback. Pedido não será finalizado.")
                     return False
@@ -442,24 +453,27 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
             st.warning("⚠️ Detalhes do pedido (JSON) não encontrados ou vazios.")
             return 0
             
-        # 💡 CORREÇÃO 1: Limpeza para strings corrompidas comuns em CSV/Pandas
-        s = pedido_str
-        if s.startswith('"') and s.endswith('"'):
-            s = s[1:-1]
-        s = s.replace('\\"', '"').replace('\\\\', '\\') # Desescapa aspas e barras
+        # 💡 CORREÇÃO: Lógica de limpeza robusta
+        s_limpa = pedido_str
+        if s_limpa.startswith('"') and s_limpa.endswith('"'):
+            s_limpa = s_limpa[1:-1]
+        s_limpa = s_limpa.replace('\\"', '"').replace('\\\\', '\\')
+        
+        detalhes_pedido = {} # Inicializa o dicionário
             
         try:
-            # Tenta com a string limpa (s)
-            detalhes_pedido = json.loads(s)
+            # Tenta 1: Carregar a string LIMPA como JSON
+            detalhes_pedido = json.loads(s_limpa)
         except json.JSONDecodeError:
-            
-            # 💡 CORREÇÃO 2: Adicionar um try/except para lidar com o erro 'malformed node or string'
+            # Tenta 2: Usar ast.literal_eval na string ORIGINAL
             try:
-                # Volta para a string original para literal_eval, pois a limpeza pode ter quebrado
                 detalhes_pedido = ast.literal_eval(pedido_str)
             except (ValueError, SyntaxError, Exception):
-                # Se falhar a conversão literal, retorna um dict vazio
-                detalhes_pedido = {} 
+                # Tenta 3: Usar ast.literal_eval na string LIMPA (última tentativa)
+                try:
+                    detalhes_pedido = ast.literal_eval(s_limpa)
+                except (ValueError, SyntaxError, Exception):
+                    detalhes_pedido = {}
             
         itens = detalhes_pedido.get('itens', [])
         total_itens = len(itens)
@@ -474,7 +488,6 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
             item_id = pd.to_numeric(item.get('id'), errors='coerce')
             
             if not df_catalogo.empty and not pd.isna(item_id) and not df_catalogo[df_catalogo['ID'] == int(item_id)].empty: 
-                # Usando .get() para segurança
                 link_na_tabela = str(df_catalogo[df_catalogo['ID'] == int(item_id)].iloc[0].get('LINKIMAGEM', link_imagem)).strip()
                 
                 if link_na_tabela.lower() != 'nan' and link_na_tabela:
@@ -514,7 +527,6 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
         return 0
         
     except Exception as e: 
-        # Mantém a mensagem de erro para debug, mas agora é mais difícil de ser atingida
         st.error(f"Erro fatal ao processar itens do pedido. Verifique o JSON. Detalhe: {e}")
         return 0 
 
@@ -594,7 +606,6 @@ def criar_promocao(id_produto, nome_produto, preco_original, preco_promocional, 
         df = pd.DataFrame([nova_linha])
     
     commit_msg = f"Criar promoção para {nome_produto}"
-    # 💥 CORREÇÃO: Trocar 'commit_message' por 'commit_msg'
     return write_csv_to_github(df, SHEET_NAME_PROMOCOES, commit_msg)
 
 
@@ -604,7 +615,6 @@ def excluir_promocao(id_promocao):
     
     df = df[df['ID_PROMOCAO'] != int(id_promocao)]
     commit_msg = f"Excluir promoção ID: {id_promocao}"
-    # 💥 CORREÇÃO: Trocar 'commit_message' por 'commit_msg'
     return write_csv_to_github(df, SHEET_NAME_PROMOCOES, commit_msg)
 
 
@@ -621,7 +631,6 @@ def atualizar_promocao(id_promocao, preco_promocional, data_inicio, data_fim, st
         df.loc[idx, 'STATUS'] = status
         
         commit_msg = f"Atualizar promoção ID: {id_promocao}"
-        # 💥 CORREÇÃO: Trocar 'commit_message' por 'commit_msg'
         return write_csv_to_github(df, SHEET_NAME_PROMOCOES, commit_msg)
     return False
 
@@ -648,41 +657,41 @@ def extract_customer_cashback(itens_json_string):
 
     s = str(itens_json_string).strip()
     
-    # === 1. TENTATIVA COM REGEX (Mais robusto para strings corrompidas) ===
-    # Busca por "cliente_saldo_cashback": seguido de zero ou mais espaços, e captura o número (com ponto)
-    # r'\"cliente_saldo_cashback\"\s*:\s*([\d\.]+)'
+    # === 1. TENTATIVA COM REGEX ===
     match = re.search(r'\"cliente_saldo_cashback\"\s*:\s*([\d\.]+)', s)
     
     if match:
         try:
-            # Converte o valor capturado (ex: "0.9") para float
             return float(match.group(1))
         except ValueError:
-            # Se a conversão falhar, segue para o parsing JSON
             pass
 
-    # === 2. FALLBACK COM LIMPEZA E JSON.LOADS (Se o RegEx falhar) ===
-    
-    # 💡 CORREÇÃO: Adicionando limpeza agressiva antes de tentar json.loads
+    # === 2. FALLBACK COM LIMPEZA E JSON.LOADS ===
     s_limpa = s
     if s_limpa.startswith('"') and s_limpa.endswith('"'):
         s_limpa = s_limpa[1:-1]
     s_limpa = s_limpa.replace('""', '"')
     s_limpa = s_limpa.replace('\\"', '"') 
-    s_limpa = s_limpa.replace('\\\\', '\\') # Desescapa barras (importante para o json.loads)
+    s_limpa = s_limpa.replace('\\\\', '\\')
+    
+    data = {}
 
     try:
+        # Tenta 1: Carregar a string LIMPA como JSON
         data = json.loads(s_limpa)
-        return data.get("cliente_saldo_cashback", 0.0)
     except Exception:
-        # 3. Fallback final com ast.literal_eval
+        # Tenta 2: Usar ast.literal_eval na string ORIGINAL
         try:
-            # Tenta com a string original (itens_json_string) caso a limpeza tenha sido agressiva demais
             data = ast.literal_eval(itens_json_string) 
-            return data.get("cliente_saldo_cashback", 0.0)
         except Exception:
-            # Retorna 0.0 se falhar em todas as tentativas
-            return 0.0
+            # Tenta 3: Usar ast.literal_eval na string LIMPA (última tentativa)
+            try:
+                data = ast.literal_eval(s_limpa) 
+            except Exception:
+                # Retorna 0.0 se falhar em todas as tentativas
+                return 0.0
+
+    return data.get("cliente_saldo_cashback", 0.0)
 
 with tab_pedidos:
     st.header("📋 Pedidos Recebidos")
@@ -1063,4 +1072,3 @@ with tab_promocoes:
                         st.rerun()
                     else:
                         st.error("Falha ao excluir promoção.")
-
