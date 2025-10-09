@@ -213,7 +213,7 @@ with tab_produtos:
                                     st.success("Produto atualizado!"); st.rerun()
                                 else: st.error("Falha ao atualizar.")
 
-                    if st.button("🗑️ Excluir", key=f"del_{produto.get('ID', index)}", type="primary"):
+                    if st.button("🗑️ Excluir", key=f"del_{produto.get('ID')}_{index}", type="primary"):
                         if excluir_produto(produto['ID']):
                             st.success("Produto excluído!"); st.rerun()
                         else: st.error("Falha ao excluir.")
@@ -277,5 +277,6 @@ with tab_promocoes:
                 if st.button("🗑️ Excluir", key=f"del_{produto.get('ID')}_{index}", type="primary"):
                     if excluir_promocao(promo['ID_PROMOCAO']):
                         st.success("Promoção excluída!"); st.rerun()
+
 
 
