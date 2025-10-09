@@ -12,31 +12,11 @@ from io import StringIO
 import os
 import ast
 
-# --- Variáveis de Configuração (CORREÇÃO DE ERRO StreamlitSecretNotFoundError) ---
 
-# Tenta carregar as variáveis de st.secrets de forma segura, usando .get()
-# Isso evita o erro StreamlitSecretNotFoundError se o secrets.toml não existir.
-github_secrets = st.secrets.get("github", {})
-
-# 1. Tenta usar o valor do secrets.toml (se existir a chave 'github')
-# 2. Caso contrário, usa a variável de ambiente (padrão para deploy no Render/Streamlit Cloud)
-GITHUB_TOKEN = github_secrets.get("token") or os.environ.get("GITHUB_TOKEN")
-DATA_REPO_NAME = github_secrets.get("repo_name") or os.environ.get("DATA_REPO_NAME") or os.environ.get("REPO_NAME")
-BRANCH = github_secrets.get("branch") or os.environ.get("BRANCH")
-
-# Verifica se o GITHUB_TOKEN foi definido
-if not GITHUB_TOKEN:
-    st.error("ERRO DE CONFIGURAÇÃO: O GITHUB_TOKEN não foi encontrado. Verifique suas variáveis de ambiente ou secrets.toml.")
-
-# Teste de conexão e debug
-st.write("🔑 GITHUB_TOKEN definido:", bool(GITHUB_TOKEN))
-st.write("📦 DATA_REPO_NAME:", DATA_REPO_NAME)
-st.write("🌿 BRANCH:", BRANCH)
-st.write("🔗 URL de teste:", f"https://api.github.com/repos/{DATA_REPO_NAME}/contents/pedidos.csv?ref={BRANCH}")
-
-# Caminho local (não usado, mas mantido caso precise no futuro)
-pedidos_path = "pedidos.csv"
-
+# --- Variáveis de Configuração ---
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+DATA_REPO_NAME = os.environ.get("DATA_REPO_NAME", os.environ.get("REPO_NAME"))
+BRANCH = os.environ.get("BRANCH")
 # === MUDANÇAS NOVAS ===
 ESTOQUE_BAIXO_LIMITE = 5 # Define o limite para exibir o alerta de "Últimas Unidades"
 # === FIM DAS MUDANÇAS NOVAS ===
@@ -49,9 +29,9 @@ SHEET_NAME_CATALOGO_CSV = "produtos_estoque.csv"
 SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
 SHEET_NAME_PEDIDOS_CSV = "pedidos.csv"
 SHEET_NAME_VIDEOS_CSV = "video.csv"
-SHEET_NAME_CLIENTES_CASHBACK_CSV = "clientes_cash.csv" # Novo arquivo: Clientes para cashback
-
-# Recursos visuais
+# === NOVO ARQUIVO: Clientes para consulta de Cashback ===
+SHEET_NAME_CLIENTES_CASHBACK_CSV = "clientes_cash.csv"
+# =======================================================
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-na-zvania-3.jpg'
 LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
 
@@ -432,9 +412,7 @@ def adicionar_ao_carrinho(produto_id, produto_row):
 def remover_do_carrinho(produto_id):
     if produto_id in st.session_state.carrinho:
         nome = st.session_state.carrinho[produto_id]['nome']
-        # MUDANÇA: 'prod_id' não está definido aqui. Deve usar 'produto_id'.
-        # del st.session_state.carrinho[prod_id] 
-        del st.session_state.carrinho[produto_id]
+        del st.session_state.carrinho[prod_id]
         st.toast(f"❌ {nome} removido.", icon="🗑️")
 
 def render_product_image(link_imagem):
@@ -696,10 +674,8 @@ if st.session_state.pedido_confirmado:
     
     # Botão de Copiar (usando JS)
     copy_to_clipboard_js(resumo_texto)
-    # Cuidado com as aspas no JS: substituído ' por \', e escapado \ com \\
-    safe_resumo_texto = resumo_texto.replace('\\', '\\\\').replace("'", "\\'")
     st.markdown(
-        f'<button class="cart-badge-button" style="background-color: #25D366; width: 100%; margin-bottom: 15px;" onclick="copyTextToClipboard(\'{safe_resumo_texto}\')">✅ Copiar Resumo</button>',
+        f'<button class="cart-badge-button" style="background-color: #25D366; width: 100%; margin-bottom: 15px;" onclick="copyTextToClipboard(\'{resumo_texto.replace("'", "\\'")}\')">✅ Copiar Resumo</button>',
         unsafe_allow_html=True
     )
     
@@ -728,9 +704,6 @@ with col_pesquisa:
     st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
 
 with col_carrinho:
-    # MUDANÇA: O botão popover não é criado aqui, mas o seu placeholder HTML é.
-    # O Streamlit já cria o popover, o HTML customizado apenas esconde o botão padrão
-    # e cria um novo que simula o clique no popover oculto.
     custom_cart_button = f"""
         <div class='cart-badge-button' onclick='document.querySelector("[data-testid=\\"stPopover\\"] > div:first-child > button").click();'>
             🛒 SEU PEDIDO
@@ -796,7 +769,6 @@ with col_carrinho:
                 c3.markdown(f"**R$ {item['preco']*item['quantidade']:.2f}**<br><span style='font-size: 0.8rem; color: #757575;'>(R$ {item['preco']:.2f} un.)</span>", unsafe_allow_html=True)
                 
                 if c4.button("X", key=f'rem_{prod_id}_popover'):
-                    # MUDANÇA: Correção na função remover_do_carrinho
                     remover_do_carrinho(prod_id)
                     st.rerun()
             st.markdown("---")
