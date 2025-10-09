@@ -319,24 +319,29 @@ def calcular_cashback_a_creditar(pedido_json, df_catalogo):
         itens = detalhes_pedido.get('itens', [])
         
         for item in itens:
-            item_id = pd.to_numeric(item.get('id'), errors='coerce')
-            
-            if pd.isna(item_id) or df_catalogo.empty:
-                continue
-            
-            produto_catalogo = df_catalogo[df_catalogo['ID'] == int(item_id)]
-            
-            if not produto_catalogo.empty:
-                # FALLBACK: Usa a coluna 'CASHBACKPERCENT' do catálogo atual
-                cashback_percent = pd.to_numeric(produto_catalogo.iloc[0].get('CASHBACKPERCENT', 0), errors='coerce').fillna(0)
-                
-                if cashback_percent > 0:
-                    preco_unitario = float(item.get('preco', 0.0))
-                    quantidade = int(item.get('quantidade', 0))
-                    
-                    valor_item = preco_unitario * quantidade
-                    cashback_item = valor_item * (cashback_percent / 100)
-                    valor_cashback_total += cashback_item
+    item_id = pd.to_numeric(item.get('id'), errors='coerce')
+
+    # 1️⃣ tenta pegar do JSON do pedido primeiro
+    cashback_percent = pd.to_numeric(
+        str(item.get('cashbackpercent', 0)).replace(',', '.'),
+        errors='coerce'
+    )
+
+    # 2️⃣ se não veio nada, busca no catálogo
+    if (pd.isna(cashback_percent) or cashback_percent == 0) and not df_catalogo.empty:
+        produto_catalogo = df_catalogo[df_catalogo['ID'] == int(item_id)]
+        if not produto_catalogo.empty:
+            cashback_percent = pd.to_numeric(
+                str(produto_catalogo.iloc[0].get('CASHBACKPERCENT', 0)).replace(',', '.'),
+                errors='coerce'
+            )
+
+    # 3️⃣ cálculo normal
+    if cashback_percent > 0:
+        preco_unitario = float(item.get('preco', 0.0))
+        quantidade = int(item.get('quantidade', 0))
+        valor_item = preco_unitario * quantidade
+        valor_cashback_total += valor_item * (cashback_percent / 100)
                     
     except Exception:
         # Erro de leitura/cálculo
@@ -767,6 +772,7 @@ with tab_produtos:
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     # ... (Restante do código da aba Promoções) ...
+
 
 
 
