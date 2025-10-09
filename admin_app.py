@@ -437,7 +437,7 @@ def atualizar_produto(id_produto, nome, preco, desc_curta, desc_longa, link_imag
         df.loc[idx, 'CASHBACKPERCENT'] = str(cashback_percent_prod).replace('.', ',') # Atualiza a porcentagem
         
         commit_msg = f"Atualizar produto ID: {id_produto}"
-        return write_csv_to_github(df, SHEET_NAME_CATALOGO, commit_msg)
+        return write_csv_to_github(df, SHEET_NAME_CATALOGO, commit_message)
     return False
 
 def excluir_produto(id_produto):
@@ -473,7 +473,7 @@ def criar_promocao(id_produto, nome_produto, preco_original, preco_promocional, 
         df = pd.DataFrame([nova_linha])
     
     commit_msg = f"Criar promoção para {nome_produto}"
-    return write_csv_to_github(df, SHEET_NAME_PROMOCOES, commit_msg)
+    return write_csv_to_github(df, SHEET_NAME_PROMOCOES, commit_message)
 
 
 def excluir_promocao(id_promocao):
@@ -542,11 +542,24 @@ with tab_pedidos:
                 id_pedido = pedido['ID_PEDIDO']
                 data_hora_str = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indisponível"
                 titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {data_hora_str} - Total: R$ {pedido['VALOR_TOTAL']}"
+                
+                # --- NOVO BLOCO DE VISUALIZAÇÃO DE CASHBACK ---
+                pedido_json_data = pedido.get('ITENS_JSON', pedido.get('ITENS_PEDIDO', '{}'))
+                cashback_a_creditar = calcular_cashback_a_creditar(pedido_json_data, df_catalogo_pedidos)
+                
                 with st.expander(titulo):
                     st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{id_pedido}`")
                     
-                    # --- NOVO: Exibe itens e retorna o progresso (usando ITENS_JSON) ---
-                    progresso_separacao = exibir_itens_pedido(id_pedido, pedido.get('ITENS_JSON', pedido.get('ITENS_PEDIDO', '{}')), df_catalogo_pedidos)
+                    if cashback_a_creditar > 0.00:
+                        st.markdown(f"**💰 Cashback a ser Creditado:** **R$ {cashback_a_creditar:.2f}**")
+                        st.info("Este valor será creditado ao cliente (no clientes_cash.csv) **após** a finalização deste pedido.")
+                    else:
+                        st.markdown("💰 **Cashback:** R$ 0.00")
+                        st.caption("Nenhum produto neste pedido está configurado com porcentagem de Cashback (CASHBACKPERCENT).")
+                    st.markdown("---")
+                    # --- FIM BLOCO DE VISUALIZAÇÃO DE CASHBACK ---
+                    
+                    progresso_separacao = exibir_itens_pedido(id_pedido, pedido_json_data, df_catalogo_pedidos)
                     
                     st.markdown(f"**Progresso de Separação:** {progresso_separacao}%")
                     st.progress(progresso_separacao / 100) # Barra de progresso
@@ -620,8 +633,8 @@ with tab_produtos:
                 # CORREÇÃO: Passa o novo argumento
                 elif adicionar_produto(nome_prod, preco_prod, desc_curta_prod, desc_longa_prod, link_imagem_prod, disponivel_prod, cashback_percent_prod=cashback_percent_prod):
                     st.success("Produto cadastrado!")
-                    st.session_state['data_version'] += 1  # Incrementa a versão
-                    st.rerun()  # Força o Streamlit a recarregar e usar a nova versão
+                    st.session_state['data_version'] += 1 
+                    st.rerun() 
                 else: 
                     st.error("Falha ao cadastrar.")
     
