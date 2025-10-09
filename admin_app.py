@@ -806,7 +806,7 @@ with tab_pedidos:
 
 
 with tab_produtos:
-    st.header("🛍️ Gerenciamento de Produtos")
+st.header("🛍️ Gerenciamento de Produtos")
     # --- FORMULÁRIO DE CADASTRO/EDIÇÃO DE PRODUTO ---
     df_produtos_catalogo = carregar_dados(SHEET_NAME_CATALOGO)
     
@@ -1008,4 +1008,5 @@ with tab_promocoes:
                         st.rerun()
                     else:
                         st.error("Falha ao excluir promoção.")
+
 
