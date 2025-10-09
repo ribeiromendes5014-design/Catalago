@@ -120,10 +120,8 @@ def carregar_dados(sheet_name):
 def write_csv_to_github(df, sheet_name, commit_message):
     """Obtém o SHA do arquivo e faz o commit do novo DataFrame no GitHub."""
     
-    # Determina o nome do arquivo no GitHub (usa o nome real da planilha)
     csv_filename = f"{sheet_name}.csv"
         
-    # --- NOVO: Define o repositório e URL API para escrita ---
     if sheet_name == SHEET_NAME_PEDIDOS or sheet_name == SHEET_NAME_CLIENTES_CASH:
         repo_to_write = PEDIDOS_REPO_FULL
         branch_to_write = PEDIDOS_BRANCH
@@ -150,8 +148,11 @@ def write_csv_to_github(df, sheet_name, commit_message):
         st.error("Erro interno: SHA não encontrado na resposta do GitHub.")
         return False
 
-    # 2. Preparar o novo conteúdo CSV
-    csv_content = df.fillna('').to_csv(index=False, sep=',').replace('\n\n', '\n')
+    # 2. Preparar o novo conteúdo CSV (FORÇANDO UPPERCASE E UNDERSCORE PARA GRAVAÇÃO)
+    df_to_save = df.copy()
+    df_to_save.columns = df_to_save.columns.str.strip().str.upper().str.replace(' ', '_')
+    
+    csv_content = df_to_save.fillna('').to_csv(index=False, sep=',').replace('\n\n', '\n')
     
     # 3. Codificar o conteúdo em Base64
     content_base64 = base64.b64encode(csv_content.encode('utf-8')).decode('utf-8')
@@ -160,7 +161,7 @@ def write_csv_to_github(df, sheet_name, commit_message):
     payload = {
         "message": commit_message,
         "content": content_base64,
-        "branch": branch_to_write # Usa a branch correta para o repositório
+        "branch": branch_to_write
     }
     if sha:
         payload["sha"] = sha 
@@ -168,11 +169,81 @@ def write_csv_to_github(df, sheet_name, commit_message):
     put_response = requests.put(api_url, headers=HEADERS, json=payload)
     
     if put_response.status_code in [200, 201]:
+        # Força a limpeza do cache de leitura após o sucesso da escrita
+        fetch_github_data_v2.clear() 
         return True
     else:
         error_message = put_response.json().get('message', 'Erro desconhecido')
         st.error(f"Falha no Commit: {put_response.status_code} - {error_message}")
         return False
+# --- FIM DA SUBSTITUIÇÃO DE write_csv_to_github ---
+
+
+# --- SUBSTITUA A FUNÇÃO fetch_github_data_v2 COMPLETA ---
+@st.cache_data(ttl=5)
+def fetch_github_data_v2(sheet_name, version_control):
+    """Carrega dados de um CSV do GitHub via API (sem cache da CDN)."""
+    
+    csv_filename = f"{sheet_name}.csv"
+    
+    # --- Lógica para Repositório Externo ---
+    if sheet_name == SHEET_NAME_PEDIDOS or sheet_name == SHEET_NAME_CLIENTES_CASH:
+        repo_to_use = PEDIDOS_REPO_FULL
+        branch_to_use = PEDIDOS_BRANCH
+    else:
+        repo_to_use = REPO_NAME_FULL
+        branch_to_use = BRANCH
+        
+    api_url = f"https://api.github.com/repos/{repo_to_use}/contents/{csv_filename}?ref={branch_to_use}"
+
+    try:
+        response = requests.get(api_url, headers=HEADERS)
+        if response.status_code != 200:
+            if sheet_name != SHEET_NAME_CLIENTES_CASH:
+                st.warning(f"Erro ao buscar '{csv_filename}': Status {response.status_code}. Repositório: {repo_to_use}")
+            return pd.DataFrame()
+
+        content = base64.b64decode(response.json()["content"]).decode("utf-8")
+
+        # --- LÓGICA ROBUSTA PARA LER CSV COM CAMPOS COMPLEXOS (JSON) ---
+        try:
+            df = pd.read_csv(
+                StringIO(content),  
+                sep=",",  
+                engine='python', 
+                on_bad_lines='warn'
+            )
+        except Exception as read_error:
+            st.error(f"Erro de leitura do CSV de {csv_filename}. Causa: {read_error}. O arquivo pode estar vazio ou mal formatado.")
+            return pd.DataFrame()
+        # -------------------------------------------------------------
+
+        # GARANTINDO O PADRÃO PARA BUSCA DE COLUNAS
+        df.columns = df.columns.str.strip().str.upper().str.replace(' ', '_')
+
+        if "COLUNA" in df.columns:
+            df.drop(columns=["COLUNA"], inplace=True)
+
+        if "PRECO" in df.columns:
+            df["PRECO"] = df["PRECO"].astype(str).str.replace(".", ",", regex=False)
+
+        if sheet_name == SHEET_NAME_PEDIDOS and "STATUS" not in df.columns:
+            df["STATUS"] = ""
+            
+        if sheet_name == SHEET_NAME_PEDIDOS and "ID_PEDIDO" in df.columns:
+            # Garante que ID_PEDIDO é uma string para evitar problemas de merge/lookup
+            df['ID_PEDIDO'] = df['ID_PEDIDO'].astype(str)
+
+        if sheet_name == SHEET_NAME_CATALOGO and "ID" in df.columns:
+            df["ID"] = pd.to_numeric(df["ID"], errors="coerce")
+            df.dropna(subset=["ID"], inplace=True)
+            df["ID"] = df["ID"].astype(int)
+
+        return df
+
+    except Exception as e:
+        st.error(f"Erro geral ao carregar dados de '{csv_filename}': {e}")
+        return pd.DataFrame()
 
 # --------------------------------------------------------------------------------
 # --- FUNÇÕES DE LÓGICA DE CASHBACK (INTEGRADO AO ADMIN) ---
@@ -755,6 +826,7 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
 
 
