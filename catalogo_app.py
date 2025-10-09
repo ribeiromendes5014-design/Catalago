@@ -1,4 +1,9 @@
 # catalogo_app.py
+🔑 GITHUB_TOKEN definido: True
+📦 DATA_REPO_NAME: ribeiromendes5014-design/fluxo
+🌿 BRANCH: main
+🔗 URL de teste: https://api.github.com/repos/ribeiromendes5014-design/fluxo/contents/pedidos.csv?ref=main
+
 
 import streamlit as st
 import pandas as pd
@@ -948,6 +953,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
