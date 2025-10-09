@@ -138,6 +138,12 @@ def carregar_dados(sheet_name):
     # Passa o contador de versão para a função em cache
     return fetch_github_data_v2(sheet_name, st.session_state['data_version'])
 
+# Função auxiliar para carregar o DataFrame de Clientes Cashback
+def carregar_clientes_cashback():
+    """Alias para carregar o DataFrame de clientes cashback."""
+    # Garante que o DataFrame de Clientes Cashback seja carregado com a lógica de versionamento
+    return carregar_dados(SHEET_NAME_CLIENTES_CASH) 
+
 # Função para obter o SHA e fazer o PUT (commit)
 def write_csv_to_github(df, sheet_name, commit_message):
     """Obtém o SHA do arquivo e faz o commit do novo DataFrame no GitHub."""
@@ -666,4 +672,5 @@ with tab_produtos:
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     # ... (Restante do código da aba Promoções) ...
+
 
