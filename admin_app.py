@@ -299,80 +299,71 @@ def calcular_cashback_a_creditar(pedido_json, df_catalogo):
     if not pedido_str or pedido_str.lower() in ('nan', '{}', ''):
         return 0.0
 
-    # 💡 CORREÇÃO: Lógica de limpeza robusta
-    s_limpa = pedido_str
-    if s_limpa.startswith('"') and s_limpa.endswith('"'):
-        s_limpa = s_limpa[1:-1]
-    s_limpa = s_limpa.replace('\\"', '"').replace('\\\\', '\\')
-    
-    detalhes_pedido = {}
-
     try:
-        # Tenta 1: Carregar a string LIMPA como JSON
-        detalhes_pedido = json.loads(s_limpa) 
-    except (json.JSONDecodeError, TypeError): 
-        # Tenta 2: Usar ast.literal_eval na string ORIGINAL
+        # Tenta carregar o JSON (com tratamento para strings complexas)
         try:
+            detalhes_pedido = json.loads(pedido_str)
+        except (json.JSONDecodeError, TypeError): # Adicionado TypeError para segurança
+            # Tenta converter string literal para estrutura Python
             detalhes_pedido = ast.literal_eval(pedido_str)
-        except (ValueError, SyntaxError, Exception):
-            # Tenta 3: Usar ast.literal_eval na string LIMPA (última tentativa)
+            
+        itens = detalhes_pedido.get('itens', [])
+        
+        # --- BLOC DA ITERAÇÃO (Indentação Corrigida) ---
+        for item in itens:
+            # --- 1. Extração e Conversão Inicial de Dados do Item ---
+            
+            # Converte o ID para inteiro de forma segura ANTES de usar no catálogo
             try:
-                 detalhes_pedido = ast.literal_eval(s_limpa)
-            except (ValueError, SyntaxError, Exception):
-                 detalhes_pedido = {}
-            
-    itens = detalhes_pedido.get('itens', [])
-    
-    for item in itens:
-        # --- 1. Extração e Conversão Inicial de Dados do Item ---
-        
-        # Converte o ID para inteiro de forma segura ANTES de usar no catálogo
-        try:
-            item_id = int(item.get('id', -1))
-        except (TypeError, ValueError):
-            continue  # Pula o item se o ID for inválido ou ausente
-
-        # 1️⃣ Tenta pegar do JSON do pedido primeiro
-        cashback_percent_str = str(item.get('cashbackpercent', 0)).replace(',', '.')
-        
-        # Conversão segura para float (Python nativo)
-        try:
-            cashback_percent = float(cashback_percent_str)
-        except ValueError:
-            cashback_percent = 0.0
-
-        # --- 2. Busca no Catálogo se o Valor For Inválido ou Zero ---
-
-        # Condição melhorada para tratar 0 e falhas na conversão (ex: None, NaN)
-        # Atenção: df_catalogo['ID'] deve ser um INT para que a comparação funcione
-        if cashback_percent == 0.0 and not df_catalogo.empty:
-            
-            # Filtra o catálogo
-            produto_catalogo = df_catalogo.loc[df_catalogo['ID'] == item_id]
-            
-            if not produto_catalogo.empty:
-                # Pega o valor do catálogo (primeira linha .iloc[0])
-                catalogo_cashback_str = str(produto_catalogo.iloc[0].get('CASHBACKPERCENT', 0)).replace(',', '.')
-                
-                # Atualiza o cashback_percent (Python nativo)
-                try:
-                    cashback_percent = float(catalogo_cashback_str)
-                except ValueError:
-                    pass # Mantém 0.0
-
-        # --- 3. Cálculo Normal do Cashback ---
-        
-        if cashback_percent > 0:
-            preco_unitario = float(item.get('preco', 0.0))
-            
-            # Converte a quantidade com valor default seguro
-            try:
-                quantidade = int(item.get('quantidade', 0))
+                item_id = int(item.get('id', -1))
             except (TypeError, ValueError):
-                quantidade = 0
+                continue  # Pula o item se o ID for inválido ou ausente
+
+            # 1️⃣ Tenta pegar do JSON do pedido primeiro
+            cashback_percent_str = str(item.get('cashbackpercent', 0)).replace(',', '.')
+            
+            # Conversão segura para float (Python nativo)
+            try:
+                cashback_percent = float(cashback_percent_str)
+            except ValueError:
+                cashback_percent = 0.0
+
+            # --- 2. Busca no Catálogo se o Valor For Inválido ou Zero ---
+
+            # Condição melhorada para tratar 0 e falhas na conversão (ex: None, NaN)
+            if cashback_percent == 0.0 and not df_catalogo.empty:
                 
-            valor_item = preco_unitario * quantidade
-            valor_cashback_total += valor_item * (cashback_percent / 100)
+                # Filtra o catálogo
+                # Usado .loc para clareza e garantindo que item_id é o tipo esperado
+                produto_catalogo = df_catalogo.loc[df_catalogo['ID'] == item_id]
+                
+                if not produto_catalogo.empty:
+                    # Pega o valor do catálogo (primeira linha .iloc[0])
+                    catalogo_cashback_str = str(produto_catalogo.iloc[0].get('CASHBACKPERCENT', 0)).replace(',', '.')
+                    
+                    # Atualiza o cashback_percent (Python nativo)
+                    try:
+                        cashback_percent = float(catalogo_cashback_str)
+                    except ValueError:
+                        pass # Mantém 0.0
+
+            # --- 3. Cálculo Normal do Cashback ---
+            
+            if cashback_percent > 0:
+                preco_unitario = float(item.get('preco', 0.0))
+                
+                # Converte a quantidade com valor default seguro
+                try:
+                    quantidade = int(item.get('quantidade', 0))
+                except (TypeError, ValueError):
+                    quantidade = 0
+                    
+                valor_item = preco_unitario * quantidade
+                valor_cashback_total += valor_item * (cashback_percent / 100)
+                
+    except Exception:
+        # Erro geral de leitura/cálculo do pedido
+        return 0.0
         
     return round(valor_cashback_total, 2) # Retorna com 2 casas decimais
 
@@ -406,6 +397,8 @@ def atualizar_status_pedido(id_pedido, novo_status, df_catalogo):
             
             if pedido_json and contato_cliente and valor_cashback_credito > 0:
                 # 2. Lança o Crédito no sistema de Clientes Cashback
+                # ATENÇÃO: A função lancar_venda_cashback precisa do valor de venda BRUTO 
+                # OU apenas do valor do cashback. Mantive o valor do cashback por enquanto.
                 if not lancar_venda_cashback(nome_cliente_pedido, contato_cliente, valor_cashback_credito):
                     st.warning("Falha ao lançar cashback. Pedido não será finalizado.")
                     return False
@@ -453,27 +446,10 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
             st.warning("⚠️ Detalhes do pedido (JSON) não encontrados ou vazios.")
             return 0
             
-        # 💡 CORREÇÃO: Lógica de limpeza robusta
-        s_limpa = pedido_str
-        if s_limpa.startswith('"') and s_limpa.endswith('"'):
-            s_limpa = s_limpa[1:-1]
-        s_limpa = s_limpa.replace('\\"', '"').replace('\\\\', '\\')
-        
-        detalhes_pedido = {} # Inicializa o dicionário
-            
         try:
-            # Tenta 1: Carregar a string LIMPA como JSON
-            detalhes_pedido = json.loads(s_limpa)
+            detalhes_pedido = json.loads(pedido_str)
         except json.JSONDecodeError:
-            # Tenta 2: Usar ast.literal_eval na string ORIGINAL
-            try:
-                detalhes_pedido = ast.literal_eval(pedido_str)
-            except (ValueError, SyntaxError, Exception):
-                # Tenta 3: Usar ast.literal_eval na string LIMPA (última tentativa)
-                try:
-                    detalhes_pedido = ast.literal_eval(s_limpa)
-                except (ValueError, SyntaxError, Exception):
-                    detalhes_pedido = {}
+            detalhes_pedido = ast.literal_eval(pedido_str)
             
         itens = detalhes_pedido.get('itens', [])
         total_itens = len(itens)
@@ -657,41 +633,39 @@ def extract_customer_cashback(itens_json_string):
 
     s = str(itens_json_string).strip()
     
-    # === 1. TENTATIVA COM REGEX ===
+    # === 1. TENTATIVA COM REGEX (Mais robusto para strings corrompidas) ===
+    # Busca por "cliente_saldo_cashback": seguido de zero ou mais espaços, e captura o número (com ponto)
+    # r'\"cliente_saldo_cashback\"\s*:\s*([\d\.]+)'
     match = re.search(r'\"cliente_saldo_cashback\"\s*:\s*([\d\.]+)', s)
     
     if match:
         try:
+            # Converte o valor capturado (ex: "0.9") para float
             return float(match.group(1))
         except ValueError:
+            # Se a conversão falhar, segue para o parsing JSON
             pass
 
-    # === 2. FALLBACK COM LIMPEZA E JSON.LOADS ===
-    s_limpa = s
-    if s_limpa.startswith('"') and s_limpa.endswith('"'):
-        s_limpa = s_limpa[1:-1]
-    s_limpa = s_limpa.replace('""', '"')
-    s_limpa = s_limpa.replace('\\"', '"') 
-    s_limpa = s_limpa.replace('\\\\', '\\')
+    # === 2. FALLBACK COM LIMPEZA E JSON.LOADS (Se o RegEx falhar) ===
     
-    data = {}
+    # Limpeza agressiva (necessária para JSON.loads)
+    if s.startswith('"') and s.endswith('"'):
+        s = s[1:-1]
+    s = s.replace('""', '"')
+    s = s.replace('\\"', '"') 
 
     try:
-        # Tenta 1: Carregar a string LIMPA como JSON
-        data = json.loads(s_limpa)
+        data = json.loads(s)
+        return data.get("cliente_saldo_cashback", 0.0)
     except Exception:
-        # Tenta 2: Usar ast.literal_eval na string ORIGINAL
+        # 3. Fallback final com ast.literal_eval
         try:
+            # Reverte para a string original, caso a limpeza tenha sido agressiva demais
             data = ast.literal_eval(itens_json_string) 
+            return data.get("cliente_saldo_cashback", 0.0)
         except Exception:
-            # Tenta 3: Usar ast.literal_eval na string LIMPA (última tentativa)
-            try:
-                data = ast.literal_eval(s_limpa) 
-            except Exception:
-                # Retorna 0.0 se falhar em todas as tentativas
-                return 0.0
-
-    return data.get("cliente_saldo_cashback", 0.0)
+            # Retorna 0.0 se falhar em todas as tentativas
+            return 0.0
 
 with tab_pedidos:
     st.header("📋 Pedidos Recebidos")
@@ -752,15 +726,14 @@ with tab_pedidos:
             for index, pedido in pedidos_pendentes.iloc[::-1].iterrows():
                 id_pedido = pedido['ID_PEDIDO']
                 data_hora_str = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indisponível"
-                # Usando .get() para segurança
-                titulo = f"Pedido de **{pedido.get('NOME_CLIENTE', 'N/A')}** - {data_hora_str} - Total: R$ {pedido.get('VALOR_TOTAL', 0.0):.2f}"
+                titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {data_hora_str} - Total: R$ {pedido['VALOR_TOTAL']}"
                 
                 # --- BLOCO DE VISUALIZAÇÃO DE CASHBACK ---
                 pedido_json_data = pedido.get('ITENS_JSON', pedido.get('ITENS_PEDIDO', '{}'))
                 cashback_a_creditar = calcular_cashback_a_creditar(pedido_json_data, df_catalogo_pedidos)
                 
                 with st.expander(titulo):
-                    st.markdown(f"**Contato:** `{pedido.get('CONTATO_CLIENTE', 'N/A')}` | **ID:** `{id_pedido}`")
+                    st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{id_pedido}`")
                     
                     # 💥 EXIBIÇÃO DO SALDO ACUMULADO (R$ 0,90)
                     saldo_anterior = pedido['SALDO_CASHBACK_CLIENTE_PEDIDO']
@@ -802,11 +775,10 @@ with tab_pedidos:
             else:
                 for index, pedido in pedidos_finalizados.iloc[::-1].iterrows():
                     data_hora_str = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indisponível"
-                    # Usando .get() para segurança
-                    titulo = f"Pedido de **{pedido.get('NOME_CLIENTE', 'N/A')}** - {data_hora_str} - Total: R$ {pedido.get('VALOR_TOTAL', 0.0):.2f}"
+                    titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {data_hora_str} - Total: R$ {pedido['VALOR_TOTAL']}"
                     
                     with st.expander(titulo):
-                        st.markdown(f"**Contato:** `{pedido.get('CONTATO_CLIENTE', 'N/A')}` | **ID:** `{pedido['ID_PEDIDO']}`")
+                        st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{pedido['ID_PEDIDO']}`")
                         
                         # 💥 EXIBIÇÃO DO SALDO ACUMULADO (também nos finalizados)
                         saldo_anterior = pedido['SALDO_CASHBACK_CLIENTE_PEDIDO']
@@ -840,14 +812,13 @@ with tab_produtos:
     
     with st.expander("➕ Adicionar Novo Produto"):
         with st.form("form_novo_produto"):
-            # 💥 CORREÇÃO DE DUPLICIDADE: A chave precisa ser diferente da usada em 'Editar'
-            novo_nome = st.text_input("Nome do Produto", key="novo_nome_add") 
-            novo_preco = st.number_input("Preço (R$)", min_value=0.01, format="%.2f", key="novo_preco_add")
-            novo_desc_curta = st.text_input("Descrição Curta", key="novo_desc_curta_add")
-            novo_desc_longa = st.text_area("Descrição Longa", key="novo_desc_longa_add")
-            novo_link_imagem = st.text_input("Link da Imagem", key="novo_link_imagem_add")
-            novo_cashback = st.number_input("Cashback (%)", min_value=0.0, max_value=100.0, format="%.2f", key="novo_cashback_add")
-            novo_disponivel = st.checkbox("Disponível para Venda", value=True, key="novo_disponivel_add")
+            novo_nome = st.text_input("Nome do Produto", key="novo_nome")
+            novo_preco = st.number_input("Preço (R$)", min_value=0.01, format="%.2f", key="novo_preco")
+            novo_desc_curta = st.text_input("Descrição Curta", key="novo_desc_curta")
+            novo_desc_longa = st.text_area("Descrição Longa", key="novo_desc_longa")
+            novo_link_imagem = st.text_input("Link da Imagem", key="novo_link_imagem")
+            novo_cashback = st.number_input("Cashback (%)", min_value=0.0, max_value=100.0, format="%.2f", key="novo_cashback")
+            novo_disponivel = st.checkbox("Disponível para Venda", value=True, key="novo_disponivel")
             
             submitted = st.form_submit_button("Salvar Novo Produto")
             
@@ -872,7 +843,7 @@ with tab_produtos:
         df_produtos_catalogo['ID_STR'] = df_produtos_catalogo['ID'].astype(str)
         
         # Cria uma lista de opções: "ID - Nome"
-        opcoes_produtos = df_produtos_catalogo.apply(lambda row: f"{row['ID_STR']} - {row.get('NOME', 'Produto Sem Nome')}", axis=1).tolist()
+        opcoes_produtos = df_produtos_catalogo.apply(lambda row: f"{row['ID_STR']} - {row['NOME']}", axis=1).tolist()
         
         produto_selecionado_str = st.selectbox("Selecione o Produto para Editar", opcoes_produtos, key="produto_editar_select")
         
@@ -883,13 +854,9 @@ with tab_produtos:
             
             # Converte PRECO e CASHBACKPERCENT (que podem ter sido lidos com vírgula) para float
             try:
-                preco_float = float(str(produto_atual.get('PRECO', '0.0')).replace(',', '.'))
+                preco_float = float(str(produto_atual['PRECO']).replace(',', '.'))
             except:
                 preco_float = 0.0
-                
-            # 💥 CORREÇÃO DO ERRO StreamlitValueBelowMinError
-            if preco_float < 0.01:
-                preco_float = 0.01 # Define o valor mínimo permitido
                 
             try:
                 cashback_float = float(str(produto_atual.get('CASHBACKPERCENT', '0.0')).replace(',', '.'))
@@ -899,14 +866,13 @@ with tab_produtos:
             with st.form("form_editar_produto"):
                 st.info(f"Editando produto ID: {id_selecionado}")
                 
-                # 💥 CORREÇÃO KEYERROR e DUPLICIDADE (Usando .get() e chave única)
-                edit_nome = st.text_input("Nome do Produto", value=produto_atual.get('NOME', ''), key="edit_nome")
+                edit_nome = st.text_input("Nome do Produto", value=produto_atual['NOME'], key="edit_nome")
                 edit_preco = st.number_input("Preço (R$)", min_value=0.01, format="%.2f", value=preco_float, key="edit_preco")
-                edit_desc_curta = st.text_input("Descrição Curta", value=produto_atual.get('DESCRICAOCURTA', ''), key="edit_desc_curta")
-                edit_desc_longa = st.text_area("Descrição Longa", value=produto_atual.get('DESCRICAOLONGA', ''), key="edit_desc_longa")
-                edit_link_imagem = st.text_input("Link da Imagem", value=produto_atual.get('LINKIMAGEM', ''), key="edit_link_imagem")
+                edit_desc_curta = st.text_input("Descrição Curta", value=produto_atual['DESCRICAOCURTA'], key="edit_desc_curta")
+                edit_desc_longa = st.text_area("Descrição Longa", value=produto_atual['DESCRICAOLONGA'], key="edit_desc_longa")
+                edit_link_imagem = st.text_input("Link da Imagem", value=produto_atual['LINKIMAGEM'], key="edit_link_imagem")
                 edit_cashback = st.number_input("Cashback (%)", min_value=0.0, max_value=100.0, format="%.2f", value=cashback_float, key="edit_cashback")
-                edit_disponivel = st.checkbox("Disponível para Venda", value=produto_atual.get('DISPONIVEL', True), key="edit_disponivel")
+                edit_disponivel = st.checkbox("Disponível para Venda", value=produto_atual['DISPONIVEL'], key="edit_disponivel")
                 
                 col_update, col_delete = st.columns(2)
                 
@@ -946,27 +912,24 @@ with tab_promocoes:
             else:
                 # Garante que o ID é int para a busca, mas string para o selectbox
                 df_produtos_catalogo['ID_STR'] = df_produtos_catalogo['ID'].astype(str)
-                opcoes_produtos_promo = df_produtos_catalogo.apply(lambda row: f"{row['ID_STR']} - {row.get('NOME', 'Produto Sem Nome')}", axis=1).tolist()
+                opcoes_produtos_promo = df_produtos_catalogo.apply(lambda row: f"{row['ID_STR']} - {row['NOME']}", axis=1).tolist()
                 
                 produto_selecionado_promo_str = st.selectbox("Selecione o Produto", opcoes_produtos_promo, key="produto_promo_select")
                 
                 if produto_selecionado_promo_str:
                     id_produto_promo = int(produto_selecionado_promo_str.split(' - ')[0])
                     produto_atual_promo = df_produtos_catalogo[df_produtos_catalogo['ID'] == id_produto_promo].iloc[0]
-                    nome_produto_promo = produto_atual_promo.get('NOME', 'N/A') # Usando .get() aqui também
+                    nome_produto_promo = produto_atual_promo['NOME']
                     
                     # Converte o preço original para exibição
                     try:
-                        preco_original_float = float(str(produto_atual_promo.get('PRECO', '0.0')).replace(',', '.'))
+                        preco_original_float = float(str(produto_atual_promo['PRECO']).replace(',', '.'))
                     except:
                         preco_original_float = 0.0
                         
                     st.caption(f"Preço Original: R$ {preco_original_float:.2f}")
                     
-                    # Garante que max_value é >= 0.01 (para evitar erro)
-                    max_value_promo = preco_original_float if preco_original_float >= 0.01 else 0.01
-                    
-                    preco_promocional = st.number_input("Preço Promocional (R$)", min_value=0.01, max_value=max_value_promo, format="%.2f", key="novo_preco_promo")
+                    preco_promocional = st.number_input("Preço Promocional (R$)", min_value=0.01, max_value=preco_original_float, format="%.2f", key="novo_preco_promo")
                     data_inicio = st.date_input("Data de Início", value=date.today(), key="data_inicio_promo")
                     data_fim = st.date_input("Data de Fim", value=date.today(), key="data_fim_promo")
 
@@ -994,8 +957,7 @@ with tab_promocoes:
         # Exibir e permitir edição/exclusão das promoções existentes
         df_promocoes['ID_PROMOCAO_STR'] = df_promocoes['ID_PROMOCAO'].astype(str)
         
-        # Usando .get() para segurança
-        opcoes_promocoes = df_promocoes.apply(lambda row: f"{row['ID_PROMOCAO_STR']} - {row.get('NOME_PRODUTO', 'Promoção Sem Nome')} ({row.get('STATUS', 'N/A')})", axis=1).tolist()
+        opcoes_promocoes = df_promocoes.apply(lambda row: f"{row['ID_PROMOCAO_STR']} - {row['NOME_PRODUTO']} ({row['STATUS']})", axis=1).tolist()
         
         promocao_selecionada_str = st.selectbox("Selecione a Promoção para Editar", opcoes_promocoes, key="promocao_editar_select")
         
@@ -1005,52 +967,40 @@ with tab_promocoes:
 
             # Converte o preço promocional (que pode ter sido lido com vírgula) para float
             try:
-                preco_promo_float = float(str(promocao_atual.get('PRECO_PROMOCIONAL', '0.0')).replace(',', '.'))
+                preco_promo_float = float(str(promocao_atual['PRECO_PROMOCIONAL']).replace(',', '.'))
             except:
                 preco_promo_float = 0.0
                 
             # Encontra o preço original no catálogo para usar como limite
-            id_produto_relacionado = pd.to_numeric(promocao_atual.get('ID_PRODUTO'), errors='coerce')
-            preco_max_promo = preco_promo_float if preco_promo_float >= 0.01 else 0.01 # Define o valor mínimo de 0.01
-
+            id_produto_relacionado = pd.to_numeric(promocao_atual['ID_PRODUTO'], errors='coerce')
+            preco_max_promo = preco_promo_float # Valor default
             
             if not df_produtos_catalogo.empty and not pd.isna(id_produto_relacionado) and not df_produtos_catalogo[df_produtos_catalogo['ID'] == int(id_produto_relacionado)].empty:
                 produto_catalogo = df_produtos_catalogo[df_produtos_catalogo['ID'] == int(id_produto_relacionado)].iloc[0]
                 try:
-                    preco_max_promo = float(str(produto_catalogo.get('PRECO', '0.0')).replace(',', '.'))
+                    preco_max_promo = float(str(produto_catalogo['PRECO']).replace(',', '.'))
                 except:
                     pass
             
-            # Garante que o valor máximo é pelo menos 0.01
-            if preco_max_promo < 0.01:
-                 preco_max_promo = 0.01
-
             with st.form("form_editar_promocao"):
-                st.info(f"Editando promoção ID: {id_promocao_selecionada} para '{promocao_atual.get('NOME_PRODUTO', 'N/A')}'")
+                st.info(f"Editando promoção ID: {id_promocao_selecionada} para '{promocao_atual['NOME_PRODUTO']}'")
                 
                 edit_preco_promocional = st.number_input("Novo Preço Promocional (R$)", min_value=0.01, max_value=preco_max_promo, format="%.2f", value=preco_promo_float, key="edit_preco_promo")
                 
                 # Conversão segura de datas para o widget
                 try:
-                    data_inicio_default = datetime.strptime(str(promocao_atual.get('DATA_INICIO')), '%Y-%m-%d').date()
+                    data_inicio_default = datetime.strptime(str(promocao_atual['DATA_INICIO']), '%Y-%m-%d').date()
                 except:
                     data_inicio_default = date.today()
                     
                 try:
-                    data_fim_default = datetime.strptime(str(promocao_atual.get('DATA_FIM')), '%Y-%m-%d').date()
+                    data_fim_default = datetime.strptime(str(promocao_atual['DATA_FIM']), '%Y-%m-%d').date()
                 except:
                     data_fim_default = date.today()
 
                 edit_data_inicio = st.date_input("Data de Início", value=data_inicio_default, key="edit_data_inicio_promo")
                 edit_data_fim = st.date_input("Data de Fim", value=data_fim_default, key="edit_data_fim_promo")
-                
-                # Trata KeyError para a coluna STATUS
-                status_atual = promocao_atual.get('STATUS', 'Ativa')
-                status_options = ['Ativa', 'Inativa', 'Expirada']
-                if status_atual not in status_options:
-                    status_atual = 'Ativa'
-
-                edit_status = st.selectbox("Status", status_options, index=status_options.index(status_atual), key="edit_status_promo")
+                edit_status = st.selectbox("Status", ['Ativa', 'Inativa', 'Expirada'], index=['Ativa', 'Inativa', 'Expirada'].index(promocao_atual['STATUS']), key="edit_status_promo")
                 
                 col_update, col_delete = st.columns(2)
                 
