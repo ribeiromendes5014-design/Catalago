@@ -12,7 +12,7 @@ from io import StringIO
 import ast
 
 # --- Configurações de Dados ---
-SHEET_NAME_CATALOGO = "produtos" # <<< CORRIGIDO
+SHEET_NAME_CATALOGO = "produtos_estoque" 
 SHEET_NAME_PEDIDOS = "pedidos"
 SHEET_NAME_PROMOCOES = "promocoes"
 # === NOVO: ARQUIVO DE CASHBACK E CONSTANTES ===
@@ -666,3 +666,4 @@ with tab_produtos:
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     # ... (Restante do código da aba Promoções) ...
+
