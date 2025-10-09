@@ -164,18 +164,18 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
     porcentagem de itens separados.
     """
     try:
-        # Tenta converter o pedido_json para string e limpar espaços/nulos
+        # --- INÍCIO DA CORREÇÃO ---
+        # 1. Converte para string e remove espaços em branco
         pedido_str = str(pedido_json).strip()
         
-        # 1. TRATAMENTO DE STRING INVÁLIDA (A CORREÇÃO PRINCIPAL)
-        # Se a string estiver vazia ou for a string literal 'nan' (comum em DataFrames nulos),
-        # tratamos como um pedido sem itens.
+        # 2. Verifica se a string está vazia, é "nan" (comum em DataFrames nulos) ou "{}"
         if not pedido_str or pedido_str.lower() in ('nan', '{}'):
-            # Opcional: st.info(f"O pedido {id_pedido} não possui itens ou o formato está vazio.")
+            # Se for inválido, assume que não há itens e retorna 0% de progresso
             return 0
             
-        # 2. Tenta carregar o JSON (agora mais seguro)
+        # 3. Tenta carregar o JSON (agora com string validada)
         detalhes_pedido = json.loads(pedido_str)
+        # --- FIM DA CORREÇÃO ---
         
         itens = detalhes_pedido.get('itens', [])
         total_itens = len(itens)
@@ -620,4 +620,5 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
