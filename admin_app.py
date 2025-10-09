@@ -162,10 +162,12 @@ def write_csv_to_github(df, sheet_name, commit_message):
 # =========================================================================
 
 def calcular_cashback_a_creditar(pedido_json, df_catalogo):
-    """Calcula o valor total de cashback a ser creditado a partir do pedido JSON."""
+    """
+    Calcula o valor total de cashback a ser creditado a partir do pedido JSON.
+    Prioriza a porcentagem de cashback registrada DENTRO do JSON do pedido.
+    """
     valor_cashback_total = 0.0
     
-    # Adiciona a verificação de tipo para evitar erros de JSONDecodeError com float ou nan
     if not isinstance(pedido_json, str) or pedido_json.strip().lower() in ('nan', '{}', ''):
         return 0.0
 
@@ -175,31 +177,39 @@ def calcular_cashback_a_creditar(pedido_json, df_catalogo):
         itens = detalhes_pedido.get('itens', [])
         
         for item in itens:
-            item_id = pd.to_numeric(item.get('id'), errors='coerce')
-            if pd.isna(item_id) or df_catalogo.empty:
-                 continue
             
-            # Garante que o ID é inteiro para a busca
-            produto_catalogo = df_catalogo[df_catalogo['ID'] == int(item_id)]
+            # 1. Tenta obter a PORCENTAGEM DIRETAMENTE DO JSON DO PEDIDO (Novo comportamento)
+            cashback_percent = pd.to_numeric(item.get('cashback_percent', 0), errors='coerce').fillna(0)
             
-            if not produto_catalogo.empty:
-                # Usa a coluna 'CASHBACKPERCENT' do catálogo
-                cashback_percent = pd.to_numeric(produto_catalogo.iloc[0].get('CASHBACKPERCENT', 0), errors='coerce').fillna(0)
+            # Se a porcentagem não vier do JSON, tentamos o fallback no catálogo atual
+            if cashback_percent <= 0:
+                item_id = pd.to_numeric(item.get('id'), errors='coerce')
+                if pd.isna(item_id) or df_catalogo.empty:
+                     continue
                 
-                if cashback_percent > 0:
-                    # Usa o preço registrado na linha do pedido, que é o preço final.
-                    preco_unitario = float(item.get('preco', 0.0))
-                    quantidade = int(item.get('quantidade', 0))
-                    
-                    valor_item = preco_unitario * quantidade
-                    cashback_item = valor_item * (cashback_percent / 100)
-                    valor_cashback_total += cashback_item
+                # Garante que o ID é inteiro para a busca
+                produto_catalogo = df_catalogo[df_catalogo['ID'] == int(item_id)]
+                
+                if not produto_catalogo.empty:
+                    # FALLBACK: Usa a coluna 'CASHBACKPERCENT' do catálogo atual
+                    cashback_percent = pd.to_numeric(produto_catalogo.iloc[0].get('CASHBACKPERCENT', 0), errors='coerce').fillna(0)
+
+            
+            if cashback_percent > 0:
+                # Usa o preço e quantidade registrados na linha do pedido.
+                preco_unitario = float(item.get('preco', 0.0))
+                quantidade = int(item.get('quantidade', 0))
+                
+                valor_item = preco_unitario * quantidade
+                cashback_item = valor_item * (cashback_percent / 100)
+                valor_cashback_total += cashback_item
                     
     except Exception as e:
-        # st.error(f"Erro ao calcular cashback: {e}. JSON: {pedido_json[:100]}")
+        # st.error(f"Erro ao calcular cashback: Detalhe: {e}. JSON inválido?")
         return 0.0
         
     return valor_cashback_total
+
 
 def creditar_cashback_e_atualizar_cliente(contato_cliente, valor_a_creditar, nome_cliente_pedido):
     """
@@ -308,7 +318,7 @@ def excluir_pedido(id_pedido):
 
     df = df[df['ID_PEDIDO'] != id_pedido]
     commit_msg = f"Excluir pedido {id_pedido}"
-    return write_csv_to_github(df, SHEET_NAME_PEDIDOS, commit_msg)
+    return write_csv_to_github(df, SHEET_NAME_PEDIDOS, commit_message)
 
 
 def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
@@ -418,7 +428,7 @@ def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponiv
         df = pd.DataFrame([nova_linha])
         
     commit_msg = f"Adicionar produto: {nome} (ID: {novo_id})"
-    return write_csv_to_github(df, SHEET_NAME_CATALOGO, commit_msg)
+    return write_csv_to_github(df, SHEET_NAME_CATALOGO, commit_message)
 
 # Adiciona cashback_percent_prod para atualização
 def atualizar_produto(id_produto, nome, preco, desc_curta, desc_longa, link_imagem, disponivel, cashback_percent_prod=0.0):
@@ -446,7 +456,7 @@ def excluir_produto(id_produto):
 
     df = df[df['ID'] != int(id_produto)]
     commit_msg = f"Excluir produto ID: {id_produto}"
-    return write_csv_to_github(df, SHEET_NAME_CATALOGO, commit_msg)
+    return write_csv_to_github(df, SHEET_NAME_CATALOGO, commit_message)
 
 
 # --- FUNÇÕES CRUD PARA PROMOÇÕES (ESCRITA HABILITADA) ---
@@ -722,7 +732,7 @@ with tab_promocoes:
             st.warning("Cadastre produtos antes de criar uma promoção.")
         else:
             with st.form("form_nova_promocao", clear_on_submit=True):
-                df_catalogo_promo['PRECO_FLOAT'] = pd.to_numeric(df_catalogo_promo['PRECO'].astype(str).str.replace(',', '.'), errors='coerce') 
+                df_catalogo_promo['PRECO_FLOAT'] = pd.to_numeric(df_catalogo_promo['PRECO'].astype(str).replace(',', '.'), errors='coerce') 
                 opcoes_produtos = {f"{row['NOME']} (R$ {row['PRECO_FLOAT']:.2f})": row['ID'] for _, row in df_catalogo_promo.dropna(subset=['PRECO_FLOAT', 'ID']).iterrows()}
                 
                 if not opcoes_produtos:
