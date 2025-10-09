@@ -392,7 +392,7 @@ with tab_pedidos:
                     st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{id_pedido}`")
                     
                     # --- NOVO: Exibe itens e retorna o progresso ---
-                    progresso_separacao = exibir_itens_pedido(id_pedido, pedido['ITENS_PEDIDO'], df_catalogo_pedidos)
+                    progresso_separacao = exibir_itens_pedido(id_pedido, pedido['ITENS_JSON'], df_catalogo_pedidos)
                     
                     st.markdown(f"**Progresso de Separação:** {progresso_separacao}%")
                     st.progress(progresso_separacao / 100) # Barra de progresso
@@ -620,5 +620,6 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
 
