@@ -700,8 +700,10 @@ with col_carrinho:
             st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
             st.markdown("---")
             
+            # ... (Lógica de exibição de itens do carrinho, que continua a mesma) ...
+            
             # === NOVO CABEÇALHO PARA CLAREZA ===
-            col_h1, col_h2, col_h3, col_h4 = st.columns([3, 1.5, 2.5, 1]) # Proporção ajustada!
+            col_h1, col_h2, col_h3, col_h4 = st.columns([3, 1.5, 2.5, 1])
             col_h2.markdown("**Qtd**")
             col_h3.markdown("**Subtotal**")
             col_h4.markdown("")
@@ -711,9 +713,8 @@ with col_carrinho:
             df_catalogo_completo = carregar_catalogo().set_index('ID')
             
             for prod_id, item in list(st.session_state.carrinho.items()):
-                # === Proporção AJUSTADA e Correção do c3 ===
+                # ... (Lógica de exibição e alteração de quantidade dos itens do carrinho, que continua a mesma) ...
                 c1, c2, c3, c4 = st.columns([3, 1.5, 2.5, 1])
-                # === FIM DA CORREÇÃO ===
                 
                 c1.write(f"*{item['nome']}*")
                 
@@ -748,9 +749,7 @@ with col_carrinho:
                     st.rerun()
                 # === Fim Lógica de Max Qtd no Carrinho ===
 
-                # === CORREÇÃO C3: Adicionado unsafe_allow_html=True ===
                 c3.markdown(f"**R$ {item['preco']*item['quantidade']:.2f}**<br><span style='font-size: 0.8rem; color: #757575;'>(R$ {item['preco']:.2f} un.)</span>", unsafe_allow_html=True)
-                # === FIM DA CORREÇÃO ===
                 
                 if c4.button("X", key=f'rem_{prod_id}_popover'):
                     remover_do_carrinho(prod_id)
@@ -763,36 +762,44 @@ with col_carrinho:
             # === FIM DAS MUDANÇAS NOVAS ===
             
             # =========================================================================================
-            # === NOVO FORMULÁRIO DE FINALIZAÇÃO COM CONSULTA DE CASHBACK E NÍVEL ===
+            # === NOVA SEÇÃO DE FINALIZAÇÃO COM INPUTS FORA DO FORMULÁRIO PARA REFRESH AUTOMÁTICO ===
             # =========================================================================================
-            with st.form("form_finalizar_pedido", clear_on_submit=True):
-                st.subheader("Finalizar Pedido")
-                
-                nome = st.text_input("Seu Nome Completo:", key='checkout_nome')
-                contato = st.text_input("Seu Contato (WhatsApp - apenas números, com DDD):", key='checkout_contato')
-                
-                # --- LÓGICA DE CONSULTA DE CASHBACK E NÍVEL ---
-                
-                nivel_cliente = 'N/A'
-                saldo_cashback = 0.00
-                
-                if nome and contato and DF_CLIENTES_CASH is not None and not DF_CLIENTES_CASH.empty:
-                    # Tenta buscar no DF de Clientes Cashback
-                    existe, nome_encontrado, saldo_cashback, nivel_cliente = buscar_cliente_cashback(contato, DF_CLIENTES_CASH)
+            st.subheader("Finalizar Pedido")
 
-                    if existe:
-                        st.success(
-                            f"🎉 **Bem-vindo(a) de volta, {nome_encontrado}!** Seu Nível é: **{nivel_cliente.upper()}**."
-                            f"\n\nSeu saldo atual de Cashback é de **R$ {saldo_cashback:.2f}**."
-                        )
-                    elif contato.strip():
-                        st.info("👋 **Novo Cliente!** Você começará a acumular cashback após a finalização do seu primeiro pedido no painel de administração.")
-                # -----------------------------------------------
-                
+            # Inputs fora do formulário para disparar a consulta dinâmica
+            nome_input = st.text_input("Seu Nome Completo:", key='checkout_nome_dynamic')
+            contato_input = st.text_input("Seu Contato (WhatsApp - apenas números, com DDD):", key='checkout_contato_dynamic')
+            
+            # --- LÓGICA DE CONSULTA DE CASHBACK E NÍVEL (DINÂMICA) ---
+            nivel_cliente = 'N/A'
+            saldo_cashback = 0.00
+            
+            if nome_input and contato_input and DF_CLIENTES_CASH is not None and not DF_CLIENTES_CASH.empty:
+                # Tenta buscar no DF de Clientes Cashback
+                existe, nome_encontrado, saldo_cashback, nivel_cliente = buscar_cliente_cashback(contato_input, DF_CLIENTES_CASH)
+
+                if existe:
+                    st.success(
+                        f"🎉 **Bem-vindo(a) de volta, {nome_encontrado}!** Seu Nível é: **{nivel_cliente.upper()}**."
+                        f"\n\nSeu saldo atual de Cashback é de **R$ {saldo_cashback:.2f}**."
+                    )
+                elif contato_input.strip():
+                    st.info("👋 **Novo Cliente!** Você começará a acumular cashback após a finalização do seu primeiro pedido no painel de administração.")
+            # -----------------------------------------------
+
+            # Formulário agora contém apenas o botão de submissão
+            with st.form("form_finalizar_pedido", clear_on_submit=True):
+                # Campos de entrada vazios, apenas para satisfazer o requisito do formulário, 
+                # mas usaremos os valores dos inputs dinâmicos
+                st.text_input("Nome (Preenchido)", value=nome_input, disabled=True, label_visibility="collapsed")
+                st.text_input("Contato (Preenchido)", value=contato_input, disabled=True, label_visibility="collapsed")
+
+
                 if st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True):
-                    if nome and contato:
-                        # Limpa o contato novamente para salvar no CSV
-                        contato_limpo = contato.replace('(', '').replace(')', '').replace('-', '').replace(' ', '').strip()
+                    # Valida usando os valores dos inputs dinâmicos
+                    if nome_input and contato_input:
+                        
+                        contato_limpo = contato_input.replace('(', '').replace(')', '').replace('-', '').replace(' ', '').strip()
                         
                         detalhes = {
                             "total": total_acumulado,
@@ -805,15 +812,13 @@ with col_carrinho:
                                     "imagem": v.get('imagem', '')
                                 } for k, v in st.session_state.carrinho.items()
                             ],
-                            "nome": nome,
+                            "nome": nome_input,
                             "contato": contato_limpo,
-                            # NOVO: Incluir o nível e saldo atual no JSON para referência no Admin
                             "cliente_nivel_atual": nivel_cliente, 
                             "cliente_saldo_cashback": saldo_cashback,
                         }
                         
-                        # A função salvar_pedido foi alterada acima para usar STATUS: PENDENTE
-                        if salvar_pedido(nome, contato_limpo, total_acumulado, json.dumps(detalhes, ensure_ascii=False), detalhes):
+                        if salvar_pedido(nome_input, contato_limpo, total_acumulado, json.dumps(detalhes, ensure_ascii=False), detalhes):
                             st.session_state.carrinho = {}
                             st.rerun()
                     else:
@@ -912,3 +917,4 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
