@@ -862,12 +862,13 @@ with tab_produtos:
                 
                 edit_nome = st.text_input("Nome do Produto", value=produto_atual['NOME'], key="edit_nome")
                 # LINHA 870 CORRIGIDA IMPLICITAMENTE PELA CORREÇÃO ACIMA
+                edit_nome = st.text_input("Nome do Produto", value=produto_atual.get('NOME', ''), key="edit_nome")
                 edit_preco = st.number_input("Preço (R$)", min_value=0.01, format="%.2f", value=preco_float, key="edit_preco")
-                edit_desc_curta = st.text_input("Descrição Curta", value=produto_atual['DESCRICAOCURTA'], key="edit_desc_curta")
-                edit_desc_longa = st.text_area("Descrição Longa", value=produto_atual['DESCRICAOLONGA'], key="edit_desc_longa")
-                edit_link_imagem = st.text_input("Link da Imagem", value=produto_atual['LINKIMAGEM'], key="edit_link_imagem")
+                edit_desc_curta = st.text_input("Descrição Curta", value=produto_atual.get('DESCRICAOCURTA', ''), key="edit_desc_curta")
+                edit_desc_longa = st.text_area("Descrição Longa", value=produto_atual.get('DESCRICAOLONGA', ''), key="edit_desc_longa")
+                edit_link_imagem = st.text_input("Link da Imagem", value=produto_atual.get('LINKIMAGEM', ''), key="edit_link_imagem")
                 edit_cashback = st.number_input("Cashback (%)", min_value=0.0, max_value=100.0, format="%.2f", value=cashback_float, key="edit_cashback")
-                edit_disponivel = st.checkbox("Disponível para Venda", value=produto_atual['DISPONIVEL'], key="edit_disponivel")
+                edit_disponivel = st.checkbox("Disponível para Venda", value=produto_atual.get('DISPONIVEL', True), key="edit_disponivel")
                 
                 col_update, col_delete = st.columns(2)
                 
@@ -1017,6 +1018,7 @@ with tab_promocoes:
                         st.rerun()
                     else:
                         st.error("Falha ao excluir promoção.")
+
 
 
 
