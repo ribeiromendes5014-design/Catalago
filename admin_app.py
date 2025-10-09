@@ -10,6 +10,7 @@ import numpy as np
 import random
 from io import StringIO
 import ast
+import re
 
 # O bloco de código de teste que lia 'pedidos.csv' localmente FOI REMOVIDO.
 # A lógica principal agora irá carregar os dados CORRETAMENTE do GitHub,
@@ -752,6 +753,7 @@ with tab_produtos:
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     # ... (Restante do código da aba Promoções) ...
+
 
 
 
