@@ -577,34 +577,35 @@ tab_pedidos, tab_produtos, tab_promocoes = st.tabs(["Pedidos", "Produtos", "🔥
 
 # --- VARIÁVEL DE CONTROLE DE VERSÃO JÁ ESTÁ NO TOPO ---
 def extract_customer_cashback(itens_json_string):
-    """Tenta extrair o saldo de cashback do cliente de uma string JSON, tratando problemas comuns de CSV."""
+    """Tenta extrair o saldo de cashback do cliente de uma string JSON, com limpeza agressiva de aspas."""
+    import json # Mantendo o import aqui para máxima segurança na função
+    import ast
+    import pandas as pd # Para usar pd.isna
     
     if pd.isna(itens_json_string) or not itens_json_string:
         return 0.0
-    
+
     s = str(itens_json_string).strip()
     
-    # 1. Limpeza de aspas (Problema comum do CSV: o JSON fica envelopado e mal escapado)
+    # 1. Limpeza Agressiva de Aspas: Remove aspas externas e tenta limpar todos os tipos de escapamentos
     if s.startswith('"') and s.endswith('"'):
-        s = s[1:-1] # Remove as aspas externas que sobraram
-    s = s.replace('""', '"') # Des-escapa as aspas internas restantes
+        s = s[1:-1]  # Remove aspas duplas externas
     
+    # 2. Trata diferentes tipos de escapamentos que o CSV pode introduzir
+    s = s.replace('""', '"')  # Ex: transforma '"{""total"": 30.0}"' em '{"total": 30.0}'
+    s = s.replace('\\"', '"') # Trata JSON escapado: Ex: transforma '{\"total\": 30.0}' em '{"total": 30.0}'
+
+    # 3. Tenta json.loads
     try:
-        # 2. Tenta carregar como JSON padrão
         data = json.loads(s)
-        
-        # 3. Retorna o saldo do cliente (é o saldo ACUMULADO no momento do pedido)
         return data.get("cliente_saldo_cashback", 0.0)
-        
-    except (json.JSONDecodeError, AttributeError):
-        # 4. Se JSON falhar, tenta ast.literal_eval (para strings que parecem dicts Python)
+    except Exception:
+        # 4. Tenta ast.literal_eval como fallback (mais tolerante a formatos de dicionário Python)
         try:
-            # Usamos a string original ou a limpa? Vamos usar a original/limpa por segurança
-            data = ast.literal_eval(s)
+            # Reverte para a string original, pois a limpeza pode ter quebrado o formato para ast
+            data = ast.literal_eval(itens_json_string) 
             return data.get("cliente_saldo_cashback", 0.0)
         except Exception:
-            # 5. Falha total, retorna 0
-            # st.warning(f"Falha ao extrair cashback: {s[:50]}...") # Linha opcional para debug
             return 0.0
 
 with tab_pedidos:
@@ -751,6 +752,7 @@ with tab_produtos:
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     # ... (Restante do código da aba Promoções) ...
+
 
 
 
