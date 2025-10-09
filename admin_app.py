@@ -811,8 +811,17 @@ with tab_produtos:
     df_produtos_catalogo = carregar_dados(SHEET_NAME_CATALOGO)
     
     with st.expander("➕ Adicionar Novo Produto"):
-        # ... (código do formulário Adicionar Novo Produto) ...
-    
+        # Garanta que o conteúdo AQUI dentro tenha indentação extra
+        with st.form("form_novo_produto"):
+            novo_nome = st.text_input("Nome do Produto", key="novo_nome")
+            # ... (todas as outras linhas do formulário de adicionar) ...
+            
+            submitted = st.form_submit_button("Salvar Novo Produto")
+            
+            if submitted:
+                # ... (lógica de submissão do formulário) ...
+                pass
+
     st.markdown("---")
     st.subheader("📝 Editar/Excluir Produtos Existentes")
     
@@ -1008,6 +1017,7 @@ with tab_promocoes:
                         st.rerun()
                     else:
                         st.error("Falha ao excluir promoção.")
+
 
 
 
