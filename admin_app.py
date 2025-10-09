@@ -392,10 +392,7 @@ def excluir_pedido(id_pedido):
 
 
 def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
-    """
-    Exibe os itens do pedido com um checkbox de separação e retorna a
-    porcentagem de itens separados.
-    """
+    # ... código anterior ...
     try:
         pedido_str = str(pedido_json).strip()
         
@@ -406,8 +403,14 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
         try:
             detalhes_pedido = json.loads(pedido_str)
         except json.JSONDecodeError:
-            detalhes_pedido = ast.literal_eval(pedido_str)
             
+            # 💡 CORREÇÃO: Adicionar um try/except para lidar com o erro de ast.literal_eval
+            try:
+                detalhes_pedido = ast.literal_eval(pedido_str)
+            except (ValueError, SyntaxError, Exception):
+                # Se falhar a conversão literal (como no erro 'malformed node'), retorna um dict vazio
+                detalhes_pedido = {} 
+                
         itens = detalhes_pedido.get('itens', [])
         total_itens = len(itens)
         itens_separados = 0
@@ -1002,4 +1005,5 @@ with tab_promocoes:
                         st.rerun()
                     else:
                         st.error("Falha ao excluir promoção.")
+
 
