@@ -811,27 +811,7 @@ with tab_produtos:
     df_produtos_catalogo = carregar_dados(SHEET_NAME_CATALOGO)
     
     with st.expander("➕ Adicionar Novo Produto"):
-        with st.form("form_novo_produto"):
-            novo_nome = st.text_input("Nome do Produto", key="novo_nome")
-            novo_preco = st.number_input("Preço (R$)", min_value=0.01, format="%.2f", key="novo_preco")
-            novo_desc_curta = st.text_input("Descrição Curta", key="novo_desc_curta")
-            novo_desc_longa = st.text_area("Descrição Longa", key="novo_desc_longa")
-            novo_link_imagem = st.text_input("Link da Imagem", key="novo_link_imagem")
-            novo_cashback = st.number_input("Cashback (%)", min_value=0.0, max_value=100.0, format="%.2f", key="novo_cashback")
-            novo_disponivel = st.checkbox("Disponível para Venda", value=True, key="novo_disponivel")
-            
-            submitted = st.form_submit_button("Salvar Novo Produto")
-            
-            if submitted:
-                if novo_nome and novo_preco > 0:
-                    if adicionar_produto(novo_nome, novo_preco, novo_desc_curta, novo_desc_longa, novo_link_imagem, novo_disponivel, novo_cashback):
-                        st.success(f"Produto '{novo_nome}' adicionado com sucesso!")
-                        st.session_state['data_version'] += 1
-                        st.rerun()
-                    else:
-                        st.error("Falha ao adicionar produto.")
-                else:
-                    st.warning("Preencha o nome e o preço corretamente.")
+        # ... (código do formulário Adicionar Novo Produto) ...
     
     st.markdown("---")
     st.subheader("📝 Editar/Excluir Produtos Existentes")
@@ -858,6 +838,11 @@ with tab_produtos:
             except:
                 preco_float = 0.0
                 
+            # 💥 CORREÇÃO DO ERRO StreamlitValueBelowMinError
+            # Garante que o valor inicial (value) não seja menor que min_value=0.01
+            if preco_float < 0.01:
+                preco_float = 0.01 # Define o valor mínimo permitido
+            
             try:
                 cashback_float = float(str(produto_atual.get('CASHBACKPERCENT', '0.0')).replace(',', '.'))
             except:
@@ -867,6 +852,7 @@ with tab_produtos:
                 st.info(f"Editando produto ID: {id_selecionado}")
                 
                 edit_nome = st.text_input("Nome do Produto", value=produto_atual['NOME'], key="edit_nome")
+                # LINHA 870 CORRIGIDA IMPLICITAMENTE PELA CORREÇÃO ACIMA
                 edit_preco = st.number_input("Preço (R$)", min_value=0.01, format="%.2f", value=preco_float, key="edit_preco")
                 edit_desc_curta = st.text_input("Descrição Curta", value=produto_atual['DESCRICAOCURTA'], key="edit_desc_curta")
                 edit_desc_longa = st.text_area("Descrição Longa", value=produto_atual['DESCRICAOLONGA'], key="edit_desc_longa")
@@ -1022,3 +1008,4 @@ with tab_promocoes:
                         st.rerun()
                     else:
                         st.error("Falha ao excluir promoção.")
+
