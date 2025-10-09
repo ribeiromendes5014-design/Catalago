@@ -12,21 +12,27 @@ from io import StringIO
 import os
 import ast
 
+# --- Variáveis de Configuração (corrigido para usar secrets do Streamlit) ---
+if "github" in st.secrets:
+    GITHUB_TOKEN = st.secrets["github"]["token"]
+    DATA_REPO_NAME = st.secrets["github"]["repo_name"]
+    BRANCH = st.secrets["github"]["branch"]
+else:
+    GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+    DATA_REPO_NAME = os.environ.get("DATA_REPO_NAME", os.environ.get("REPO_NAME"))
+    BRANCH = os.environ.get("BRANCH")
 
-st.write("GITHUB_TOKEN set:", bool(GITHUB_TOKEN))
-st.write("DATA_REPO_NAME:", DATA_REPO_NAME)
-st.write("BRANCH:", BRANCH)
-st.write("URL de teste:", f"https://api.github.com/repos/{DATA_REPO_NAME}/contents/pedidos.csv?ref={BRANCH}")
+# Teste de conexão e debug
+st.write("🔑 GITHUB_TOKEN definido:", bool(GITHUB_TOKEN))
+st.write("📦 DATA_REPO_NAME:", DATA_REPO_NAME)
+st.write("🌿 BRANCH:", BRANCH)
+st.write("🔗 URL de teste:", f"https://api.github.com/repos/{DATA_REPO_NAME}/contents/pedidos.csv?ref={BRANCH}")
 
-
+# Caminho local (não usado, mas mantido caso precise no futuro)
 pedidos_path = "pedidos.csv"
-# --- Variáveis de Configuração ---
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-DATA_REPO_NAME = os.environ.get("DATA_REPO_NAME", os.environ.get("REPO_NAME"))
-BRANCH = os.environ.get("BRANCH")
-ID_PEDIDO,DATA_HORA,NOME_CLIENTE,CONTATO_CLIENTE,ITENS_PEDIDO,VALOR_TOTAL,LINKIMAGEM,STATUS,itens_json
+
 # === MUDANÇAS NOVAS ===
-ESTOQUE_BAIXO_LIMITE = 5 # Define o limite para exibir o alerta de "Últimas Unidades"
+ESTOQUE_BAIXO_LIMITE = 5  # Define o limite para exibir o alerta de "Últimas Unidades"
 # === FIM DAS MUDANÇAS NOVAS ===
 
 # URLs da API
@@ -37,9 +43,9 @@ SHEET_NAME_CATALOGO_CSV = "produtos_estoque.csv"
 SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
 SHEET_NAME_PEDIDOS_CSV = "pedidos.csv"
 SHEET_NAME_VIDEOS_CSV = "video.csv"
-# === NOVO ARQUIVO: Clientes para consulta de Cashback ===
-SHEET_NAME_CLIENTES_CASHBACK_CSV = "clientes_cash.csv"
-# =======================================================
+SHEET_NAME_CLIENTES_CASHBACK_CSV = "clientes_cash.csv"  # Novo arquivo: Clientes para cashback
+
+# Recursos visuais
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-na-zvania-3.jpg'
 LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
 
@@ -942,5 +948,6 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
