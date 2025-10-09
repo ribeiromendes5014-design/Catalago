@@ -319,27 +319,53 @@ def calcular_cashback_a_creditar(pedido_json, df_catalogo):
         itens = detalhes_pedido.get('itens', [])
         
         for item in itens:
-    item_id = pd.to_numeric(item.get('id'), errors='coerce')
+    # --- 1. Extração e Conversão Inicial de Dados do Item ---
+    
+    # Converte o ID para inteiro de forma segura (necessário para buscar no catálogo)
+    try:
+        item_id = int(item.get('id'))
+    except (TypeError, ValueError):
+        continue  # Pula o item se o ID for inválido
 
-    # 1️⃣ tenta pegar do JSON do pedido primeiro
-    cashback_percent = pd.to_numeric(
-        str(item.get('cashbackpercent', 0)).replace(',', '.'),
-        errors='coerce'
-    )
+    # 1️⃣ Tenta pegar do JSON do pedido primeiro
+    cashback_percent_str = str(item.get('cashbackpercent', 0)).replace(',', '.')
+    
+    # Converte a string (tratada) para float, usando 0.0 se falhar
+    try:
+        cashback_percent = float(cashback_percent_str)
+    except ValueError:
+        cashback_percent = 0.0
 
-    # 2️⃣ se não veio nada, busca no catálogo
-    if (pd.isna(cashback_percent) or cashback_percent == 0) and not df_catalogo.empty:
-        produto_catalogo = df_catalogo[df_catalogo['ID'] == int(item_id)]
+    # --- 2. Busca no Catálogo se o Valor For Inválido ou Zero ---
+
+    # Checa se o catálogo não está vazio E se o cashback_percent é 0 ou inválido (NaN)
+    if (cashback_percent == 0.0 or cashback_percent_str in ('nan', 'None')) and not df_catalogo.empty:
+        
+        # Filtra o catálogo usando .loc para maior clareza e eficiência
+        produto_catalogo = df_catalogo.loc[df_catalogo['ID'] == item_id]
+        
         if not produto_catalogo.empty:
-            cashback_percent = pd.to_numeric(
-                str(produto_catalogo.iloc[0].get('CASHBACKPERCENT', 0)).replace(',', '.'),
-                errors='coerce'
-            )
+            # Pega o valor do catálogo (primeira linha .iloc[0])
+            catalogo_cashback_str = str(produto_catalogo.iloc[0].get('CASHBACKPERCENT', 0)).replace(',', '.')
+            
+            # Atualiza o cashback_percent, se a conversão for bem sucedida
+            try:
+                cashback_percent = float(catalogo_cashback_str)
+            except ValueError:
+                pass  # Mantém o valor 0.0 se o do catálogo também for inválido
 
-    # 3️⃣ cálculo normal
+    # --- 3. Cálculo Normal do Cashback ---
+    
     if cashback_percent > 0:
+        # Extração de Preço e Quantidade com valores padrão
         preco_unitario = float(item.get('preco', 0.0))
-        quantidade = int(item.get('quantidade', 0))
+        
+        # Tenta converter a quantidade para int, senão usa 0
+        try:
+            quantidade = int(item.get('quantidade'))
+        except (TypeError, ValueError):
+            quantidade = 0
+            
         valor_item = preco_unitario * quantidade
         valor_cashback_total += valor_item * (cashback_percent / 100)
                     
@@ -772,6 +798,7 @@ with tab_produtos:
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     # ... (Restante do código da aba Promoções) ...
+
 
 
 
