@@ -55,24 +55,12 @@ def fetch_github_data_v2(sheet_name, version_control):
     
     csv_filename = f"{sheet_name}.csv"
     
-    # --- Lógica para Repositório Externo ---
-    if sheet_name == SHEET_NAME_PEDIDOS or sheet_name == SHEET_NAME_CLIENTES_CASH:
-        repo_to_use = PEDIDOS_REPO_FULL
-        branch_to_use = PEDIDOS_BRANCH
-    else:
-        repo_to_use = REPO_NAME_FULL
-        branch_to_use = BRANCH
-        
+    # --- Repositório único (todos os CSVs estão no mesmo repo) ---
+    repo_to_use = REPO_NAME_FULL
+    branch_to_use = BRANCH
+
     api_url = f"https://api.github.com/repos/{repo_to_use}/contents/{csv_filename}?ref={branch_to_use}"
 
-    try:
-        response = requests.get(api_url, headers=HEADERS)
-        if response.status_code != 200:
-            if sheet_name != SHEET_NAME_CLIENTES_CASH:
-                st.warning(f"Erro ao buscar '{csv_filename}': Status {response.status_code}. Repositório: {repo_to_use}")
-            return pd.DataFrame()
-
-        content = base64.b64decode(response.json()["content"]).decode("utf-8")
 
         # --- LÓGICA ROBUSTA PARA LER CSV COM CAMPOS COMPLEXOS (JSON) ---
         try:
@@ -826,6 +814,7 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
 
 
