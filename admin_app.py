@@ -578,35 +578,49 @@ tab_pedidos, tab_produtos, tab_promocoes = st.tabs(["Pedidos", "Produtos", "🔥
 
 # --- VARIÁVEL DE CONTROLE DE VERSÃO JÁ ESTÁ NO TOPO ---
 def extract_customer_cashback(itens_json_string):
-    """Tenta extrair o saldo de cashback do cliente de uma string JSON, com limpeza agressiva de aspas."""
-    import json # Mantendo o import aqui para máxima segurança na função
+    """Extrai o saldo do cashback diretamente da string JSON (via Regex) para máxima robustez."""
+    import pandas as pd
+    import json
     import ast
-    import pandas as pd # Para usar pd.isna
-    
+    import re # Necessário aqui para garantir que o Streamlit o encontre
+
     if pd.isna(itens_json_string) or not itens_json_string:
         return 0.0
 
     s = str(itens_json_string).strip()
     
-    # 1. Limpeza Agressiva de Aspas: Remove aspas externas e tenta limpar todos os tipos de escapamentos
-    if s.startswith('"') and s.endswith('"'):
-        s = s[1:-1]  # Remove aspas duplas externas
+    # === 1. TENTATIVA COM REGEX (Mais robusto para strings corrompidas) ===
+    # Busca por "cliente_saldo_cashback": seguido de zero ou mais espaços, e captura o número (com ponto)
+    # r'\"cliente_saldo_cashback\"\s*:\s*([\d\.]+)'
+    match = re.search(r'\"cliente_saldo_cashback\"\s*:\s*([\d\.]+)', s)
     
-    # 2. Trata diferentes tipos de escapamentos que o CSV pode introduzir
-    s = s.replace('""', '"')  # Ex: transforma '"{""total"": 30.0}"' em '{"total": 30.0}'
-    s = s.replace('\\"', '"') # Trata JSON escapado: Ex: transforma '{\"total\": 30.0}' em '{"total": 30.0}'
+    if match:
+        try:
+            # Converte o valor capturado (ex: "0.9") para float
+            return float(match.group(1))
+        except ValueError:
+            # Se a conversão falhar, segue para o parsing JSON
+            pass
 
-    # 3. Tenta json.loads
+    # === 2. FALLBACK COM LIMPEZA E JSON.LOADS (Se o RegEx falhar) ===
+    
+    # Limpeza agressiva (necessária para JSON.loads)
+    if s.startswith('"') and s.endswith('"'):
+        s = s[1:-1]
+    s = s.replace('""', '"')
+    s = s.replace('\\"', '"') 
+
     try:
         data = json.loads(s)
         return data.get("cliente_saldo_cashback", 0.0)
     except Exception:
-        # 4. Tenta ast.literal_eval como fallback (mais tolerante a formatos de dicionário Python)
+        # 3. Fallback final com ast.literal_eval
         try:
-            # Reverte para a string original, pois a limpeza pode ter quebrado o formato para ast
+            # Reverte para a string original, caso a limpeza tenha sido agressiva demais
             data = ast.literal_eval(itens_json_string) 
             return data.get("cliente_saldo_cashback", 0.0)
         except Exception:
+            # Retorna 0.0 se falhar em todas as tentativas
             return 0.0
 
 with tab_pedidos:
@@ -753,6 +767,7 @@ with tab_produtos:
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     # ... (Restante do código da aba Promoções) ...
+
 
 
 
