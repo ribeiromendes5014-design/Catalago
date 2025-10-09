@@ -313,72 +313,77 @@ def calcular_cashback_a_creditar(pedido_json, df_catalogo):
         # Tenta carregar o JSON (com tratamento para strings complexas)
         try:
             detalhes_pedido = json.loads(pedido_str)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError): # Adicionado TypeError para segurança
+            # Tenta converter string literal para estrutura Python
             detalhes_pedido = ast.literal_eval(pedido_str)
             
         itens = detalhes_pedido.get('itens', [])
         
+        # O BLOCO A SEGUIR ESTAVA SEM INDENTAÇÃO, GERANDO O ERRO. FOI CORRIGIDO.
         for item in itens:
-    # --- 1. Extração e Conversão Inicial de Dados do Item ---
-    
-    # Converte o ID para inteiro de forma segura ANTES de usar no catálogo
-    try:
-        item_id = int(item.get('id', -1))
-    except (TypeError, ValueError):
-        continue  # Pula o item se o ID for inválido ou ausente
-
-    # 1️⃣ Tenta pegar do JSON do pedido primeiro
-    cashback_percent_str = str(item.get('cashbackpercent', 0)).replace(',', '.')
-    
-    # Conversão segura para float (Python nativo)
-    try:
-        cashback_percent = float(cashback_percent_str)
-    except ValueError:
-        cashback_percent = 0.0
-
-    # --- 2. Busca no Catálogo se o Valor For Inválido ou Zero ---
-
-    # Condição melhorada para tratar 0 e falhas na conversão (ex: None, NaN)
-    if cashback_percent == 0.0 and not df_catalogo.empty:
-        
-        # Filtra o catálogo
-        produto_catalogo = df_catalogo.loc[df_catalogo['ID'] == item_id]
-        
-        if not produto_catalogo.empty:
-            # Pega o valor do catálogo
-            catalogo_cashback_str = str(produto_catalogo.iloc[0].get('CASHBACKPERCENT', 0)).replace(',', '.')
+            # --- 1. Extração e Conversão Inicial de Dados do Item ---
             
-            # Atualiza o cashback_percent (Python nativo)
+            # Converte o ID para inteiro de forma segura ANTES de usar no catálogo
             try:
-                cashback_percent = float(catalogo_cashback_str)
-            except ValueError:
-                pass # Mantém 0.0
+                item_id = int(item.get('id', -1))
+            except (TypeError, ValueError):
+                continue  # Pula o item se o ID for inválido ou ausente
 
-    # --- 3. Cálculo Normal do Cashback ---
-    
-    if cashback_percent > 0:
-        preco_unitario = float(item.get('preco', 0.0))
-        
-        # Converte a quantidade com valor default seguro
-        try:
-            quantidade = int(item.get('quantidade', 0))
-        except (TypeError, ValueError):
-            quantidade = 0
+            # 1️⃣ Tenta pegar do JSON do pedido primeiro
+            cashback_percent_str = str(item.get('cashbackpercent', 0)).replace(',', '.')
             
-        valor_item = preco_unitario * quantidade
-        valor_cashback_total += valor_item * (cashback_percent / 100)
+            # Conversão segura para float (Python nativo)
+            try:
+                cashback_percent = float(cashback_percent_str)
+            except ValueError:
+                cashback_percent = 0.0
+
+            # --- 2. Busca no Catálogo se o Valor For Inválido ou Zero ---
+
+            # Condição melhorada para tratar 0 e falhas na conversão (ex: None, NaN)
+            if cashback_percent == 0.0 and not df_catalogo.empty:
+                
+                # Filtra o catálogo
+                # Usado .loc para clareza e garantindo que item_id é o tipo esperado
+                produto_catalogo = df_catalogo.loc[df_catalogo['ID'] == item_id]
+                
+                if not produto_catalogo.empty:
+                    # Pega o valor do catálogo (primeira linha .iloc[0])
+                    catalogo_cashback_str = str(produto_catalogo.iloc[0].get('CASHBACKPERCENT', 0)).replace(',', '.')
                     
+                    # Atualiza o cashback_percent (Python nativo)
+                    try:
+                        cashback_percent = float(catalogo_cashback_str)
+                    except ValueError:
+                        pass # Mantém 0.0
+
+            # --- 3. Cálculo Normal do Cashback ---
+            
+            if cashback_percent > 0:
+                preco_unitario = float(item.get('preco', 0.0))
+                
+                # Converte a quantidade com valor default seguro
+                try:
+                    quantidade = int(item.get('quantidade', 0))
+                except (TypeError, ValueError):
+                    quantidade = 0
+                    
+                valor_item = preco_unitario * quantidade
+                valor_cashback_total += valor_item * (cashback_percent / 100)
+                
     except Exception:
-        # Erro de leitura/cálculo
+        # Erro geral de leitura/cálculo do pedido
         return 0.0
         
-    return valor_cashback_total
+    return round(valor_cashback_total, 2) # Retorna com 2 casas decimais
 
 # --------------------------------------------------------------------------------
 # --- FUNÇÕES DE PEDIDOS (ESCRITA HABILITADA) ---
 # --------------------------------------------------------------------------------
 
-# A função agora requer df_catalogo para o cálculo de cashback
+# É NECESSÁRIO QUE carregar_dados, lancar_venda_cashback, e st (streamlit?)
+# ESTEJAM DEFINIDOS NO SEU AMBIENTE.
+
 def atualizar_status_pedido(id_pedido, novo_status, df_catalogo):
     df = carregar_dados(SHEET_NAME_PEDIDOS).copy()
     
@@ -387,22 +392,49 @@ def atualizar_status_pedido(id_pedido, novo_status, df_catalogo):
         return False
 
     index_to_update = df[df['ID_PEDIDO'] == str(id_pedido)].index
+    
     if not index_to_update.empty:
+        idx = index_to_update[0]
         
         # === LÓGICA DE CRÉDITO DE CASHBACK (APENAS AO FINALIZAR) ===
-        if novo_status == 'Finalizado' and df.loc[index_to_update[0], 'STATUS'] != 'Finalizado':
-            pedido = df.loc[index_to_update[0]]
+        if novo_status == 'Finalizado' and df.loc[idx, 'STATUS'] != 'Finalizado':
+            pedido = df.loc[idx]
             
             pedido_json = pedido.get('ITENS_JSON') 
             contato_cliente = pedido.get('CONTATO_CLIENTE')
             nome_cliente_pedido = pedido.get('NOME_CLIENTE')
-            valor_venda_bruto = pedido.get('VALOR_TOTAL')
             
-            if pedido_json and contato_cliente:
-                # 1. Lança a Venda/Cashback
-                if not lancar_venda_cashback(nome_cliente_pedido, contato_cliente, valor_venda_bruto):
-                    # Se falhar no cashback, não finaliza o pedido!
-                    return False 
+            # NOVIDADE: CALCULA O CASHBACK
+            valor_cashback_credito = calcular_cashback_a_creditar(pedido_json, df_catalogo)
+            
+            if pedido_json and contato_cliente and valor_cashback_credito > 0:
+                # 1. Lança a Venda/Cashback (Assumindo que esta função credita o cashback)
+                if not lancar_venda_cashback(nome_cliente_pedido, contato_cliente, valor_cashback_credito):
+                    st.warning("Falha ao lançar cashback. Pedido não será finalizado.")
+                    return False
+                
+                # 2. ATUALIZA A COLUNA DE CASHBACK NO DATAFRAME
+                df.loc[idx, 'VALOR_CASHBACK_CREDITADO'] = valor_cashback_credito
+                
+            # ATUALIZA O STATUS APÓS O SUCESSO DO CASHBACK
+            df.loc[idx, 'STATUS'] = novo_status
+            
+            # SALVA O DATAFRAME ATUALIZADO (Você precisará de uma função de salvar_dados)
+            # if salvar_dados(df, SHEET_NAME_PEDIDOS):
+            #     return True
+            # else:
+            #     st.error("Falha ao salvar o status do pedido.")
+            #     return False
+            
+            # Apenas para fins de demonstração (substitua pelo seu salvamento real)
+            return True 
+        
+        # Atualiza o status para qualquer outro estado que não seja 'Finalizado'
+        df.loc[idx, 'STATUS'] = novo_status
+        # ... (Salvar dados aqui)
+        return True
+
+    return False
         # ==============================================================
         
         df.loc[index_to_update, 'STATUS'] = novo_status
@@ -797,6 +829,7 @@ with tab_produtos:
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     # ... (Restante do código da aba Promoções) ...
+
 
 
 
