@@ -12,11 +12,19 @@ from io import StringIO
 import os
 import ast
 
+
+st.write("GITHUB_TOKEN set:", bool(GITHUB_TOKEN))
+st.write("DATA_REPO_NAME:", DATA_REPO_NAME)
+st.write("BRANCH:", BRANCH)
+st.write("URL de teste:", f"https://api.github.com/repos/{DATA_REPO_NAME}/contents/pedidos.csv?ref={BRANCH}")
+
+
 pedidos_path = "pedidos.csv"
 # --- Variáveis de Configuração ---
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 DATA_REPO_NAME = os.environ.get("DATA_REPO_NAME", os.environ.get("REPO_NAME"))
 BRANCH = os.environ.get("BRANCH")
+ID_PEDIDO,DATA_HORA,NOME_CLIENTE,CONTATO_CLIENTE,ITENS_PEDIDO,VALOR_TOTAL,LINKIMAGEM,STATUS,itens_json
 # === MUDANÇAS NOVAS ===
 ESTOQUE_BAIXO_LIMITE = 5 # Define o limite para exibir o alerta de "Últimas Unidades"
 # === FIM DAS MUDANÇAS NOVAS ===
@@ -934,4 +942,5 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
