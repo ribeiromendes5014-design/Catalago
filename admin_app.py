@@ -299,88 +299,69 @@ def calcular_cashback_a_creditar(pedido_json, df_catalogo):
     if not pedido_str or pedido_str.lower() in ('nan', '{}', ''):
         return 0.0
 
-    # 💡 CORREÇÃO 1: Limpeza para strings corrompidas comuns em CSV/Pandas
-    s = pedido_str
-    if s.startswith('"') and s.endswith('"'):
-        s = s[1:-1]
-    s = s.replace('\\"', '"').replace('\\\\', '\\') # Desescapa aspas e barras
+    # 💡 Lógica de limpeza robusta
+    s_limpa = pedido_str
+    if s_limpa.startswith('"') and s_limpa.endswith('"'):
+        s_limpa = s_limpa[1:-1]
+    s_limpa = s_limpa.replace('\\"', '"').replace('\\\\', '\\')
     
+    detalhes_pedido = {}
+
     try:
-        # Tenta carregar o JSON (com tratamento para strings complexas)
+        # Tenta 1: Carregar a string LIMPA como JSON
+        detalhes_pedido = json.loads(s_limpa) 
+    except (json.JSONDecodeError, TypeError): 
+        # Tenta 2: Usar ast.literal_eval na string ORIGINAL
         try:
-            # Tenta com a string limpa (s)
-            detalhes_pedido = json.loads(s) 
-        except (json.JSONDecodeError, TypeError): 
-            # Tenta converter string literal para estrutura Python
-            
-            # 💡 CORREÇÃO 2: Adicionar um try/except para lidar com o erro 'malformed node or string'
+            detalhes_pedido = ast.literal_eval(pedido_str)
+        except (ValueError, SyntaxError, Exception):
+            # Tenta 3: Usar ast.literal_eval na string LIMPA (última tentativa)
             try:
-                # Volta para a string original para literal_eval, pois a limpeza pode ter quebrado
-                detalhes_pedido = ast.literal_eval(pedido_str)
+                 detalhes_pedido = ast.literal_eval(s_limpa)
             except (ValueError, SyntaxError, Exception):
-                # Se falhar a conversão literal, retorna um dict vazio
-                detalhes_pedido = {} 
+                 detalhes_pedido = {}
             
-        itens = detalhes_pedido.get('itens', [])
+    itens = detalhes_pedido.get('itens', [])
+    
+    for item in itens:
+        try:
+            item_id = int(item.get('id', -1))
+        except (TypeError, ValueError):
+            continue
+
+        cashback_percent_str = str(item.get('cashbackpercent', 0)).replace(',', '.')
         
-        # --- BLOC DA ITERAÇÃO (Indentação Corrigida) ---
-        for item in itens:
-            # --- 1. Extração e Conversão Inicial de Dados do Item ---
+        try:
+            cashback_percent = float(cashback_percent_str)
+        except ValueError:
+            cashback_percent = 0.0
+
+        # --- 2. Busca no Catálogo se o Valor For Inválido ou Zero ---
+        if cashback_percent == 0.0 and not df_catalogo.empty:
             
-            # Converte o ID para inteiro de forma segura ANTES de usar no catálogo
-            try:
-                item_id = int(item.get('id', -1))
-            except (TypeError, ValueError):
-                continue  # Pula o item se o ID for inválido ou ausente
-
-            # 1️⃣ Tenta pegar do JSON do pedido primeiro
-            cashback_percent_str = str(item.get('cashbackpercent', 0)).replace(',', '.')
+            produto_catalogo = df_catalogo.loc[df_catalogo['ID'] == item_id]
             
-            # Conversão segura para float (Python nativo)
-            try:
-                cashback_percent = float(cashback_percent_str)
-            except ValueError:
-                cashback_percent = 0.0
-
-            # --- 2. Busca no Catálogo se o Valor For Inválido ou Zero ---
-
-            # Condição melhorada para tratar 0 e falhas na conversão (ex: None, NaN)
-            if cashback_percent == 0.0 and not df_catalogo.empty:
+            if not produto_catalogo.empty:
+                catalogo_cashback_str = str(produto_catalogo.iloc[0].get('CASHBACKPERCENT', 0)).replace(',', '.')
                 
-                # Filtra o catálogo
-                # Usado .loc para clareza e garantindo que item_id é o tipo esperado
-                produto_catalogo = df_catalogo.loc[df_catalogo['ID'] == item_id]
-                
-                if not produto_catalogo.empty:
-                    # Pega o valor do catálogo (primeira linha .iloc[0])
-                    # Usando .get() para segurança
-                    catalogo_cashback_str = str(produto_catalogo.iloc[0].get('CASHBACKPERCENT', 0)).replace(',', '.')
-                    
-                    # Atualiza o cashback_percent (Python nativo)
-                    try:
-                        cashback_percent = float(catalogo_cashback_str)
-                    except ValueError:
-                        pass # Mantém 0.0
-
-            # --- 3. Cálculo Normal do Cashback ---
-            
-            if cashback_percent > 0:
-                preco_unitario = float(item.get('preco', 0.0))
-                
-                # Converte a quantidade com valor default seguro
                 try:
-                    quantidade = int(item.get('quantidade', 0))
-                except (TypeError, ValueError):
-                    quantidade = 0
-                    
-                valor_item = preco_unitario * quantidade
-                valor_cashback_total += valor_item * (cashback_percent / 100)
+                    cashback_percent = float(catalogo_cashback_str)
+                except ValueError:
+                    pass
+
+        # --- 3. Cálculo Normal do Cashback ---
+        if cashback_percent > 0:
+            preco_unitario = float(item.get('preco', 0.0))
+            
+            try:
+                quantidade = int(item.get('quantidade', 0))
+            except (TypeError, ValueError):
+                quantidade = 0
                 
-    except Exception:
-        # Erro geral de leitura/cálculo do pedido
-        return 0.0
+            valor_item = preco_unitario * quantidade
+            valor_cashback_total += valor_item * (cashback_percent / 100)
         
-    return round(valor_cashback_total, 2) # Retorna com 2 casas decimais
+    return round(valor_cashback_total, 2)
 
 # --------------------------------------------------------------------------------
 # --- FUNÇÕES DE PEDIDOS (ESCRITA HABILITADA) ---
@@ -1082,3 +1063,4 @@ with tab_promocoes:
                         st.rerun()
                     else:
                         st.error("Falha ao excluir promoção.")
+
