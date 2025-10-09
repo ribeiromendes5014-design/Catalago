@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 import json
-from datetime import datetime
+from datetime import datetime, date
 import time
 import requests 
 import base64
@@ -14,6 +14,12 @@ from io import StringIO
 SHEET_NAME_CATALOGO = "produtos_estoque" # <<< NOVO NOME DO ARQUIVO
 SHEET_NAME_PEDIDOS = "pedidos"
 SHEET_NAME_PROMOCOES = "promocoes"
+# === NOVO: ARQUIVO DE CASHBACK E CONSTANTES ===
+SHEET_NAME_CLIENTES_CASH = "clientes_cash"
+CASHBACK_LANCAMENTOS_CSV = "lancamentos.csv" # Opcional: Se quiser registrar lançamentos
+BONUS_INDICACAO_PERCENTUAL = 0.03 
+CASHBACK_INDICADO_PRIMEIRA_COMPRA = 0.05
+# ============================================
 
 # --- Configurações do Repositório de Pedidos Externo (NOVO) ---
 PEDIDOS_REPO_FULL = "ribeiromendes5014-design/fluxo"
@@ -50,8 +56,8 @@ def fetch_github_data_v2(sheet_name, version_control):
     # Define o nome do arquivo a ser buscado no GitHub
     csv_filename = f"{sheet_name}.csv"
     
-    # --- Lógica para Repositório de Pedidos Externo (AJUSTADO) ---
-    if sheet_name == SHEET_NAME_PEDIDOS:
+    # --- Lógica para Repositório Externo ---
+    if sheet_name == SHEET_NAME_PEDIDOS or sheet_name == SHEET_NAME_CLIENTES_CASH: # Inclui o CSV de cashback
         repo_to_use = PEDIDOS_REPO_FULL
         branch_to_use = PEDIDOS_BRANCH
     else:
@@ -61,21 +67,25 @@ def fetch_github_data_v2(sheet_name, version_control):
     api_url = f"https://api.github.com/repos/{repo_to_use}/contents/{csv_filename}?ref={branch_to_use}"
 
     try:
-        # Faz a requisição diretamente à API do GitHub
         response = requests.get(api_url, headers=HEADERS)
         if response.status_code != 200:
-            st.warning(f"Erro ao buscar '{csv_filename}': {response.status_code}")
+            # Não exibe erro para o CSV de clientes, pois ele pode não existir inicialmente
+            if sheet_name != SHEET_NAME_CLIENTES_CASH:
+                st.warning(f"Erro ao buscar '{csv_filename}': {response.status_code}")
             return pd.DataFrame()
 
-        # Decodifica o conteúdo base64 retornado pela API
         content = base64.b64decode(response.json()["content"]).decode("utf-8")
 
-        # Converte o conteúdo em DataFrame
-        from io import StringIO
-        df = pd.read_csv(StringIO(content), sep=",")
+        # --- LÓGICA ROBUSTA PARA LER CSV COM CAMPOS COMPLEXOS (JSON) ---
+        df = pd.read_csv(
+            StringIO(content), 
+            sep=",", 
+            engine='python', 
+            on_bad_lines='warn'
+        )
+        # -------------------------------------------------------------
 
-        # Padroniza as colunas
-        df.columns = df.columns.str.strip().str.upper()
+        df.columns = df.columns.str.strip().str.upper().str.replace(' ', '_')
 
         if "COLUNA" in df.columns:
             df.drop(columns=["COLUNA"], inplace=True)
@@ -111,7 +121,7 @@ def write_csv_to_github(df, sheet_name, commit_message):
     csv_filename = f"{sheet_name}.csv"
         
     # --- NOVO: Define o repositório e URL API para escrita ---
-    if sheet_name == SHEET_NAME_PEDIDOS:
+    if sheet_name == SHEET_NAME_PEDIDOS or sheet_name == SHEET_NAME_CLIENTES_CASH:
         repo_to_write = PEDIDOS_REPO_FULL
         branch_to_write = PEDIDOS_BRANCH
     else:
@@ -161,6 +171,116 @@ def write_csv_to_github(df, sheet_name, commit_message):
         st.error(f"Falha no Commit: {put_response.status_code} - {error_message}")
         return False
 
+# --------------------------------------------------------------------------------
+# --- FUNÇÕES DE LÓGICA DE CASHBACK (INTEGRADO AO ADMIN) ---
+# --------------------------------------------------------------------------------
+
+@st.cache_data(ttl=5)
+def carregar_clientes_cashback():
+    """Carrega e padroniza o DataFrame de clientes de cashback."""
+    df = carregar_dados(SHEET_NAME_CLIENTES_CASH).copy()
+    if df.empty:
+        # Colunas padrão do cashback_system.py
+        cols = ['NOME', 'APELIDO/DESCRIÇÃO', 'TELEFONE', 'CASHBACK_DISPONÍVEL', 'GASTO_ACUMULADO', 'NIVEL_ATUAL', 'INDICADO_POR', 'PRIMEIRA_COMPRA_FEITA']
+        df = pd.DataFrame(columns=[c.upper().replace(' ', '_') for c in cols])
+        df['TELEFONE'] = df['TELEFONE'].astype(str) # Garante que a coluna de telefone existe
+        return df
+
+    # Renomeia e padroniza as colunas conforme o schema do cashback_system.py
+    df.rename(columns={
+        'TELEFONE': 'TELEFONE', 
+        'CASHBACK_DISPONIVEL': 'CASHBACK_DISPONIVEL',
+        'NIVEL_ATUAL': 'NIVEL_ATUAL'
+    }, inplace=True, errors='ignore')
+
+    # Limpa o telefone para ser usado como chave única
+    df['CONTATO_LIMPO'] = df['TELEFONE'].astype(str).str.replace(r'\D', '', regex=True).str.strip()
+    df['CASHBACK_DISPONIVEL'] = pd.to_numeric(df['CASHBACK_DISPONIVEL'], errors='coerce').fillna(0.0)
+    df['GASTO_ACUMULADO'] = pd.to_numeric(df['GASTO_ACUMULADO'], errors='coerce').fillna(0.0)
+    df['NIVEL_ATUAL'] = df['NIVEL_ATUAL'].fillna('Prata')
+    
+    return df
+
+def cadastrar_cliente_cashback(df_clientes, nome, contato, nivel='Prata'):
+    """Adiciona um novo cliente ao DF de clientes (com status de primeira compra)."""
+    novo_cliente = {
+        'NOME': nome, 
+        'APELIDO/DESCRIÇÃO': '', 
+        'TELEFONE': contato,
+        'CASHBACK_DISPONIVEL': 0.00, 
+        'GASTO_ACUMULADO': 0.00, 
+        'NIVEL_ATUAL': nivel,
+        'INDICADO_POR': '', 
+        'PRIMEIRA_COMPRA_FEITA': 'FALSE',
+        'CONTATO_LIMPO': contato
+    }
+    return pd.concat([df_clientes, pd.DataFrame([novo_cliente])], ignore_index=True)
+
+def calcular_nivel_e_beneficios(gasto_acumulado: float):
+    # Lógica de níveis simplificada (Mantenha a lógica completa do cashback_system.py aqui se for preciso)
+    if gasto_acumulado >= 1000.01: nivel, cb_normal = 'Diamante', 0.15
+    elif gasto_acumulado >= 200.01: nivel, cb_normal = 'Ouro', 0.07
+    else: nivel, cb_normal = 'Prata', 0.03
+    return nivel, cb_normal
+
+def lancar_venda_cashback(nome: str, contato: str, valor_venda: float):
+    """Lança a venda, cadastra o cliente se novo, credita o cashback e persiste o DF."""
+    df_clientes = carregar_clientes_cashback()
+    contato_limpo = str(contato).replace('(', '').replace(')', '').replace('-', '').replace(' ', '').strip()
+    valor_venda = float(valor_venda)
+    
+    # 1. Busca Cliente (Pelo Contato Limpo)
+    cliente_idx = df_clientes[df_clientes['CONTATO_LIMPO'] == contato_limpo].index
+    
+    # Flags iniciais
+    is_new_customer = cliente_idx.empty
+    
+    if is_new_customer:
+        # 1.1. Cadastro Automático
+        df_clientes = cadastrar_cliente_cashback(df_clientes, nome, contato_limpo, nivel='Prata')
+        cliente_idx = df_clientes[df_clientes['CONTATO_LIMPO'] == contato_limpo].index
+        idx = cliente_idx[0]
+        st.toast(f"Cliente '{nome}' cadastrado automaticamente.", icon='👤')
+    else:
+        idx = cliente_idx[0]
+    
+    # 2. Cálculo do Cashback
+    cliente = df_clientes.loc[idx].copy()
+    gasto_antigo = cliente['GASTO_ACUMULADO']
+    nivel_antigo = cliente['NIVEL_ATUAL']
+    
+    nivel_atual, cb_normal_rate = calcular_nivel_e_beneficios(gasto_antigo)
+    taxa_final = cb_normal_rate
+    
+    # Se for a primeira compra E não tiver indicador, ou for novo, usa taxa de primeira compra
+    if cliente['PRIMEIRA_COMPRA_FEITA'].upper() == 'FALSE' or is_new_customer:
+        taxa_final = CASHBACK_INDICADO_PRIMEIRA_COMPRA # 5% na primeira compra (mesmo sem indicador)
+        
+    cashback_credito = round(valor_venda * taxa_final, 2)
+
+    # 3. Atualiza Saldos
+    df_clientes.loc[idx, 'CASHBACK_DISPONIVEL'] = round(cliente['CASHBACK_DISPONIVEL'] + cashback_credito, 2)
+    df_clientes.loc[idx, 'GASTO_ACUMULADO'] = round(cliente['GASTO_ACUMULADO'] + valor_venda, 2)
+    df_clientes.loc[idx, 'PRIMEIRA_COMPRA_FEITA'] = 'TRUE'
+    
+    # Recalcula Nível
+    novo_nivel, _ = calcular_nivel_e_beneficios(df_clientes.loc[idx, 'GASTO_ACUMULADO'])
+    df_clientes.loc[idx, 'NIVEL_ATUAL'] = novo_nivel
+    
+    # 4. Persiste o DataFrame de Clientes
+    if write_csv_to_github(df_clientes, SHEET_NAME_CLIENTES_CASH, f"CRÉDITO CASHBACK: {nome} (R$ {cashback_credito:.2f})"):
+        st.toast(f"Cashback creditado com sucesso! +R$ {cashback_credito:.2f}", icon='💵')
+        st.toast(f"Novo Nível: {novo_nivel.upper()}", icon='⭐')
+        return True
+    else:
+        st.error("Falha CRÍTICA ao salvar o crédito de Cashback no GitHub.")
+        return False
+        
+# --------------------------------------------------------------------------------
+# --- FIM DAS FUNÇÕES DE LÓGICA DE CASHBACK ---
+# --------------------------------------------------------------------------------
+
+
 # --- Funções de Pedidos (ESCRITA HABILITADA) ---
 
 def atualizar_status_pedido(id_pedido, novo_status):
@@ -191,11 +311,20 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
     a porcentagem de itens separados (com imagem do próprio JSON se disponível).
     """
     try:
+        # A lógica para a coluna ITENS_JSON pode vir com aspas duplas,
+        # então tentamos decodificar como JSON.
         if pd.isna(pedido_json) or not str(pedido_json).strip():
             st.warning(f"Pedido {id_pedido} não possui detalhes de itens para exibir.")
             return 0
 
-        detalhes_pedido = json.loads(pedido_json)
+        # Tenta carregar o JSON (assumindo que está com aspas duplas escapadas)
+        try:
+            detalhes_pedido = json.loads(pedido_json)
+        except json.JSONDecodeError:
+            # Tenta limpar as aspas duplas extras que podem ter vindo da serialização do CSV
+            pedido_json_limpo = pedido_json.strip().replace('""', '"').strip('"')
+            detalhes_pedido = json.loads(pedido_json_limpo)
+            
         itens = detalhes_pedido.get('itens', [])
 
         if not itens:
@@ -224,7 +353,7 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
                             link_imagem = link_catalogo
 
             # 🖼️ 3️⃣ Fallback se continuar sem imagem
-            if not link_imagem:
+            if not link_imagem or link_imagem.lower() == 'nan':
                 link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
 
             # Layout
@@ -260,85 +389,14 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
         return progresso
 
     except json.JSONDecodeError:
-        st.error(f"Erro ao processar itens do pedido {id_pedido}: O formato dos dados dos itens é inválido.")
+        st.error(f"Erro ao processar itens do pedido {id_pedido}: O formato dos dados dos itens é inválido. [JSON Decode Error]")
         return 0
     except Exception as e:
         st.error(f"Erro inesperado ao processar itens do pedido {id_pedido}: {e}")
         return 0
-
-        # --- FIM DA CORREÇÃO 1 ---
-
-        total_itens = len(itens)
-        itens_separados = 0
         
-        # Cria um estado de sessão para o progresso do pedido, se ainda não existir
-        key_progress = f'pedido_{id_pedido}_itens_separados'
-        if key_progress not in st.session_state:
-            # Inicializa a lista de checks: False para cada item
-            st.session_state[key_progress] = [False] * total_itens
-            
-        for i, item in enumerate(itens):
-            link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
-            item_id = pd.to_numeric(item.get('id'), errors='coerce')
-            
-            # Busca link da imagem no catálogo
-            if not df_catalogo.empty and not pd.isna(item_id) and not df_catalogo[df_catalogo['ID'] == int(item_id)].empty: 
-                link_na_tabela = str(df_catalogo[df_catalogo['ID'] == int(item_id)].iloc[0].get('LINKIMAGEM', link_imagem)).strip()
-                
-                if link_na_tabela.lower() != 'nan' and link_na_tabela:
-                    link_imagem = link_na_tabela
-
-            col_check, col_img, col_detalhes = st.columns([0.5, 1, 3.5])
-            
-            # --- Lógica do Checkbox de Separação (Novo) ---
-            # Atualiza o estado da sessão quando o checkbox é clicado
-            checked = col_check.checkbox(
-                label="Separado",
-                value=st.session_state[key_progress][i],
-                key=f"check_{id_pedido}_{i}",
-            )
-            
-            # Armazena o estado do checkbox
-            if checked != st.session_state[key_progress][i]:
-                st.session_state[key_progress][i] = checked
-                # Forçar um pequeno rerun para a barra de progresso atualizar imediatamente
-                st.rerun() 
-            # --- Fim Lógica do Checkbox ---
-
-            col_img.image(link_imagem, width=100)
-            quantidade = item.get('qtd', item.get('quantidade', 0))
-            preco_unitario = float(item.get('preco', 0.0))
-            subtotal = item.get('subtotal')
-            if subtotal is None: subtotal = preco_unitario * quantidade
-            
-            col_detalhes.markdown(
-                f"**Produto:** {item.get('nome', 'N/A')}\n\n"
-                f"**Quantidade:** {quantidade}\n\n"
-                f"**Subtotal:** R$ {subtotal:.2f}"
-            ); 
-            st.markdown("---")
-            
-            if st.session_state[key_progress][i]:
-                itens_separados += 1
-                
-        # Calcula e retorna a porcentagem de progresso
-        if total_itens > 0:
-            progresso = int((itens_separados / total_itens) * 100)
-            return progresso
-        return 0
-        
-    except json.JSONDecodeError:
-        st.error(f"Erro ao processar itens do pedido {id_pedido}: O formato dos dados dos itens é inválido.")
-        return 0
-    except Exception as e: 
-        st.error(f"Erro inesperado ao processar itens do pedido {id_pedido}: {e}")
-        return 0 # Retorna 0% em caso de erro
-        
-    except Exception as e: 
-        st.error(f"Erro ao processar itens do pedido: {e}")
-        return 0 # Retorna 0% em caso de erro
-
 # --- FUNÇÕES CRUD PARA PRODUTOS (ESCRITA HABILITADA) ---
+# ... (Funções CRUD para Produtos e Promoções permanecem inalteradas) ...
 
 def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponivel):
     df = carregar_dados(SHEET_NAME_CATALOGO).copy()
@@ -369,7 +427,7 @@ def excluir_produto(id_produto):
     df = carregar_dados(SHEET_NAME_CATALOGO).copy()
     if df.empty: return False
 
-    df = df[df['ID'] != int(id_produto)]
+    df = df[df['ID'] != id_produto]
     commit_msg = f"Excluir produto ID: {id_produto}"
     return write_csv_to_github(df, SHEET_NAME_CATALOGO, commit_msg)
 
@@ -464,6 +522,7 @@ with tab_pedidos:
         keys_to_delete = [k for k in st.session_state if k.startswith('pedido_') and k.endswith('_itens_separados')]
         for k in keys_to_delete:
             del st.session_state[k]
+        st.session_state['data_version'] += 1
         st.rerun()
 
     df_pedidos_raw = carregar_dados(SHEET_NAME_PEDIDOS)
@@ -476,7 +535,7 @@ with tab_pedidos:
 
         st.subheader("🔍 Filtrar Pedidos")
         col_filtro1, col_filtro2 = st.columns(2)
-        data_filtro = col_filtro1.date_input("Filtrar por data:")
+        data_filtro = col_filtro1.date_input("Filtrar por data:", value=None)
         texto_filtro = col_filtro2.text_input("Buscar por cliente ou produto:")
 
         df_filtrado = df_pedidos_raw.copy()
@@ -490,23 +549,29 @@ with tab_pedidos:
             ]
 
         st.markdown("---")
-        pedidos_pendentes = df_filtrado[df_filtrado['STATUS'] != 'Finalizado']
+        # Pedidos PENDENTES são aqueles com status 'PENDENTE' (do novo fluxo)
+        pedidos_pendentes = df_filtrado[df_filtrado['STATUS'] == 'PENDENTE']
         pedidos_finalizados = df_filtrado[df_filtrado['STATUS'] == 'Finalizado']
+        pedidos_separacao = df_filtrado[df_filtrado['STATUS'].isin(['', 'Separacao', 'SEPARACAO'])] # Pedidos mais antigos ou em separação
 
+        # Combina pedidos de separação e pendentes para a fila de trabalho
+        pedidos_a_trabalhar = pd.concat([pedidos_separacao, pedidos_pendentes]).drop_duplicates(subset=['ID_PEDIDO'])
+        
         # ======================
-        # PEDIDOS PENDENTES
+        # PEDIDOS PENDENTES (AGUARDANDO CRÉDITO)
         # ======================
-        st.header("⏳ Pedidos Pendentes")
-        if pedidos_pendentes.empty:
-            st.info("Nenhum pedido pendente encontrado.")
+        st.header("⏳ Pedidos Pendentes / Em Separação")
+        if pedidos_a_trabalhar.empty:
+            st.info("Nenhum pedido pendente ou em separação encontrado.")
         else:
-            for index, pedido in pedidos_pendentes.iloc[::-1].iterrows():
+            for index, pedido in pedidos_a_trabalhar.iloc[::-1].iterrows():
                 id_pedido = pedido['ID_PEDIDO']
                 data_hora_str = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indisponível"
                 titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {data_hora_str} - Total: R$ {pedido['VALOR_TOTAL']}"
 
                 with st.expander(titulo):
                     st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{id_pedido}`")
+                    st.markdown(f"**Status Atual:** `{pedido['STATUS']}`")
 
                     # ✅ Usa a coluna correta (ITENS_JSON)
                     progresso_separacao = exibir_itens_pedido(id_pedido, pedido['ITENS_JSON'], df_catalogo_pedidos)
@@ -515,17 +580,31 @@ with tab_pedidos:
                     st.progress(progresso_separacao / 100)
 
                     pode_finalizar = progresso_separacao == 100
-
-                    if st.button("✅ Finalizar Pedido", key=f"finalizar_{id_pedido}", disabled=not pode_finalizar):
-                        if atualizar_status_pedido(id_pedido, novo_status="Finalizado"):
-                            st.success(f"Pedido {id_pedido} finalizado!")
-                            key_progress = f'pedido_{id_pedido}_itens_separados'
-                            if key_progress in st.session_state:
-                                del st.session_state[key_progress]
-                            st.session_state['data_version'] += 1
-                            st.rerun()
+                    
+                    # --- NOVO FLUXO DE FINALIZAÇÃO COM CASHBACK ---
+                    if st.button("✅ Finalizar Pedido e Creditar Cashback", key=f"finalizar_{id_pedido}", disabled=not pode_finalizar):
+                        
+                        nome_cliente = pedido['NOME_CLIENTE']
+                        contato_cliente = pedido['CONTATO_CLIENTE']
+                        valor_venda = float(pedido['VALOR_TOTAL']) 
+                        
+                        # 1. Lança o Cashback (Cadastra se novo, credita se existente)
+                        if lancar_venda_cashback(nome_cliente, contato_cliente, valor_venda):
+                            # 2. Cashback SUCESSO: Agora finaliza o pedido (muda status para Finalizado)
+                            if atualizar_status_pedido(id_pedido, novo_status="Finalizado"):
+                                st.success(f"Pedido {id_pedido} FINALIZADO e Cashback CREDITADO!")
+                                # Limpa estado e força reload de tudo
+                                st.session_state['data_version'] += 1 
+                                st.cache_data.clear() # Limpa o cache de clientes de cashback para ver o novo saldo
+                                st.rerun()
+                            else:
+                                st.error("Falha ao finalizar pedido no pedidos.csv. O Cashback foi creditado, verifique o arquivo!")
                         else:
-                            st.error("Falha ao finalizar pedido.")
+                            # 3. Cashback FALHA: Não finaliza o pedido
+                            st.error(f"❌ Falha CRÍTICA: O Cashback não foi creditado. Pedido {id_pedido} mantido como PENDENTE.")
+                    
+                    # --- FIM NOVO FLUXO DE FINALIZAÇÃO ---
+
 
         # ======================
         # PEDIDOS FINALIZADOS
@@ -544,8 +623,9 @@ with tab_pedidos:
                     col_reverter, col_excluir = st.columns(2)
                     with col_reverter:
                         if st.button("↩️ Reverter para Pendente", key=f"reverter_{pedido['ID_PEDIDO']}", use_container_width=True):
-                            if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status=""):
-                                st.success(f"Pedido {pedido['ID_PEDIDO']} revertido.")
+                            # Reverte o status para PENDENTE (novo status de trabalho)
+                            if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status="PENDENTE"): 
+                                st.success(f"Pedido {pedido['ID_PEDIDO']} revertido para PENDENTE.")
                                 st.session_state['data_version'] += 1
                                 st.rerun()
                             else:
@@ -562,6 +642,11 @@ with tab_pedidos:
                     st.markdown("---")
                     # ✅ Também usa a coluna ITENS_JSON aqui
                     exibir_itens_pedido(pedido['ID_PEDIDO'], pedido['ITENS_JSON'], df_catalogo_pedidos)
+
+
+# --- FUNÇÕES CRUD PARA PRODUTOS (ESCRITA HABILITADA) ---
+# ... (Restante do código CRUD de Produtos e Promoções permanece inalterado) ...
+# O código continua aqui, mas não é repetido para brevidade.
 
 
 
@@ -667,6 +752,7 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
 
 
