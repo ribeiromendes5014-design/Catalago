@@ -4,37 +4,19 @@ import pandas as pd
 import json
 from datetime import datetime, date
 import time
-import requests 
+import requests
 import base64
-import numpy as np 
+import numpy as np
 import random
 from io import StringIO
 import ast
 
-# 1. Carregue seu CSV
-df = pd.read_csv("pedidos.csv")
-
-# 2. Selecione a linha do pedido (usando o primeiro pedido como exemplo)
-primeiro_pedido = df.iloc[0]
-
-# 3. Converta a string ITENS_JSON para um dicionário Python
-# O Streamlit/Pandas pode precisar de um 'replace' inicial devido às aspas duplas escapadas (\"\" -> ")
-try:
-    json_string = primeiro_pedido['ITENS_JSON'].replace('""', '"')
-    dados_json = json.loads(json_string)
-except json.JSONDecodeError as e:
-    # Tratar erro se o JSON estiver malformado
-    print(f"Erro ao decodificar JSON: {e}")
-    dados_json = {}
-
-# 4. Extraia o saldo de cashback
-saldo_cashback = dados_json.get("cliente_saldo_cashback", 0.0)
-
-# O valor extraído será: 0.9
-print(saldo_cashback)
+# O bloco de código de teste que lia 'pedidos.csv' localmente FOI REMOVIDO.
+# A lógica principal agora irá carregar os dados CORRETAMENTE do GitHub,
+# através da função carregar_dados() na aba Pedidos.
 
 # --- Configurações de Dados ---
-SHEET_NAME_CATALOGO = "produtos_estoque" 
+SHEET_NAME_CATALOGO = "produtos_estoque"
 SHEET_NAME_PEDIDOS = "pedidos"
 SHEET_NAME_PROMOCOES = "promocoes"
 # === NOVO: ARQUIVO DE CASHBACK E CONSTANTES ===
@@ -42,13 +24,13 @@ SHEET_NAME_CLIENTES_CASH = "clientes_cash"
 CASHBACK_LANCAMENTOS_CSV = "lancamentos.csv"
 # Constantes de Cálculo (Baseado no fluxo cashback_system.py)
 BONUS_INDICACAO_PERCENTUAL = 0.03
-CASHBACK_INDICADO_PRIMEIRA_COMPRA = 0.05 
+CASHBACK_INDICADO_PRIMEIRA_COMPRA = 0.05
 # ==============================================
 
 # --- Configurações do Repositório de Pedidos Externo ---
 # Assumindo que os dados de Pedidos e Clientes Cashback estão aqui:
 PEDIDOS_REPO_FULL = "ribeiromendes5014-design/fluxo"
-PEDIDOS_BRANCH = "main" 
+PEDIDOS_BRANCH = "main"
 
 # --- Controle de Cache para forçar o reload do GitHub ---
 if 'data_version' not in st.session_state:
@@ -57,13 +39,13 @@ if 'data_version' not in st.session_state:
 # --- Configurações do GitHub (Lendo do st.secrets) ---
 try:
     GITHUB_TOKEN = st.secrets["github"]["token"]
-    REPO_NAME_FULL = st.secrets["github"]["repo_name"] 
-    BRANCH = st.secrets["github"]["branch"] 
-    
+    REPO_NAME_FULL = st.secrets["github"]["repo_name"]
+    BRANCH = st.secrets["github"]["branch"]
+
     # URLs de API
     GITHUB_RAW_BASE_URL = f"https://raw.githubusercontent.com/{REPO_NAME_FULL}/{BRANCH}"
     GITHUB_API_BASE_URL = f"https://api.github.com/repos/{REPO_NAME_FULL}/contents"
-    
+
     HEADERS = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json",
@@ -694,6 +676,7 @@ with tab_produtos:
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     # ... (Restante do código da aba Promoções) ...
+
 
 
 
