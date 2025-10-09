@@ -11,6 +11,28 @@ import random
 from io import StringIO
 import ast
 
+# 1. Carregue seu CSV
+df = pd.read_csv("pedidos.csv")
+
+# 2. Selecione a linha do pedido (usando o primeiro pedido como exemplo)
+primeiro_pedido = df.iloc[0]
+
+# 3. Converta a string ITENS_JSON para um dicionário Python
+# O Streamlit/Pandas pode precisar de um 'replace' inicial devido às aspas duplas escapadas (\"\" -> ")
+try:
+    json_string = primeiro_pedido['ITENS_JSON'].replace('""', '"')
+    dados_json = json.loads(json_string)
+except json.JSONDecodeError as e:
+    # Tratar erro se o JSON estiver malformado
+    print(f"Erro ao decodificar JSON: {e}")
+    dados_json = {}
+
+# 4. Extraia o saldo de cashback
+saldo_cashback = dados_json.get("cliente_saldo_cashback", 0.0)
+
+# O valor extraído será: 0.9
+print(saldo_cashback)
+
 # --- Configurações de Dados ---
 SHEET_NAME_CATALOGO = "produtos_estoque" 
 SHEET_NAME_PEDIDOS = "pedidos"
@@ -672,5 +694,6 @@ with tab_produtos:
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     # ... (Restante do código da aba Promoções) ...
+
 
 
