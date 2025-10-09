@@ -12,7 +12,7 @@ SHEET_NAME_PEDIDOS = "pedidos"
 SHEET_NAME_PROMOCOES = "promocoes"
 
 # --- Configurações do GitHub ---
-GITHUB_RAW_BASE_URL = "https://raw.githubusercontent.com/ribeiromendes5014-design/Catalago/main"
+GITHUB_RAW_BASE_URL = "https://raw.githubusercontent.com/ribeiromendes5014-design/fluxo/main"
 
 # --- Conexão e Carregamento de Dados (CORRIGIDO E NORMALIZADO) ---
 
@@ -279,5 +279,6 @@ with tab_promocoes:
                 if st.button("🗑️ Excluir Promoção", key=f"del_promo_{promo.get('ID_PROMOCAO', index)}", type="primary"):
                     if excluir_promocao(promo['ID_PROMOCAO']):
                         st.success("Promoção excluída!"); st.rerun()
+
 
 
