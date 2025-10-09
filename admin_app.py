@@ -577,29 +577,34 @@ tab_pedidos, tab_produtos, tab_promocoes = st.tabs(["Pedidos", "Produtos", "🔥
 
 # --- VARIÁVEL DE CONTROLE DE VERSÃO JÁ ESTÁ NO TOPO ---
 def extract_customer_cashback(itens_json_string):
-    """Tenta extrair o saldo de cashback do cliente de uma string JSON."""
-    # IMPORTS REMOVIDOS DAQUI, POIS JÁ ESTÃO NO TOPO DO ARQUIVO
+    """Tenta extrair o saldo de cashback do cliente de uma string JSON, tratando problemas comuns de CSV."""
     
     if pd.isna(itens_json_string) or not itens_json_string:
         return 0.0
     
+    s = str(itens_json_string).strip()
+    
+    # 1. Limpeza de aspas (Problema comum do CSV: o JSON fica envelopado e mal escapado)
+    if s.startswith('"') and s.endswith('"'):
+        s = s[1:-1] # Remove as aspas externas que sobraram
+    s = s.replace('""', '"') # Des-escapa as aspas internas restantes
+    
     try:
-        # 1. Tenta limpar as aspas escapadas
-        clean_string = str(itens_json_string).replace('""', '"')
+        # 2. Tenta carregar como JSON padrão
+        data = json.loads(s)
         
-        # 2. Tenta carregar como JSON
-        data = json.loads(clean_string)
-        
-        # 3. Retorna o saldo do cliente
+        # 3. Retorna o saldo do cliente (é o saldo ACUMULADO no momento do pedido)
         return data.get("cliente_saldo_cashback", 0.0)
         
     except (json.JSONDecodeError, AttributeError):
-        # Se json.loads falhar, tenta ast.literal_eval
+        # 4. Se JSON falhar, tenta ast.literal_eval (para strings que parecem dicts Python)
         try:
-            data = ast.literal_eval(itens_json_string)
+            # Usamos a string original ou a limpa? Vamos usar a original/limpa por segurança
+            data = ast.literal_eval(s)
             return data.get("cliente_saldo_cashback", 0.0)
         except Exception:
-            # Falha total, retorna 0
+            # 5. Falha total, retorna 0
+            # st.warning(f"Falha ao extrair cashback: {s[:50]}...") # Linha opcional para debug
             return 0.0
 
 with tab_pedidos:
@@ -746,6 +751,7 @@ with tab_produtos:
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     # ... (Restante do código da aba Promoções) ...
+
 
 
 
