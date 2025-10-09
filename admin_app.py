@@ -860,9 +860,9 @@ with tab_produtos:
             with st.form("form_editar_produto"):
                 st.info(f"Editando produto ID: {id_selecionado}")
                 
-                edit_nome = st.text_input("Nome do Produto", value=produto_atual['NOME'], key="edit_nome")
-                # LINHA 870 CORRIGIDA IMPLICITAMENTE PELA CORREÇÃO ACIMA
-                edit_nome = st.text_input("Nome do Produto", value=produto_atual.get('NOME', ''), key="edit_nome")
+               
+                edit_nome = st.text_input("Nome do Produto", value=produto_atual.get('NOME', ''), key="edit_nome") 
+                
                 edit_preco = st.number_input("Preço (R$)", min_value=0.01, format="%.2f", value=preco_float, key="edit_preco")
                 edit_desc_curta = st.text_input("Descrição Curta", value=produto_atual.get('DESCRICAOCURTA', ''), key="edit_desc_curta")
                 edit_desc_longa = st.text_area("Descrição Longa", value=produto_atual.get('DESCRICAOLONGA', ''), key="edit_desc_longa")
@@ -1018,6 +1018,7 @@ with tab_promocoes:
                         st.rerun()
                     else:
                         st.error("Falha ao excluir promoção.")
+
 
 
 
