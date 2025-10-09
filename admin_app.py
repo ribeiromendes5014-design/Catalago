@@ -576,6 +576,31 @@ st.title("⭐ Painel de Administração | Doce&Bella")
 tab_pedidos, tab_produtos, tab_promocoes = st.tabs(["Pedidos", "Produtos", "🔥 Promoções"])
 
 # --- VARIÁVEL DE CONTROLE DE VERSÃO JÁ ESTÁ NO TOPO ---
+def extract_customer_cashback(itens_json_string):
+    """Tenta extrair o saldo de cashback do cliente de uma string JSON."""
+    # IMPORTS REMOVIDOS DAQUI, POIS JÁ ESTÃO NO TOPO DO ARQUIVO
+    
+    if pd.isna(itens_json_string) or not itens_json_string:
+        return 0.0
+    
+    try:
+        # 1. Tenta limpar as aspas escapadas
+        clean_string = str(itens_json_string).replace('""', '"')
+        
+        # 2. Tenta carregar como JSON
+        data = json.loads(clean_string)
+        
+        # 3. Retorna o saldo do cliente
+        return data.get("cliente_saldo_cashback", 0.0)
+        
+    except (json.JSONDecodeError, AttributeError):
+        # Se json.loads falhar, tenta ast.literal_eval
+        try:
+            data = ast.literal_eval(itens_json_string)
+            return data.get("cliente_saldo_cashback", 0.0)
+        except Exception:
+            # Falha total, retorna 0
+            return 0.0
 
 with tab_pedidos:
     st.header("📋 Pedidos Recebidos"); 
@@ -590,17 +615,18 @@ with tab_pedidos:
     df_pedidos_raw = carregar_dados(SHEET_NAME_PEDIDOS); 
     df_catalogo_pedidos = carregar_dados(SHEET_NAME_CATALOGO)
     
-    if df_pedidos_raw.empty: st.info("Nenhum pedido foi encontrado na planilha.")
+    # ======================================================================
+    # 💥 PASSO ESSENCIAL: CRIA A COLUNA COM O SALDO EXTRAÍDO DO JSON
+    if not df_pedidos_raw.empty and 'ITENS_JSON' in df_pedidos_raw.columns:
+        df_pedidos_raw['SALDO_CASHBACK_CLIENTE_PEDIDO'] = df_pedidos_raw['ITENS_JSON'].apply(
+            extract_customer_cashback
+        )
     else:
-        df_pedidos_raw['DATA_HORA'] = pd.to_datetime(df_pedidos_raw['DATA_HORA'], errors='coerce'); st.subheader("🔍 Filtrar Pedidos")
-        col_filtro1, col_filtro2 = st.columns(2); data_filtro = col_filtro1.date_input("Filtrar por data:", value=None); texto_filtro = col_filtro2.text_input("Buscar por cliente ou produto:")
-        df_filtrado = df_pedidos_raw.copy()
-        if data_filtro: df_filtrado = df_filtrado[df_filtrado['DATA_HORA'].dt.date == data_filtro]
-        if texto_filtro.strip():
-            texto_filtro = texto_filtro.lower(); df_filtrado = df_filtrado[df_filtrado['NOME_CLIENTE'].astype(str).str.lower().str.contains(texto_filtro) | df_filtrado['ITENS_PEDIDO'].astype(str).str.lower().str.contains(texto_filtro) | df_filtrado['ITENS_JSON'].astype(str).str.lower().str.contains(texto_filtro)]  
-        st.markdown("---"); pedidos_pendentes = df_filtrado[df_filtrado['STATUS'] != 'Finalizado']; pedidos_finalizados = df_filtrado[df_filtrado['STATUS'] == 'Finalizado']
-        st.header("⏳ Pedidos Pendentes")
-        if pedidos_pendentes.empty: st.info("Nenhum pedido pendente encontrado.")
+        # Garante que a coluna exista mesmo se estiver vazia
+        df_pedidos_raw['SALDO_CASHBACK_CLIENTE_PEDIDO'] = 0.0
+    # ======================================================================
+
+    if df_pedidos_raw.empty: st.info("Nenhum pedido foi encontrado na planilha.")
         else:
             for index, pedido in pedidos_pendentes.iloc[::-1].iterrows():
                 id_pedido = pedido['ID_PEDIDO']
@@ -614,13 +640,17 @@ with tab_pedidos:
                 with st.expander(titulo):
                     st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{id_pedido}`")
                     
+                    saldo_anterior = pedido['SALDO_CASHBACK_CLIENTE_PEDIDO']
+                    st.markdown(f"**Saldo Cashback do Cliente:** **R$ {saldo_anterior:.2f}**")
+                    st.markdown("---")
+                     # -------------------------------------------------------------
+                   
                     if cashback_a_creditar > 0.00:
                         st.markdown(f"**💰 Cashback a ser Creditado:** **R$ {cashback_a_creditar:.2f}**")
                         st.info("Este valor será creditado ao cliente (no clientes_cash.csv) **após** a finalização deste pedido.")
                     else:
-                        st.markdown("💰 **Cashback:** R$ 0.00")
+                        st.markdown("💰 **Cashback a ser Creditado:** R$ 0.00")
                         st.caption("Nenhum produto neste pedido está configurado com porcentagem de Cashback (CASHBACKPERCENT).")
-                    st.markdown("---")
                     # --- FIM BLOCO DE VISUALIZAÇÃO DE CASHBACK ---
                     
                     progresso_separacao = exibir_itens_pedido(id_pedido, pedido_json_data, df_catalogo_pedidos)
@@ -676,6 +706,7 @@ with tab_produtos:
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     # ... (Restante do código da aba Promoções) ...
+
 
 
 
