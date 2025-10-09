@@ -12,7 +12,7 @@ from io import StringIO
 import os
 import ast
 
-
+pedidos_path = "pedidos.csv"
 # --- Variáveis de Configuração ---
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 DATA_REPO_NAME = os.environ.get("DATA_REPO_NAME", os.environ.get("REPO_NAME"))
@@ -934,3 +934,4 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
