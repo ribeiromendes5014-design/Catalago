@@ -6,26 +6,19 @@ from datetime import datetime, date
 import time
 import requests 
 import base64
-import numpy as np 
-import random
 from io import StringIO
 
-# --- Configurações de Dados (AJUSTADO) ---
-SHEET_NAME_CATALOGO = "produtos_estoque" # <<< NOVO NOME DO ARQUIVO
+# --- Configurações dos Nomes dos Arquivos ---
+SHEET_NAME_CATALOGO = "produtos_estoque"
 SHEET_NAME_PEDIDOS = "pedidos"
 SHEET_NAME_PROMOCOES = "promocoes"
-# === NOVO: ARQUIVO DE CASHBACK E CONSTANTES ===
 SHEET_NAME_CLIENTES_CASH = "clientes_cash"
-CASHBACK_LANCAMENTOS_CSV = "lancamentos.csv" # Opcional: Se quiser registrar lançamentos
+
+# --- Constantes do Cashback ---
 BONUS_INDICACAO_PERCENTUAL = 0.03 
 CASHBACK_INDICADO_PRIMEIRA_COMPRA = 0.05
-# ============================================
 
-# --- Configurações do Repositório de Pedidos Externo (NOVO) ---
-PEDIDOS_REPO_FULL = "ribeiromendes5014-design/fluxo"
-PEDIDOS_BRANCH = "main" 
-
-# --- Controle de Cache para forçar o reload do GitHub ---
+# --- Controle de Cache ---
 if 'data_version' not in st.session_state:
     st.session_state['data_version'] = 0
 
@@ -35,69 +28,45 @@ try:
     REPO_NAME_FULL = st.secrets["github"]["repo_name"] 
     BRANCH = st.secrets["github"]["branch"] 
     
-    # URLs de API (Base URL é para o repositório principal, mas será ajustado nas funções)
-    GITHUB_RAW_BASE_URL = f"https://raw.githubusercontent.com/{REPO_NAME_FULL}/{BRANCH}"
-    GITHUB_API_BASE_URL = f"https://api.github.com/repos/{REPO_NAME_FULL}/contents"
-    
     HEADERS = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json",
     }
 except KeyError:
-    st.error("Erro de configuração: As chaves 'token', 'repo_name' e 'branch' do GitHub precisam estar configuradas no secrets.toml."); st.stop()
+    st.error("Erro de configuração: As chaves 'token', 'repo_name' e 'branch' do GitHub precisam estar configuradas no secrets.toml.")
+    st.stop()
 
-
-# --- Funções Base do GitHub para Leitura e Escrita ---
+# --- Funções Base do GitHub (CORRIGIDAS E UNIFICADAS) ---
 
 @st.cache_data(ttl=5)
-def fetch_github_data_v2(sheet_name, version_control):
-    """Carrega dados de um CSV do GitHub via API (sem cache da CDN)."""
-    
+def fetch_github_data(sheet_name, version_control):
+    """Carrega dados de um CSV do repositório configurado nos secrets."""
     csv_filename = f"{sheet_name}.csv"
-
-    # --- Repositório único (todos os CSVs estão no mesmo repo) ---
-    repo_to_use = REPO_NAME_FULL
-    branch_to_use = BRANCH
-
-    api_url = f"https://api.github.com/repos/{repo_to_use}/contents/{csv_filename}?ref={branch_to_use}"
+    api_url = f"https://api.github.com/repos/{REPO_NAME_FULL}/contents/{csv_filename}?ref={BRANCH}"
 
     try:
-        # Faz a requisição à API do GitHub
         response = requests.get(api_url, headers=HEADERS)
-
         if response.status_code != 200:
-            st.warning(f"Erro ao buscar '{csv_filename}': Status {response.status_code}. Repositório: {repo_to_use}")
+            error_details = response.json().get('message', 'Erro desconhecido')
+            st.error(f"FALHA ao buscar '{csv_filename}': Status {response.status_code} - {error_details}. Verifique o nome do repositório, branch e se o arquivo existe.")
             return pd.DataFrame()
 
-        # Decodifica o conteúdo Base64 vindo do GitHub
         content = base64.b64decode(response.json()["content"]).decode("utf-8")
+        
+        if not content.strip():
+             st.warning(f"Arquivo '{csv_filename}' está vazio.")
+             return pd.DataFrame()
 
-        # --- LÓGICA ROBUSTA PARA LER CSV COM CAMPOS COMPLEXOS (JSON) ---
-        try:
-            df = pd.read_csv(
-                StringIO(content),  
-                sep=",",  
-                engine="python",  # Crucial para lidar com o JSON complexo no pedidos.csv
-                on_bad_lines="warn"
-            )
-        except Exception as read_error:
-            # Captura o erro na leitura para dar um feedback mais útil
-            st.error(f"Erro de leitura do CSV '{csv_filename}'. Causa: {read_error}. O arquivo pode estar vazio ou mal formatado.")
-            return pd.DataFrame()
-        # -------------------------------------------------------------
-
-        # Padroniza nomes de colunas
-        df.columns = df.columns.str.strip().str.upper().str.replace(" ", "_")
-
-        if "COLUNA" in df.columns:
-            df.drop(columns=["COLUNA"], inplace=True)
-
+        df = pd.read_csv(StringIO(content), sep=",", engine='python', on_bad_lines='warn')
+        
+        # Padronização de Colunas
+        df.columns = df.columns.str.strip().str.upper().str.replace(' ', '_')
         if "PRECO" in df.columns:
             df["PRECO"] = df["PRECO"].astype(str).str.replace(".", ",", regex=False)
-
         if sheet_name == SHEET_NAME_PEDIDOS and "STATUS" not in df.columns:
             df["STATUS"] = ""
-
+        if sheet_name == SHEET_NAME_PEDIDOS and "ID_PEDIDO" in df.columns:
+            df['ID_PEDIDO'] = df['ID_PEDIDO'].astype(str)
         if sheet_name == SHEET_NAME_CATALOGO and "ID" in df.columns:
             df["ID"] = pd.to_numeric(df["ID"], errors="coerce")
             df.dropna(subset=["ID"], inplace=True)
@@ -109,72 +78,42 @@ def fetch_github_data_v2(sheet_name, version_control):
         st.error(f"Erro geral ao carregar dados de '{csv_filename}': {e}")
         return pd.DataFrame()
 
-
-
-# Função auxiliar para o app usar o nome antigo e passar a versão
 def carregar_dados(sheet_name):
-    # Passa o contador de versão para a função em cache
-    return fetch_github_data_v2(sheet_name, st.session_state['data_version'])
+    """Função auxiliar para chamar a leitura de dados com controle de versão."""
+    return fetch_github_data(sheet_name, st.session_state.get('data_version', 0))
 
-# Função para obter o SHA e fazer o PUT (commit)
 def write_csv_to_github(df, sheet_name, commit_message):
-    """Obtém o SHA do arquivo e faz o commit do novo DataFrame no GitHub."""
-    
+    """Salva (escreve) um DataFrame como CSV no repositório configurado nos secrets."""
     csv_filename = f"{sheet_name}.csv"
-        
-    if sheet_name == SHEET_NAME_PEDIDOS or sheet_name == SHEET_NAME_CLIENTES_CASH:
-        repo_to_write = PEDIDOS_REPO_FULL
-        branch_to_write = PEDIDOS_BRANCH
-    else:
-        repo_to_write = REPO_NAME_FULL
-        branch_to_write = BRANCH
-        
-    GITHUB_API_BASE_URL_WRITE = f"https://api.github.com/repos/{repo_to_write}/contents"
-    api_url = f"{GITHUB_API_BASE_URL_WRITE}/{csv_filename}"
+    api_url = f"https://api.github.com/repos/{REPO_NAME_FULL}/contents/{csv_filename}"
     
     # 1. Obter o SHA atual do arquivo
-    response = requests.get(api_url, headers=HEADERS)
-    if response.status_code != 200:
-        if response.status_code == 404:
-             sha = None
-        else:
-             st.error(f"Erro ao obter SHA: {response.status_code} - {response.json().get('message', 'Erro desconhecido')}")
-             return False
-    
-    try:
-        if response.status_code == 200:
-            sha = response.json()['sha']
-    except KeyError:
-        st.error("Erro interno: SHA não encontrado na resposta do GitHub.")
+    response = requests.get(api_url, headers=HEADERS, params={"ref": BRANCH})
+    sha = None
+    if response.status_code == 200:
+        sha = response.json().get('sha')
+    elif response.status_code != 404:
+        st.error(f"Erro ao obter SHA de '{csv_filename}': {response.status_code} - {response.json().get('message', 'Erro')}")
         return False
-
-    # 2. Preparar o novo conteúdo CSV (FORÇANDO UPPERCASE E UNDERSCORE PARA GRAVAÇÃO)
+    
+    # 2. Preparar o conteúdo
     df_to_save = df.copy()
     df_to_save.columns = df_to_save.columns.str.strip().str.upper().str.replace(' ', '_')
-    
-    csv_content = df_to_save.fillna('').to_csv(index=False, sep=',').replace('\n\n', '\n')
-    
-    # 3. Codificar o conteúdo em Base64
+    csv_content = df_to_save.to_csv(index=False, sep=',')
     content_base64 = base64.b64encode(csv_content.encode('utf-8')).decode('utf-8')
 
-    # 4. Enviar a requisição PUT (Commit)
-    payload = {
-        "message": commit_message,
-        "content": content_base64,
-        "branch": branch_to_write
-    }
+    # 3. Fazer o commit (PUT)
+    payload = {"message": commit_message, "content": content_base64, "branch": BRANCH}
     if sha:
         payload["sha"] = sha 
     
     put_response = requests.put(api_url, headers=HEADERS, json=payload)
     
     if put_response.status_code in [200, 201]:
-        # Força a limpeza do cache de leitura após o sucesso da escrita
-        fetch_github_data_v2.clear() 
+        fetch_github_data.clear() 
         return True
     else:
-        error_message = put_response.json().get('message', 'Erro desconhecido')
-        st.error(f"Falha no Commit: {put_response.status_code} - {error_message}")
+        st.error(f"Falha no Commit para '{csv_filename}': {put_response.status_code} - {put_response.json().get('message', 'Erro')}")
         return False
 # --- FIM DA SUBSTITUIÇÃO DE write_csv_to_github ---
 
@@ -245,34 +184,19 @@ def fetch_github_data_v2(sheet_name, version_control):
         st.error(f"Erro geral ao carregar dados de '{csv_filename}': {e}")
         return pd.DataFrame()
 
-# --------------------------------------------------------------------------------
-# --- FUNÇÕES DE LÓGICA DE CASHBACK (INTEGRADO AO ADMIN) ---
-# --------------------------------------------------------------------------------
-
+# --- FUNÇÕES DE LÓGICA DE CASHBACK ---
 @st.cache_data(ttl=5)
 def carregar_clientes_cashback():
-    """Carrega e padroniza o DataFrame de clientes de cashback."""
     df = carregar_dados(SHEET_NAME_CLIENTES_CASH).copy()
     if df.empty:
-        # Colunas padrão do cashback_system.py
-        cols = ['NOME', 'APELIDO/DESCRIÇÃO', 'TELEFONE', 'CASHBACK_DISPONÍVEL', 'GASTO_ACUMULADO', 'NIVEL_ATUAL', 'INDICADO_POR', 'PRIMEIRA_COMPRA_FEITA']
+        cols = ['NOME', 'APELIDO/DESCRIÇÃO', 'TELEFONE', 'CASHBACK_DISPONIVEL', 'GASTO_ACUMULADO', 'NIVEL_ATUAL', 'INDICADO_POR', 'PRIMEIRA_COMPRA_FEITA']
         df = pd.DataFrame(columns=[c.upper().replace(' ', '_') for c in cols])
-        df['TELEFONE'] = df['TELEFONE'].astype(str) # Garante que a coluna de telefone existe
         return df
 
-    # Renomeia e padroniza as colunas conforme o schema do cashback_system.py
-    df.rename(columns={
-        'TELEFONE': 'TELEFONE', 
-        'CASHBACK_DISPONIVEL': 'CASHBACK_DISPONIVEL',
-        'NIVEL_ATUAL': 'NIVEL_ATUAL'
-    }, inplace=True, errors='ignore')
-
-    # Limpa o telefone para ser usado como chave única
     df['CONTATO_LIMPO'] = df['TELEFONE'].astype(str).str.replace(r'\D', '', regex=True).str.strip()
-    df['CASHBACK_DISPONIVEL'] = pd.to_numeric(df['CASHBACK_DISPONIVEL'], errors='coerce').fillna(0.0)
-    df['GASTO_ACUMULADO'] = pd.to_numeric(df['GASTO_ACUMULADO'], errors='coerce').fillna(0.0)
-    df['NIVEL_ATUAL'] = df['NIVEL_ATUAL'].fillna('Prata')
-    
+    df['CASHBACK_DISPONIVEL'] = pd.to_numeric(df.get('CASHBACK_DISPONIVEL'), errors='coerce').fillna(0.0)
+    df['GASTO_ACUMULADO'] = pd.to_numeric(df.get('GASTO_ACUMULADO'), errors='coerce').fillna(0.0)
+    df['NIVEL_ATUAL'] = df.get('NIVEL_ATUAL', 'Prata').fillna('Prata')
     return df
 
 def cadastrar_cliente_cashback(df_clientes, nome, contato, nivel='Prata'):
@@ -826,6 +750,7 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
 
 
