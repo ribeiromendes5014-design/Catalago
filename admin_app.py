@@ -171,11 +171,11 @@ with tab_produtos:
             with st.container(border=True):
                 col1, col2 = st.columns([1, 4])
                 
-                # CORREÇÃO: Garante que o link da imagem é uma string antes de usar no st.image
                 link_imagem_produto = str(produto.get("LINKIMAGEM")).strip() 
                 
                 with col1:
-                    if link_imagem_produto.lower() == 'nan' or not link_imagem_produto:
+                    # ✅ CORREÇÃO APLICADA AQUI
+                    if link_imagem_produto.lower() in ['nan', 'none'] or not link_imagem_produto:
                          img_url = "https://via.placeholder.com/150?text=Sem+Imagem"
                     else:
                          img_url = link_imagem_produto
@@ -195,7 +195,6 @@ with tab_produtos:
                             curta_edit = st.text_input("Desc. Curta", value=produto.get('DESCRICAOCURTA', ''))
                             longa_edit = st.text_area("Desc. Longa", value=produto.get('DESCRICAOLONGA', ''))
                             
-                            # Tratamento para o ValueError do DISPONIVEL
                             disponivel_val = produto.get('DISPONIVEL', 'Sim')
                             if isinstance(disponivel_val, str):
                                 disponivel_val = disponivel_val.strip().title()
@@ -228,7 +227,6 @@ with tab_promocoes:
             st.warning("Cadastre produtos antes de criar uma promoção.")
         else:
             with st.form("form_nova_promocao", clear_on_submit=True):
-                # Conversão para float, tratando o separador de milhar/decimal
                 df_catalogo_promo['PRECO_FLOAT'] = pd.to_numeric(df_catalogo_promo['PRECO'].astype(str).str.replace(',', '.'), errors='coerce') 
                 opcoes_produtos = {f"{row['NOME']} (R$ {row['PRECO_FLOAT']:.2f})": row['ID'] for _, row in df_catalogo_promo.dropna(subset=['PRECO_FLOAT', 'ID']).iterrows()}
                 
@@ -279,7 +277,3 @@ with tab_promocoes:
                 if st.button("🗑️ Excluir Promoção", key=f"del_promo_{promo.get('ID_PROMOCAO', index)}", type="primary"):
                     if excluir_promocao(promo['ID_PROMOCAO']):
                         st.success("Promoção excluída!"); st.rerun()
-
-
-
-
