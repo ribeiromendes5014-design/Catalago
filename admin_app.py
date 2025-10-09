@@ -164,7 +164,19 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
     porcentagem de itens separados.
     """
     try:
-        detalhes_pedido = json.loads(pedido_json)
+        # Tenta converter o pedido_json para string e limpar espaços/nulos
+        pedido_str = str(pedido_json).strip()
+        
+        # 1. TRATAMENTO DE STRING INVÁLIDA (A CORREÇÃO PRINCIPAL)
+        # Se a string estiver vazia ou for a string literal 'nan' (comum em DataFrames nulos),
+        # tratamos como um pedido sem itens.
+        if not pedido_str or pedido_str.lower() in ('nan', '{}'):
+            # Opcional: st.info(f"O pedido {id_pedido} não possui itens ou o formato está vazio.")
+            return 0
+            
+        # 2. Tenta carregar o JSON (agora mais seguro)
+        detalhes_pedido = json.loads(pedido_str)
+        
         itens = detalhes_pedido.get('itens', [])
         total_itens = len(itens)
         itens_separados = 0
@@ -174,6 +186,8 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
         if key_progress not in st.session_state:
             # Inicializa a lista de checks: False para cada item
             st.session_state[key_progress] = [False] * total_itens
+            
+        # ... (O restante do seu código da função é mantido) ...
             
         for i, item in enumerate(itens):
             link_imagem = "https://via.placeholder.com/150?text=Sem+Imagem"
@@ -189,7 +203,6 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
             col_check, col_img, col_detalhes = st.columns([0.5, 1, 3.5])
             
             # --- Lógica do Checkbox de Separação (Novo) ---
-            # Atualiza o estado da sessão quando o checkbox é clicado
             checked = col_check.checkbox(
                 label="Separado",
                 value=st.session_state[key_progress][i],
@@ -199,7 +212,6 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
             # Armazena o estado do checkbox
             if checked != st.session_state[key_progress][i]:
                 st.session_state[key_progress][i] = checked
-                # Forçar um pequeno rerun para a barra de progresso atualizar imediatamente
                 st.rerun() 
             # --- Fim Lógica do Checkbox ---
 
@@ -226,6 +238,7 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
         return 0
         
     except Exception as e: 
+        # Este catch ainda é útil para erros de JSON malformado que não são 'nan' ou vazio
         st.error(f"Erro ao processar itens do pedido: {e}")
         return 0 # Retorna 0% em caso de erro
 
@@ -607,3 +620,4 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
