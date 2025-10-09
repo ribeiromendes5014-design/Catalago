@@ -186,7 +186,7 @@ with tab_produtos:
                     st.markdown(f"**{produto.get('NOME', 'N/A')}** (ID: {produto.get('ID', 'N/A')})")
                     st.markdown(f"**Preço:** R$ {produto.get('PRECO', 'N/A')}")
                     with st.popover("📝 Editar"):
-                        with st.form(f"edit_form_{produto.get('ID', index)}", clear_on_submit=True):
+                        with st.form(f"edit_form_{produto.get('ID')}_{index}", clear_on_submit=True):
                             st.markdown(f"Editando: **{produto.get('NOME', 'N/A')}**")
                             preco_val = float(str(produto.get('PRECO', '0')).replace(',','.'))
                             nome_edit = st.text_input("Nome", value=produto.get('NOME', ''))
@@ -277,3 +277,4 @@ with tab_promocoes:
                 if st.button("🗑️ Excluir Promoção", key=f"del_promo_{promo.get('ID_PROMOCAO', index)}", type="primary"):
                     if excluir_promocao(promo['ID_PROMOCAO']):
                         st.success("Promoção excluída!"); st.rerun()
+
