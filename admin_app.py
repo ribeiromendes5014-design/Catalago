@@ -53,11 +53,10 @@ except KeyError:
 def fetch_github_data_v2(sheet_name, version_control):
     """Carrega dados de um CSV do GitHub via API (sem cache da CDN)."""
     
-    # Define o nome do arquivo a ser buscado no GitHub
     csv_filename = f"{sheet_name}.csv"
     
     # --- Lógica para Repositório Externo ---
-    if sheet_name == SHEET_NAME_PEDIDOS or sheet_name == SHEET_NAME_CLIENTES_CASH: # Inclui o CSV de cashback
+    if sheet_name == SHEET_NAME_PEDIDOS or sheet_name == SHEET_NAME_CLIENTES_CASH:
         repo_to_use = PEDIDOS_REPO_FULL
         branch_to_use = PEDIDOS_BRANCH
     else:
@@ -69,20 +68,24 @@ def fetch_github_data_v2(sheet_name, version_control):
     try:
         response = requests.get(api_url, headers=HEADERS)
         if response.status_code != 200:
-            # Não exibe erro para o CSV de clientes, pois ele pode não existir inicialmente
             if sheet_name != SHEET_NAME_CLIENTES_CASH:
-                st.warning(f"Erro ao buscar '{csv_filename}': {response.status_code}")
+                st.warning(f"Erro ao buscar '{csv_filename}': Status {response.status_code}. Repositório: {repo_to_use}")
             return pd.DataFrame()
 
         content = base64.b64decode(response.json()["content"]).decode("utf-8")
 
         # --- LÓGICA ROBUSTA PARA LER CSV COM CAMPOS COMPLEXOS (JSON) ---
-        df = pd.read_csv(
-            StringIO(content), 
-            sep=",", 
-            engine='python', 
-            on_bad_lines='warn'
-        )
+        try:
+            df = pd.read_csv(
+                StringIO(content),  
+                sep=",",  
+                engine='python',  # Crucial para lidar com o JSON complexo no pedidos.csv
+                on_bad_lines='warn'
+            )
+        except Exception as read_error:
+            # Captura o erro na leitura para dar um feedback mais útil
+            st.error(f"Erro de leitura do CSV de {csv_filename}. Causa: {read_error}. O arquivo pode estar vazio ou mal formatado.")
+            return pd.DataFrame()
         # -------------------------------------------------------------
 
         df.columns = df.columns.str.strip().str.upper().str.replace(' ', '_')
@@ -104,7 +107,7 @@ def fetch_github_data_v2(sheet_name, version_control):
         return df
 
     except Exception as e:
-        st.error(f"Erro ao carregar dados de '{csv_filename}': {e}")
+        st.error(f"Erro geral ao carregar dados de '{csv_filename}': {e}")
         return pd.DataFrame()
 
 
@@ -752,6 +755,7 @@ with tab_promocoes:
                         st.session_state['data_version'] += 1 
                         st.rerun()
                     else: st.error("Falha ao excluir promoção.")
+
 
 
 
