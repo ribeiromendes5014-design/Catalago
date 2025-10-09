@@ -204,7 +204,7 @@ def carregar_catalogo():
 
 
 # =========================================================================
-# === NOVAS FUNÇÕES DE CASHBACK ===
+# === NOVAS FUNÇÕES DE CASHBACK (CORRIGIDAS PARA O ACENTO E CASE) ===
 # =========================================================================
 
 @st.cache_data(ttl=1) 
@@ -215,20 +215,36 @@ def carregar_clientes_cashback():
     if df is None or df.empty:
         return pd.DataFrame(columns=['NOME', 'CONTATO', 'CASHBACK_DISPONIVEL', 'NIVEL_ATUAL'])
         
-    # Renomeia e padroniza as colunas conforme o schema do cashback_system.py
+    # Corrigindo a leitura da coluna 'Cashback Disponível' e 'Telefone' (o nome original pode ser 'TELEFONE')
     df.rename(columns={
-        'CASHBACK_DISPONÍVEL': 'CASHBACK_DISPONIVEL', 
+        'CASHBACK_DISPONIVEL': 'CASHBACK_DISPONIVEL', # Se for tudo em CAPS, é a forma que o Streamlit lê 'Cashback Disponível'
         'NIVEL_ATUAL': 'NIVEL_ATUAL', 
-        'TELEFONE': 'CONTATO',
+        'TELEFONE': 'CONTATO', # Assumindo que o campo 'Telefone' é lido como 'TELEFONE' em CAPS pelo get_data_from_github
         'NOME': 'NOME'
     }, inplace=True)
     
+    # Tentativa de ajuste para lidar com o nome da coluna original (Cashback Disponível)
+    if 'CASHBACK_DISPONÍVEL' in df.columns:
+        df.rename(columns={'CASHBACK_DISPONÍVEL': 'CASHBACK_DISPONIVEL'}, inplace=True)
+
+    # Assumindo que a coluna de telefone é 'TELEFONE'
+    if 'TELEFONE' in df.columns:
+        df.rename(columns={'TELEFONE': 'CONTATO'}, inplace=True)
+    elif 'CONTATO' not in df.columns:
+         # Última tentativa para achar o telefone
+        if 'TELEFONE' in df.columns: df.rename(columns={'TELEFONE': 'CONTATO'}, inplace=True)
+        
     # Limpa o telefone para ser usado como chave única
-    df['CONTATO'] = df['CONTATO'].astype(str).str.replace(r'\D', '', regex=True).str.strip() 
-    df['CASHBACK_DISPONIVEL'] = pd.to_numeric(df['CASHBACK_DISPONIVEL'], errors='coerce').fillna(0.0)
-    df['NIVEL_ATUAL'] = df['NIVEL_ATUAL'].fillna('Prata')
+    if 'CONTATO' in df.columns:
+        df['CONTATO'] = df['CONTATO'].astype(str).str.replace(r'\D', '', regex=True).str.strip() 
+        df['CASHBACK_DISPONIVEL'] = pd.to_numeric(df['CASHBACK_DISPONIVEL'], errors='coerce').fillna(0.0)
+        df['NIVEL_ATUAL'] = df['NIVEL_ATUAL'].fillna('Prata')
     
-    return df[['NOME', 'CONTATO', 'CASHBACK_DISPONIVEL', 'NIVEL_ATUAL']].dropna(subset=['CONTATO'])
+        return df[['NOME', 'CONTATO', 'CASHBACK_DISPONIVEL', 'NIVEL_ATUAL']].dropna(subset=['CONTATO'])
+    else:
+        st.error("Erro: A coluna 'Telefone' (ou equivalente) do clientes_cash.csv não foi encontrada para a busca.")
+        return pd.DataFrame(columns=['NOME', 'CONTATO', 'CASHBACK_DISPONIVEL', 'NIVEL_ATUAL'])
+
 
 DF_CLIENTES_CASH = carregar_clientes_cashback()
 
@@ -238,6 +254,10 @@ def buscar_cliente_cashback(numero_contato, df_clientes_cash):
     # Limpa o contato do usuário para fazer a busca
     contato_limpo = str(numero_contato).replace('(', '').replace(')', '').replace('-', '').replace(' ', '').strip()
     
+    # Garante que o DataFrame não está vazio
+    if df_clientes_cash.empty:
+        return False, None, 0.00, 'NENHUM'
+        
     cliente = df_clientes_cash[df_clientes_cash['CONTATO'] == contato_limpo]
     
     if not cliente.empty:
@@ -700,8 +720,6 @@ with col_carrinho:
             st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
             st.markdown("---")
             
-            # ... (Lógica de exibição de itens do carrinho, que continua a mesma) ...
-            
             # === NOVO CABEÇALHO PARA CLAREZA ===
             col_h1, col_h2, col_h3, col_h4 = st.columns([3, 1.5, 2.5, 1])
             col_h2.markdown("**Qtd**")
@@ -713,7 +731,6 @@ with col_carrinho:
             df_catalogo_completo = carregar_catalogo().set_index('ID')
             
             for prod_id, item in list(st.session_state.carrinho.items()):
-                # ... (Lógica de exibição e alteração de quantidade dos itens do carrinho, que continua a mesma) ...
                 c1, c2, c3, c4 = st.columns([3, 1.5, 2.5, 1])
                 
                 c1.write(f"*{item['nome']}*")
@@ -901,7 +918,7 @@ else:
         df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'RECENCIA'], ascending=[False, False])
     elif ordem_selecionada == 'Menor Preço':
         df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'PRECO_FINAL'], ascending=[False, True])
-    elif ordem_seleccionada == 'Maior Preço':
+    elif ordem_selecionada == 'Maior Preço':
         df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'PRECO_FINAL'], ascending=[False, False])
     elif ordem_selecionada == 'Nome do Produto (A-Z)':
         df_ordenado = df_filtrado.sort_values(by=['EM_PROMOCAO', 'NOME'], ascending=[False, True])
@@ -917,4 +934,3 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
-
