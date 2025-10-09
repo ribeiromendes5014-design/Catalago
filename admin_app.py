@@ -7,9 +7,9 @@ import time
 import requests 
 
 # --- Configurações de Dados ---
-SHEET_NAME_CATALOGO = "produtos_estoque.csv"
-SHEET_NAME_PEDIDOS = "pedidos.csv"
-SHEET_NAME_PROMOCOES = "promocoes.csv"
+SHEET_NAME_CATALOGO = "produtos_estoque"
+SHEET_NAME_PEDIDOS = "pedidos"
+SHEET_NAME_PROMOCOES = "promocoes"
 
 # --- Configurações do GitHub ---
 GITHUB_RAW_BASE_URL = "https://raw.githubusercontent.com/ribeiromendes5014-design/Catalago/main"
@@ -279,4 +279,5 @@ with tab_promocoes:
                 if st.button("🗑️ Excluir Promoção", key=f"del_promo_{promo.get('ID_PROMOCAO', index)}", type="primary"):
                     if excluir_promocao(promo['ID_PROMOCAO']):
                         st.success("Promoção excluída!"); st.rerun()
+
 
