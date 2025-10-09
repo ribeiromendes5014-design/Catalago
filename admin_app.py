@@ -274,7 +274,8 @@ with tab_promocoes:
                             if atualizar_promocao(promo['ID_PROMOCAO'], preco_promo_edit, data_inicio_edit.strftime('%Y-%m-%d'), data_fim_edit.strftime('%Y-%m-%d'), status_edit):
                                 st.success("Promoção atualizada!"); st.rerun()
 
-                if st.button("🗑️ Excluir Promoção", key=f"del_promo_{promo.get('ID_PROMOCAO', index)}", type="primary"):
+                if st.button("🗑️ Excluir", key=f"del_{produto.get('ID')}_{index}", type="primary"):
                     if excluir_promocao(promo['ID_PROMOCAO']):
                         st.success("Promoção excluída!"); st.rerun()
+
 
