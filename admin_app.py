@@ -603,7 +603,7 @@ def extract_customer_cashback(itens_json_string):
             return 0.0
 
 with tab_pedidos:
-    st.header("📋 Pedidos Recebidos"); 
+    st.header("📋 Pedidos Recebidos")
     if st.button("Recarregar Pedidos"): 
         # Limpa o estado de separação dos itens ao recarregar
         keys_to_delete = [k for k in st.session_state if k.startswith('pedido_') and k.endswith('_itens_separados')]
@@ -612,11 +612,11 @@ with tab_pedidos:
         st.session_state['data_version'] += 1 
         st.rerun() 
     
-    df_pedidos_raw = carregar_dados(SHEET_NAME_PEDIDOS); 
+    df_pedidos_raw = carregar_dados(SHEET_NAME_PEDIDOS)
     df_catalogo_pedidos = carregar_dados(SHEET_NAME_CATALOGO)
     
     # ======================================================================
-    # 💥 PASSO ESSENCIAL: CRIA A COLUNA COM O SALDO EXTRAÍDO DO JSON
+    # 💥 CORREÇÃO CASHBACK: Extrai o saldo do cliente do JSON
     if not df_pedidos_raw.empty and 'ITENS_JSON' in df_pedidos_raw.columns:
         df_pedidos_raw['SALDO_CASHBACK_CLIENTE_PEDIDO'] = df_pedidos_raw['ITENS_JSON'].apply(
             extract_customer_cashback
@@ -625,32 +625,63 @@ with tab_pedidos:
         # Garante que a coluna exista mesmo se estiver vazia
         df_pedidos_raw['SALDO_CASHBACK_CLIENTE_PEDIDO'] = 0.0
     # ======================================================================
-
-    if df_pedidos_raw.empty: st.info("Nenhum pedido foi encontrado na planilha.")
+    
+    # 💥 CORREÇÃO DE INDENTAÇÃO: O 'else' deve estar alinhado com o 'if'
+    if df_pedidos_raw.empty:
+        st.info("Nenhum pedido foi encontrado na planilha.")
+    else:
+        df_pedidos_raw['DATA_HORA'] = pd.to_datetime(df_pedidos_raw['DATA_HORA'], errors='coerce')
+        st.subheader("🔍 Filtrar Pedidos")
+        
+        col_filtro1, col_filtro2 = st.columns(2)
+        data_filtro = col_filtro1.date_input("Filtrar por data:", value=None)
+        texto_filtro = col_filtro2.text_input("Buscar por cliente ou produto:")
+        
+        df_filtrado = df_pedidos_raw.copy()
+        
+        if data_filtro:
+            df_filtrado = df_filtrado[df_filtrado['DATA_HORA'].dt.date == data_filtro]
+        
+        if texto_filtro.strip():
+            texto_filtro = texto_filtro.lower()
+            df_filtrado = df_filtrado[
+                df_filtrado['NOME_CLIENTE'].astype(str).str.lower().str.contains(texto_filtro) | 
+                df_filtrado['ITENS_PEDIDO'].astype(str).str.lower().str.contains(texto_filtro) | 
+                df_filtrado['ITENS_JSON'].astype(str).str.lower().str.contains(texto_filtro)
+            ]
+            
+        st.markdown("---")
+        pedidos_pendentes = df_filtrado[df_filtrado['STATUS'] != 'Finalizado']
+        pedidos_finalizados = df_filtrado[df_filtrado['STATUS'] == 'Finalizado']
+        st.header("⏳ Pedidos Pendentes")
+        
+        if pedidos_pendentes.empty: 
+            st.info("Nenhum pedido pendente encontrado.")
         else:
             for index, pedido in pedidos_pendentes.iloc[::-1].iterrows():
                 id_pedido = pedido['ID_PEDIDO']
                 data_hora_str = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indisponível"
                 titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {data_hora_str} - Total: R$ {pedido['VALOR_TOTAL']}"
                 
-                # --- NOVO BLOCO DE VISUALIZAÇÃO DE CASHBACK ---
+                # --- BLOCO DE VISUALIZAÇÃO DE CASHBACK ---
                 pedido_json_data = pedido.get('ITENS_JSON', pedido.get('ITENS_PEDIDO', '{}'))
                 cashback_a_creditar = calcular_cashback_a_creditar(pedido_json_data, df_catalogo_pedidos)
                 
                 with st.expander(titulo):
                     st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{id_pedido}`")
                     
+                    # 💥 EXIBIÇÃO DO SALDO ACUMULADO (R$ 0,90)
                     saldo_anterior = pedido['SALDO_CASHBACK_CLIENTE_PEDIDO']
                     st.markdown(f"**Saldo Cashback do Cliente:** **R$ {saldo_anterior:.2f}**")
                     st.markdown("---")
-                     # -------------------------------------------------------------
-                   
+                    
                     if cashback_a_creditar > 0.00:
                         st.markdown(f"**💰 Cashback a ser Creditado:** **R$ {cashback_a_creditar:.2f}**")
                         st.info("Este valor será creditado ao cliente (no clientes_cash.csv) **após** a finalização deste pedido.")
                     else:
                         st.markdown("💰 **Cashback a ser Creditado:** R$ 0.00")
                         st.caption("Nenhum produto neste pedido está configurado com porcentagem de Cashback (CASHBACKPERCENT).")
+                        
                     # --- FIM BLOCO DE VISUALIZAÇÃO DE CASHBACK ---
                     
                     progresso_separacao = exibir_itens_pedido(id_pedido, pedido_json_data, df_catalogo_pedidos)
@@ -673,30 +704,39 @@ with tab_pedidos:
                             st.rerun() 
                         else: st.error("Falha ao finalizar pedido.")
                         
-                st.header("✅ Pedidos Finalizados")
-                if pedidos_finalizados.empty: st.info("Nenhum pedido finalizado encontrado.")
-                else:
-                    for index, pedido in pedidos_finalizados.iloc[::-1].iterrows():
-                        data_hora_str = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indisponível"
-                        titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {data_hora_str} - Total: R$ {pedido['VALOR_TOTAL']}"
-                        with st.expander(titulo):
-                            st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{pedido['ID_PEDIDO']}`")
-                            col_reverter, col_excluir = st.columns(2)
-                            with col_reverter:
-                                if st.button("↩️ Reverter para Pendente", key=f"reverter_{pedido['ID_PEDIDO']}", use_container_width=True):
-                                    if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status="PENDENTE", df_catalogo=pd.DataFrame()):  
-                                        st.success(f"Pedido {pedido['ID_PEDIDO']} revertido para PENDENTE.")
-                                        st.session_state['data_version'] += 1  
-                                        st.rerun()  
-                                    else: st.error("Falha ao reverter status do pedido.")
-                            with col_excluir:
-                                if st.button("🗑️ Excluir Pedido", type="primary", key=f"excluir_{pedido['ID_PEDIDO']}", use_container_width=True):
-                                    if excluir_pedido(pedido['ID_PEDIDO']):  
-                                        st.success(f"Pedido {pedido['ID_PEDIDO']} excluído!")
-                                        st.session_state['data_version'] += 1  
-                                        st.rerun()  
-                                    else: st.error("Falha ao excluir o pedido.")
-                            st.markdown("---"); exibir_itens_pedido(pedido['ID_PEDIDO'], pedido.get('ITENS_JSON', pedido.get('ITENS_PEDIDO', '{}')), df_catalogo_pedidos)
+            st.header("✅ Pedidos Finalizados")
+            if pedidos_finalizados.empty: 
+                st.info("Nenhum pedido finalizado encontrado.")
+            else:
+                for index, pedido in pedidos_finalizados.iloc[::-1].iterrows():
+                    data_hora_str = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indisponível"
+                    titulo = f"Pedido de **{pedido['NOME_CLIENTE']}** - {data_hora_str} - Total: R$ {pedido['VALOR_TOTAL']}"
+                    
+                    with st.expander(titulo):
+                        st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{pedido['ID_PEDIDO']}`")
+                        
+                        # 💥 EXIBIÇÃO DO SALDO ACUMULADO (também nos finalizados)
+                        saldo_anterior = pedido['SALDO_CASHBACK_CLIENTE_PEDIDO']
+                        st.markdown(f"**Saldo Cashback do Cliente:** **R$ {saldo_anterior:.2f}**")
+                        st.markdown("---")
+                        
+                        col_reverter, col_excluir = st.columns(2)
+                        with col_reverter:
+                            if st.button("↩️ Reverter para Pendente", key=f"reverter_{pedido['ID_PEDIDO']}", use_container_width=True):
+                                if atualizar_status_pedido(pedido['ID_PEDIDO'], novo_status="PENDENTE", df_catalogo=pd.DataFrame()):  
+                                    st.success(f"Pedido {pedido['ID_PEDIDO']} revertido para PENDENTE.")
+                                    st.session_state['data_version'] += 1  
+                                    st.rerun()  
+                                else: st.error("Falha ao reverter status do pedido.")
+                        with col_excluir:
+                            if st.button("🗑️ Excluir Pedido", type="primary", key=f"excluir_{pedido['ID_PEDIDO']}", use_container_width=True):
+                                if excluir_pedido(pedido['ID_PEDIDO']):  
+                                    st.success(f"Pedido {pedido['ID_PEDIDO']} excluído!")
+                                    st.session_state['data_version'] += 1  
+                                    st.rerun()  
+                                else: st.error("Falha ao excluir o pedido.")
+                        st.markdown("---")
+                        exibir_itens_pedido(pedido['ID_PEDIDO'], pedido.get('ITENS_JSON', pedido.get('ITENS_PEDIDO', '{}')), df_catalogo_pedidos)
 
 
 with tab_produtos:
@@ -706,6 +746,7 @@ with tab_produtos:
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
     # ... (Restante do código da aba Promoções) ...
+
 
 
 
