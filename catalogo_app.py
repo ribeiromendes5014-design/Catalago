@@ -879,7 +879,7 @@ st.markdown(f"""
 /* Estilo do container do banner colorido */
 .banner-colored {{
     background-color: #e91e63;
-    padding: 10px 25px; /* <-- PADDING VERTICAL REDUZIDO */
+    padding: 10px 25px;
     border-radius: 10px;
     display: flex;
     align-items: center;
@@ -888,13 +888,13 @@ st.markdown(f"""
 }}
 
 .banner-colored img {{
-    max-height: 60px; /* <-- ALTURA MÁXIMA DO LOGO REDUZIDA */
+    max-height: 60px;
     width: auto;
 }}
 
 .banner-colored h1 {{
     color: white;
-    font-size: 2rem; /* <-- FONTE UM POUCO MENOR */
+    font-size: 2rem;
     margin: 0;
 }}
 </style>
@@ -1230,6 +1230,7 @@ whatsapp_button_html = f"""
 
 st.markdown(whatsapp_button_html, unsafe_allow_html=True)
 # --- FIM DO BLOCO ADICIONADO ---
+
 
 
 
