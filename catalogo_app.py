@@ -1203,17 +1203,17 @@ with st.popover(HIDDEN_POPOVER_TITLE, use_container_width=False, help=HIDDEN_POP
 # Código JavaScript para encontrar o botão de popover oculto e simulá-lo
 popover_click_script = f"""
 <script>
-    function openFloatingCart() {{
-        // Busca o botão Streamlit com o título único em todo o documento
-        // O title é o argumento do st.popover
-        const hiddenButton = document.querySelector('button[title="{HIDDEN_POPOVER_TITLE}"]');
-        
-        if (hiddenButton) {{
+function openFloatingCart() {{
+    // Encontra o botão do popover oculto dentro do container invisível
+    const hiddenButton = document.querySelector(
+        '#hidden-popover-container button[data-testid="stPopoverButton"]'
+    );
+    if (hiddenButton) {
             hiddenButton.click();
-        }} else {{
-            console.warn("Hidden popover button not found. Title: {HIDDEN_POPOVER_TITLE}");
-        }}
-    }}
+    } else {
+            console.warn("Botão do popover não encontrado. Verifique se o container foi renderizado.");
+    }
+}         
 </script>
 """
 st.markdown(popover_click_script, unsafe_allow_html=True)
@@ -1245,3 +1245,4 @@ whatsapp_button_html = f"""
 # Injeta o botão flutuante
 st.markdown(whatsapp_button_html, unsafe_allow_html=True)
 # --- FIM DO BLOCO ADICIONADO ---
+
