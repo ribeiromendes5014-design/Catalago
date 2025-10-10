@@ -1218,27 +1218,14 @@ with st.popover(HIDDEN_POPOVER_TITLE, use_container_width=False, help=HIDDEN_POP
 # Código JavaScript para encontrar o botão de popover oculto e simulá-lo
 popover_click_script = """
 <script>
-function openFloatingCart() {
-    // Dá um pequeno tempo pro DOM renderizar o popover
+window.openFloatingCart = function() {
     setTimeout(() => {
-        // Tenta achar o botão dentro do container oculto
         const container = document.getElementById('hidden-popover-container');
         if (!container) {
             console.warn("❌ Container do popover oculto não encontrado.");
-            // Fallback: search the whole document if container ID is not present
-            const hiddenButton = Array.from(document.querySelectorAll('button[data-testid="stPopoverButton"]'))
-                .find(button => button.title.includes("Popover Oculto Carrinho"));
-            
-            if (hiddenButton) {
-                hiddenButton.click();
-                console.log("✅ Popover (via fallback) aberto com sucesso.");
-            } else {
-                 console.warn("❌ Botão do popover oculto não encontrado no documento.");
-            }
             return;
         }
 
-        // Tenta localizar o botão real do Streamlit popover (várias opções de seletor)
         const hiddenButton =
             container.querySelector('button[data-testid="stPopoverButton"]') ||
             container.querySelector('button[aria-label*="Carrinho"]') ||
@@ -1250,11 +1237,12 @@ function openFloatingCart() {
         } else {
             console.warn("⚠️ Botão do popover não encontrado dentro do container.");
         }
-    }, 100); // espera 100 ms
+    }, 400);
 }
 </script>
 """
 st.markdown(popover_click_script, unsafe_allow_html=True)
+
 
 
 cart_float_html = f"""
@@ -1283,4 +1271,5 @@ whatsapp_button_html = f"""
 # Injeta o botão flutuante
 st.markdown(whatsapp_button_html, unsafe_allow_html=True)
 # --- FIM DO BLOCO ADICIONADO ---
+
 
