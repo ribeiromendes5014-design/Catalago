@@ -648,13 +648,6 @@ div.block-container p, div.block-container h1, div.block-container h2, div.block
     color: #262626 !important;
 }}
 
-st.markdown(f"""
-<style>
-#MainMenu, footer, [data-testid="stSidebar"] {{visibility: hidden;}}
-[data-testid="stSidebarHeader"], [data-testid="stToolbar"], a[data-testid="stAppDeployButton"], [data-testid="stStatusWidget"], [data-testid="stDecoration"] {{ display: none !important; }}
-div[data-testid="stPopover"] > div:first-child > button {{ display: none; }}
-.stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
-div.block-container {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 10px; padding: 2rem; margin-top: 1rem; }}
 .pink-bar-container {{ background-color: #E91E63; padding: 20px 0; width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
 .pink-bar-content {{ width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; }}
 .cart-badge-button {{ background-color: #C2185B; color: white; border-radius: 12px; padding: 8px 15px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; transition: background-color 0.3s; display: inline-flex; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-width: 150px; justify-content: center; }}
@@ -685,7 +678,6 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 .estoque-baixo-badge {{ background-color: #FFC107; color: black; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
 </style>
 """, unsafe_allow_html=True)
-
 
 
 st_autorefresh(interval=6000000000, key="auto_refresh_catalogo")
@@ -1040,13 +1032,3 @@ else:
         with cols[i % 4]:
             # 3. OTIMIZAÇÃO: Passa o DF indexado para a função de renderização
             render_product_card(product_id, row, key_prefix=unique_key, df_catalogo_indexado=st.session_state.df_catalogo_indexado)
-
-
-
-
-
-
-
-
-
-
