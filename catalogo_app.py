@@ -31,7 +31,7 @@ SHEET_NAME_VIDEOS_CSV = "video.csv"
 SHEET_NAME_CLIENTES_CASHBACK_CSV = "clientes_cash.csv"
 SHEET_NAME_CUPONS_CSV = "cupons.csv"
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-na-zvania-3.jpg'
-LOGO_DOCEBELLA_URL = "https://i.ibb.co/23L9xp08/logo_docebella.png"
+LOGO_DOCEBELLA_URL = "https://i.ibb.co/S9kT5nS/logo_docebella.png"
 
 
 # Inicialização do Carrinho de Compras e Estado
@@ -629,7 +629,20 @@ st.markdown(f"""
 [data-testid="stSidebarHeader"], [data-testid="stToolbar"], a[data-testid="stAppDeployButton"], [data-testid="stStatusWidget"], [data-testid="stDecoration"] {{ display: none !important; }}
 div[data-testid="stPopover"] > div:first-child > button {{ display: none; }}
 .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
-div.block-container {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 10px; padding: 2rem; margin-top: 1rem; }}
+
+/* CORREÇÃO PARA MODO ESCURO: Força a cor do texto para ser escura dentro do container principal */
+div.block-container {{ 
+    background-color: rgba(255, 255, 255, 0.95); 
+    border-radius: 10px; 
+    padding: 2rem; 
+    margin-top: 1rem; 
+    color: #262626; /* Cor de texto padrão forçada para preto escuro */
+}}
+/* Garante que o texto em parágrafos e títulos também seja escuro, superando o modo escuro do celular */
+div.block-container p, div.block-container h1, div.block-container h2, div.block-container h3, div.block-container h4, div.block-container h5, div.block-container h6, div.block-container span {{
+    color: #262626 !important;
+}}
+
 .pink-bar-container {{ background-color: #E91E63; padding: 20px 0; width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
 .pink-bar-content {{ width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; }}
 .cart-badge-button {{ background-color: #C2185B; color: white; border-radius: 12px; padding: 8px 15px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; transition: background-color 0.3s; display: inline-flex; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-width: 150px; justify-content: center; }}
@@ -1029,4 +1042,3 @@ else:
         with cols[i % 4]:
             # 3. OTIMIZAÇÃO: Passa o DF indexado para a função de renderização
             render_product_card(product_id, row, key_prefix=unique_key, df_catalogo_indexado=st.session_state.df_catalogo_indexado)
-
