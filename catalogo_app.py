@@ -1213,35 +1213,17 @@ with st.popover(HIDDEN_POPOVER_TITLE, use_container_width=False, help=HIDDEN_POP
 
 # --- 2. LÓGICA DO BOTÃO FLUTUANTE DO CARRINHO ---
 
-# Código JavaScript para encontrar e clicar no botão de popover oculto.
-# Esta função é chamada pelo 'href' do nosso novo botão <a>.
-popover_click_script = f"""
-<script>
-function openFloatingCart() {{
-    // Procura em todo o documento por um botão cujo atributo 'title'
-    // seja exatamente o título que demos ao nosso popover oculto.
-    const hiddenButton = document.querySelector('button[title="{HIDDEN_POPOVER_TITLE}"]');
-
-    if (hiddenButton) {{
-        hiddenButton.click(); // Simula o clique no botão encontrado.
-    }} else {{
-        // Este log ajuda a depurar caso o botão não seja encontrado.
-        console.warn("⚠️ Botão do popover oculto não encontrado. Verifique o título: '{HIDDEN_POPOVER_TITLE}'");
-    }}
-}}
-</script>
-"""
-st.markdown(popover_click_script, unsafe_allow_html=True)
-
-
-# HTML do botão flutuante, agora como uma tag <a>, copiando o padrão do WhatsApp.
-# O 'href' chama a função JavaScript diretamente, que é um método mais robusto.
+# >>>>>>> INÍCIO DA CORREÇÃO <<<<<<<
+# O script javascript complexo foi removido.
+# O HTML do botão flutuante agora usa um seletor JavaScript direto e robusto,
+# conforme sua sugestão, para clicar no botão do popover pelo seu título único.
 cart_float_html = f"""
-<a href="javascript:openFloatingCart()" class="cart-float" title="Abrir Meu Pedido">
+<div class="cart-float" onclick="document.querySelector('button[title=\\'{HIDDEN_POPOVER_TITLE}\\']').click();" title="Abrir Meu Pedido">
     <span style="font-size: 28px;">🛍️</span>
     <span class="cart-count-float">{num_itens}</span>
-</a>
+</div>
 """
+# >>>>>>> FIM DA CORREÇÃO <<<<<<<
 
 # Só mostra o botão do carrinho se houver itens nele.
 if num_itens > 0:
