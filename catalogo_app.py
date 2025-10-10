@@ -1204,10 +1204,6 @@ else:
 # --- ADICIONA OS BOTÕES FLUTUANTES NO FINAL DO SCRIPT ---
 
 # --- 1. BOTÃO POPOVER DO CARRINHO (OCULTO) ---
-# O popover REAL do Streamlit é criado aqui. O botão ativador é oculto via CSS.
-# Usamos um 'st.popover' isolado no final do script para garantir que ele seja renderizado por último.
-# Não precisamos mais do container <div>, pois vamos buscar o botão pelo `title` em todo o documento.
-
 # O popover com o título único (HIDDEN_POPOVER_TITLE) será renderizado,
 # mas seu botão será oculto pelo CSS lá em cima.
 with st.popover(HIDDEN_POPOVER_TITLE, use_container_width=False, help=HIDDEN_POPOVER_TITLE):
@@ -1215,36 +1211,36 @@ with st.popover(HIDDEN_POPOVER_TITLE, use_container_width=False, help=HIDDEN_POP
     render_cart_popover(total_acumulado, desconto_cupom, total_com_desconto, cashback_a_ganhar, df_catalogo_completo)
 
 
-# Código JavaScript para encontrar o botão de popover oculto e simulá-lo
-popover_click_script = """
+# --- 2. LÓGICA DO BOTÃO FLUTUANTE ---
+
+# >>>>>>> INÍCIO DA CORREÇÃO <<<<<<<
+# Código JavaScript para encontrar e clicar no botão de popover oculto.
+# A versão anterior não funcionava porque procurava por um 'id' que não existia.
+# Esta versão busca o botão pelo seu 'title', que é definido unicamente pela nossa variável.
+popover_click_script = f"""
 <script>
-window.openFloatingCart = function() {
-    setTimeout(() => {
-        const container = document.getElementById('hidden-popover-container');
-        if (!container) {
-            console.warn("❌ Container do popover oculto não encontrado.");
-            return;
-        }
+// Define a função no escopo global (window) para que o 'onclick' do HTML a encontre.
+window.openFloatingCart = function() {{
+    // Procura em todo o documento por um botão cujo atributo 'title'
+    // seja exatamente o título que demos ao nosso popover oculto.
+    const hiddenButton = document.querySelector('button[title="{HIDDEN_POPOVER_TITLE}"]');
 
-        const hiddenButton =
-            container.querySelector('button[data-testid="stPopoverButton"]') ||
-            container.querySelector('button[aria-label*="Carrinho"]') ||
-            container.querySelector('button[role="button"]');
-
-        if (hiddenButton) {
-            hiddenButton.click();
-            console.log("✅ Popover do carrinho aberto com sucesso.");
-        } else {
-            console.warn("⚠️ Botão do popover não encontrado dentro do container.");
-        }
-    }, 400);
-}
+    if (hiddenButton) {{
+        hiddenButton.click(); // Simula o clique no botão encontrado.
+        console.log("✅ Popover do carrinho aberto com sucesso.");
+    }} else {{
+        // Este log ajuda a depurar caso o botão não seja encontrado.
+        console.warn("⚠️ Botão do popover oculto não encontrado. Verifique o título: '{HIDDEN_POPOVER_TITLE}'");
+    }}
+}}
 </script>
 """
 st.markdown(popover_click_script, unsafe_allow_html=True)
+# >>>>>>> FIM DA CORREÇÃO <<<<<<<
 
 
-
+# HTML do botão flutuante que o usuário vê.
+# O 'onclick' agora chama a função corrigida que acabamos de definir.
 cart_float_html = f"""
 <div class="cart-float" onclick="window.openFloatingCart();" title="Abrir Meu Pedido">
     <span style="font-size: 28px;">🛍️</span>
@@ -1252,7 +1248,7 @@ cart_float_html = f"""
 </div>
 """
 
-# Só injeta o botão se houver itens no carrinho ou se o número de itens for > 0
+# Só mostra o botão do carrinho se houver itens nele.
 if num_itens > 0:
     st.markdown(cart_float_html, unsafe_allow_html=True)
 
@@ -1261,15 +1257,13 @@ if num_itens > 0:
 MENSAGEM_PADRAO = "Olá, vi o catálogo de pedidos da Doce&Bella e gostaria de ajuda!"
 LINK_WHATSAPP = f"https://wa.me/{NUMERO_WHATSAPP}?text={requests.utils.quote(MENSAGEM_PADRAO)}"
 
-# HTML do botão flutuante (usa o CSS que você definiu)
+# HTML do botão flutuante
 whatsapp_button_html = f"""
 <a href="{LINK_WHATSAPP}" class="whatsapp-float" target="_blank" title="Fale Conosco pelo WhatsApp">
-    <span style="font-size: 28px;">💬</span>
+     <span style="font-size: 28px;">💬</span>
 </a>
 """
 
-# Injeta o botão flutuante
+# Injeta o botão do WhatsApp na página
 st.markdown(whatsapp_button_html, unsafe_allow_html=True)
 # --- FIM DO BLOCO ADICIONADO ---
-
-
