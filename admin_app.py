@@ -241,6 +241,9 @@ with tab_pedidos:
                 data_hora = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indefinida"
                 with st.expander(f"Pedido de **{pedido.get('NOME_CLIENTE','N/A')}** - {data_hora} - Total: R$ {pedido.get('VALOR_TOTAL', 0.0):.2f}"):
                     json_data = parse_json_from_string(pedido.get('ITENS_JSON'))
+                    st.code(str(pedido.get('ITENS_JSON'))[:500], language="json")
+                    st.json(parse_json_from_string(pedido.get('ITENS_JSON')))
+                    st.stop()
                     subtotal = json_data.get('subtotal', 0.0)
                     desconto = json_data.get('desconto_cupom', pedido.get('VALOR_DESCONTO', 0.0))
                     cupom = json_data.get('cupom_aplicado', pedido.get('CUPOM_APLICADO'))
@@ -344,6 +347,7 @@ with tab_cupons:
     st.subheader("📝 Cupons Cadastrados")
     df_cupons = carregar_dados(SHEET_NAME_CUPONS)
     if not df_cupons.empty: st.dataframe(df_cupons, use_container_width=True)
+
 
 
 
