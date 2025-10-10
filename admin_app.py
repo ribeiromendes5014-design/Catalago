@@ -87,23 +87,16 @@ def write_csv_to_github(df, sheet_name, commit_message):
     else:
         st.error(f"Falha no Commit: {put_response.json().get('message', 'Erro')}"); return False
 
-# --- FUNÇÃO DE PARSING DE JSON ROBUSTA (NOVA) ---
 def parse_json_from_string(json_string):
-    if pd.isna(json_string) or not isinstance(json_string, str) or not json_string.strip():
-        return {}
-    
+    if pd.isna(json_string) or not isinstance(json_string, str) or not json_string.strip(): return {}
     s = json_string.strip()
-    
     try: return json.loads(s)
     except json.JSONDecodeError: pass
-
     try:
         s_cleaned = s.replace('""', '"')
-        if s_cleaned.startswith('"') and s_cleaned.endswith('"'):
-            s_cleaned = s_cleaned[1:-1]
+        if s_cleaned.startswith('"') and s_cleaned.endswith('"'): s_cleaned = s_cleaned[1:-1]
         return json.loads(s_cleaned)
     except (json.JSONDecodeError, TypeError): pass
-
     try: return ast.literal_eval(s)
     except: return {}
 
@@ -253,39 +246,64 @@ with tab_pedidos:
                         if atualizar_status_pedido(pedido.get('ID_PEDIDO'), "Cancelado", df_catalogo): st.warning("Pedido cancelado!"); st.rerun()
         st.header("✅ Pedidos Finalizados e Cancelados")
         concluidos = df_pedidos[df_pedidos.get('STATUS', pd.Series(dtype=str)).isin(['Finalizado', 'Cancelado'])]
-        # Lógica para exibir concluídos...
+        if concluidos.empty:
+            st.info("Nenhum pedido finalizado ou cancelado.")
+        else:
+             for _, pedido in concluidos.iterrows():
+                data_hora = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indefinida"
+                cor = "green" if pedido.get('STATUS') == 'Finalizado' else "red"
+                with st.expander(f":{cor}[{pedido.get('STATUS')}] Pedido de **{pedido.get('NOME_CLIENTE','N/A')}** - {data_hora} - Total: R$ {pedido.get('VALOR_TOTAL', 0.0):.2f}"):
+                     st.write(f"ID do Pedido: {pedido.get('ID_PEDIDO')}")
+                     if pedido.get('STATUS') == 'Finalizado': st.info(f"Cashback creditado: R$ {pedido.get('VALOR_CASHBACK_CREDITADO', 0.0):.2f}")
+
 
 with tab_produtos:
     st.header("🛍️ Gerenciamento de Produtos")
     df_prods = carregar_dados(SHEET_NAME_CATALOGO)
     with st.expander("➕ Adicionar Novo Produto"):
         with st.form("form_novo_produto", clear_on_submit=True):
-            nome, preco = st.text_input("Nome"), st.number_input("Preço", 0.01, format="%.2f")
-            desc_c, desc_l = st.text_input("Descrição Curta"), st.text_area("Descrição Longa")
-            link, cash = st.text_input("Link Imagem"), st.number_input("Cashback (%)", 0.0, 100.0, format="%.2f")
+            nome = st.text_input("Nome")
+            preco = st.number_input("Preço", 0.01, format="%.2f")
+            desc_c = st.text_input("Descrição Curta")
+            desc_l = st.text_area("Descrição Longa")
+            link = st.text_input("Link Imagem")
+            cash = st.number_input("Cashback (%)", 0.0, 100.0, format="%.2f")
             disp = st.checkbox("Disponível", True)
             if st.form_submit_button("Salvar"):
                 if nome and preco > 0:
-                    adicionar_produto(nome, preco, desc_c, desc_l, link, disp, cash)
-                    st.success("Produto adicionado!"); st.rerun()
+                    if adicionar_produto(nome, preco, desc_c, desc_l, link, disp, cash):
+                        st.success("Produto adicionado!"); st.rerun()
     st.subheader("📝 Editar/Excluir")
-    if df_prods.empty: st.info("Nenhum produto.")
+    if df_prods.empty:
+        st.info("Nenhum produto.")
     else:
         opts = df_prods.apply(lambda r: f"{r.get('ID','N/A')} - {r.get('NOME','N/A')}", axis=1).tolist()
-        sel = st.selectbox("Selecione", opts)
+        sel = st.selectbox("Selecione um produto para editar", opts, key="sel_prod_edit")
         if sel:
             id_prod = int(sel.split(' - ')[0])
             prod = df_prods[df_prods['ID'] == id_prod].iloc[0]
             with st.form(f"form_edit_{id_prod}"):
-                p_f = float(str(prod.get('PRECO','0')).replace(',','.'))
-                c_f = float(str(prod.get('CASHBACKPERCENT','0')).replace(',','.'))
+                p_f = float(str(prod.get('PRECO','0.01')).replace(',','.'))
+                c_f = float(str(prod.get('CASHBACKPERCENT','0.0')).replace(',','.'))
                 d = prod.get('DISPONIVEL', False)
                 if isinstance(d, str): d = d.upper() == 'TRUE'
-                nome_e, preco_e = st.text_input("Nome", prod.get('NOME')), st.number_input("Preço", 0.01, p_f, format="%.2f")
-                # ... outros campos ...
+                
+                nome_e = st.text_input("Nome", value=prod.get('NOME', ''))
+                # --- CORREÇÃO DO ERRO APLICADA AQUI ---
+                preco_e = st.number_input("Preço (R$)", min_value=0.01, value=p_f, format="%.2f")
+                desc_c_e = st.text_input("Descrição Curta", value=prod.get('DESCRICAOCURTA', ''))
+                desc_l_e = st.text_area("Descrição Longa", value=prod.get('DESCRICAOLONGA', ''))
+                link_e = st.text_input("Link Imagem", value=prod.get('LINKIMAGEM', ''))
+                cash_e = st.number_input("Cashback (%)", min_value=0.0, max_value=100.0, value=c_f, format="%.2f")
+                disp_e = st.checkbox("Disponível", value=d)
+                
                 c1,c2 = st.columns(2)
-                if c1.form_submit_button("💾 Salvar"): atualizar_produto(id_prod, nome_e, preco_e, '','','','',c_f); st.rerun()
-                if c2.form_submit_button("🗑️ Excluir"): excluir_produto(id_prod); st.rerun()
+                if c1.form_submit_button("💾 Salvar Alterações", type="primary", use_container_width=True):
+                    if atualizar_produto(id_prod, nome_e, preco_e, desc_c_e, desc_l_e, link_e, disp_e, cash_e):
+                        st.success("Produto atualizado!"); st.rerun()
+                if c2.form_submit_button("🗑️ Excluir Produto", use_container_width=True):
+                    if excluir_produto(id_prod):
+                        st.success("Produto excluído!"); st.rerun()
 
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
@@ -299,11 +317,15 @@ with tab_cupons:
             codigo = c1.text_input("Código").upper()
             tipo = c1.selectbox("Tipo", ["PERCENTUAL", "FIXO"])
             valor = c2.number_input(f"Valor ({'%' if tipo == 'PERCENTUAL' else 'R$'})", 0.01, format="%.2f")
-            # ... outros campos ...
+            sem_val = st.checkbox("Sem data de validade")
+            validade = st.date_input("Validade", disabled=sem_val, min_value=date.today())
+            val_min = st.number_input("Compra mínima (R$)", 0.0, format="%.2f")
+            uso_ilim = st.checkbox("Uso ilimitado")
+            limite = st.number_input("Limite de usos", 1, step=1, disabled=uso_ilim)
             if st.form_submit_button("Salvar Cupom"):
                 if codigo and valor > 0:
-                    criar_cupom(codigo, tipo, valor, None, 0.0, 0)
-                    st.success("Cupom criado!"); st.rerun()
+                    if criar_cupom(codigo, tipo, valor, None if sem_val else validade, val_min, 0 if uso_ilim else limite):
+                        st.success("Cupom criado!"); st.rerun()
     st.subheader("📝 Cupons Cadastrados")
     df_cupons = carregar_dados(SHEET_NAME_CUPONS)
     if not df_cupons.empty: st.dataframe(df_cupons, use_container_width=True)
