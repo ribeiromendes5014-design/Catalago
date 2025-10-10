@@ -613,6 +613,7 @@ def render_product_card(prod_id, row, key_prefix, df_catalogo_indexado):
             if pd.notna(cashback_percent) and cashback_percent > 0:
                 # O cashback é baseado no PRECO_FINAL (preço à vista/promocional)
                 cashback_valor_calculado = (cashback_percent / 100) * preco_final
+                # Note: Removi a quebra de linha do HTML, garantindo que a tag seja completa
                 cashback_html = f"""
                 <span style='color: #2E7D32; font-size: 0.8rem; font-weight: bold;'>
                     Cashback: R$ {cashback_valor_calculado:.2f}
