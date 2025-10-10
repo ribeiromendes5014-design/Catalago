@@ -661,7 +661,7 @@ def copy_to_clipboard_js(text_to_copy):
     st.markdown(js_code, unsafe_allow_html=True)
 
 
-st_autorefresh(interval=60000, key="auto_refresh_catalogo")
+st_autorefresh(interval=6000000000, key="auto_refresh_catalogo")
 
 
 if st.session_state.pedido_confirmado:
@@ -982,6 +982,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
