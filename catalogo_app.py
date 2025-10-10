@@ -1079,6 +1079,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# --- INÍCIO DO CÁLCULO DAS VARIÁVEIS PARA O POPOVER (MOVIMENTO DO CÓDIGO) ---
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
@@ -1086,6 +1087,14 @@ carrinho_vazio = not st.session_state.carrinho
 # NOVO: Cálculo do cashback total no carrinho
 df_catalogo_completo = st.session_state.df_catalogo_indexado 
 cashback_a_ganhar = calcular_cashback_total(st.session_state.carrinho, df_catalogo_completo)
+
+# Variáveis que causaram o erro NameError
+desconto_cupom = st.session_state.get('desconto_cupom', 0.0)
+total_com_desconto = total_acumulado - desconto_cupom
+
+if total_com_desconto < 0:
+    total_com_desconto = 0
+# --- FIM DO CÁLCULO DAS VARIÁVEIS PARA O POPOVER ---
 
 # NOVO: O cabeçalho foi simplificado, mantendo apenas a barra de pesquisa
 st.markdown("<div class='pink-bar-container'><div class='pink-bar-content'>", unsafe_allow_html=True)
@@ -1181,6 +1190,7 @@ HIDDEN_POPOVER_TITLE = "Popover Oculto Carrinho"
 # em um div com uma classe específica para ocultá-lo, evitando conflitos com outros elementos.
 st.markdown(f'<div style="display: none !important; visibility: hidden !important; height: 0;">', unsafe_allow_html=True)
 with st.popover(HIDDEN_POPOVER_TITLE, use_container_width=False, help=HIDDEN_POPOVER_TITLE):
+    # Passa as variáveis calculadas corretamente
     render_cart_popover(total_acumulado, desconto_cupom, total_com_desconto, cashback_a_ganhar, df_catalogo_completo)
 st.markdown('</div>', unsafe_allow_html=True)
 
