@@ -1212,6 +1212,7 @@ with st.popover(HIDDEN_POPOVER_TITLE, use_container_width=False, help=HIDDEN_POP
 
 
 # --- 2. LÓGICA DO BOTÃO FLUTUANTE DO CARRINHO (CORRIGIDA) ---
+# --- 2. LÓGICA DO BOTÃO FLUTUANTE DO CARRINHO (À PROVA DE VERSÃO) ---
 cart_float_html = f"""
 <div class="cart-float" onclick="window.openFloatingCart();" title="Abrir Meu Pedido">
     <span style="font-size: 28px;">🛍️</span>
@@ -1219,29 +1220,55 @@ cart_float_html = f"""
 </div>
 """
 
-# Injeta o botão se houver itens no carrinho
+# Mostra o botão apenas se houver itens
 if num_itens > 0:
     st.markdown(cart_float_html, unsafe_allow_html=True)
 
-# Injetar o script JS que realmente abre o popover
+# Script robusto para detectar automaticamente o seletor do botão popover
 popover_click_script = """
 <script>
 window.openFloatingCart = function() {
+    // Aguarda o DOM estar pronto e o popover renderizado
     setTimeout(() => {
-        // Tenta encontrar o botão do popover oculto
-        const hiddenPopoverBtn = document.querySelector('button[data-testid="stPopoverButton"]');
-        if (hiddenPopoverBtn) {
-            hiddenPopoverBtn.click();
+        const container = document.body;
+
+        if (!container) {
+            console.warn("❌ DOM principal não encontrado.");
+            return;
+        }
+
+        // Lista de seletores possíveis (Streamlit muda isso entre versões)
+        const selectors = [
+            'button[data-testid="stPopoverButton"]',
+            'button[aria-label*="Popover"]',
+            'button[aria-label*="Carrinho"]',
+            'button[title*="Popover"]',
+            'button[role="button"]'
+        ];
+
+        let hiddenButton = null;
+        for (const sel of selectors) {
+            hiddenButton = container.querySelector(sel);
+            if (hiddenButton) {
+                console.log("🔍 Botão do popover encontrado com seletor:", sel);
+                break;
+            }
+        }
+
+        if (hiddenButton) {
+            hiddenButton.click();
             console.log("✅ Carrinho aberto com sucesso!");
         } else {
-            console.warn("⚠️ Botão do popover não encontrado no DOM.");
+            console.warn("⚠️ Nenhum botão do popover foi encontrado. Verifique se o popover foi renderizado.");
         }
-    }, 300);
-}
+    }, 500); // pequeno atraso pra garantir renderização
+};
 </script>
 """
 st.markdown(popover_click_script, unsafe_allow_html=True)
 
+
 # --- FIM DO BLOCO ADICIONADO ---
+
 
 
