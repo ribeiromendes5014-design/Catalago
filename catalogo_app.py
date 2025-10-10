@@ -694,7 +694,6 @@ if st.session_state.df_catalogo_indexado is None:
 # --- CSS ---
 st.markdown(f"""
 <style>
-...
 /* Garante que o botão popover dentro do container acima não seja visível */
 #floating-cart-anchor-container button {{
     opacity: 0 !important; 
@@ -703,9 +702,6 @@ st.markdown(f"""
     padding: 0px !important;
     margin: 0px !important;
 }}
-...
-</style>
-""", unsafe_allow_html=True)
 
 .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
 
@@ -1230,7 +1226,3 @@ whatsapp_button_html = f"""
 
 st.markdown(whatsapp_button_html, unsafe_allow_html=True)
 # --- FIM DO BLOCO ADICIONADO ---
-
-
-
-
