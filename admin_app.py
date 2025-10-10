@@ -53,6 +53,14 @@ def fetch_github_data_v2(sheet_name, version_control):
         if sheet_name == SHEET_NAME_PEDIDOS:
             content = content.replace(',"","PENDENTE",', ',"PENDENTE",')
 
+        # --- INÍCIO DA CORREÇÃO ---
+        # Define o tipo de dado para garantir que o CONTATO seja sempre lido como string
+        dtype_config = {}
+        if sheet_name == SHEET_NAME_CLIENTES_CASH:
+            # O nome da coluna será 'CONTATO' antes da padronização para maiúsculas
+            dtype_config['CONTATO'] = str 
+        # --- FIM DA CORREÇÃO ---
+
         df = pd.read_csv(
             StringIO(content),
             sep=",",
@@ -60,7 +68,9 @@ def fetch_github_data_v2(sheet_name, version_control):
             on_bad_lines="warn",
             quotechar='"',
             escapechar="\\",
-            doublequote=True
+            doublequote=True,
+            # Aplica a configuração de tipo
+            dtype=dtype_config 
          )
         
         df.columns = df.columns.str.strip().str.upper().str.replace(' ', '_')
@@ -381,4 +391,5 @@ with tab_cupons:
     st.subheader("📝 Cupons Cadastrados")
     df_cupons = carregar_dados(SHEET_NAME_CUPONS)
     if not df_cupons.empty: st.dataframe(df_cupons, use_container_width=True)
+
 
