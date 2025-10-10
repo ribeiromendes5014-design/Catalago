@@ -696,21 +696,27 @@ st.markdown(f"""
 <style>
 #MainMenu, footer, [data-testid="stSidebar"] {{visibility: hidden;}}
 [data-testid="stSidebarHeader"], [data-testid="stToolbar"], a[data-testid="stAppDeployButton"], [data-testid="stStatusWidget"], [data-testid="stDecoration"] {{ display: none !important; }}
-/* Esconde o botão âncora do popover para que apenas o float o acione */
-button[title="Anchor for floating cart"] {{ 
+
+/* Novo ID para envolver e esconder o popover, garantindo que ele não afete o layout */
+#floating-cart-anchor-container {{
+    position: absolute !important;
+    top: 0px !important;
+    left: 0px !important;
+    width: 0px !important;
+    height: 0px !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+}}
+
+/* Garante que o botão popover dentro do container acima não seja visível */
+#floating-cart-anchor-container button {{
     opacity: 0 !important; 
     pointer-events: none !important; 
     width: 0px !important; 
     height: 0px !important;
-    position: absolute !important;
-}}
-/* Garante que o container do botão âncora não atrapalhe o layout */
-div[data-testid="stVerticalBlock"] > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) {{
-    height: 0px !important;
     padding: 0px !important;
     margin: 0px !important;
 }}
-
 
 .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
 
@@ -918,16 +924,12 @@ st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collaps
 
 st.markdown("</div></div>", unsafe_allow_html=True)
 
-# âncora invisível para o popover do carrinho, que será acionada pelo botão flutuante.
-# O popover precisa estar no fluxo normal do Streamlit.
-st.markdown('<div style="position: absolute; top: 0; right: 0;">', unsafe_allow_html=True)
-st.button("OpenCartPopover", key="popover_anchor_button", help="Anchor for floating cart", use_container_width=False)
-st.markdown('</div>', unsafe_allow_html=True)
-
-# O popover do carrinho agora é um elemento Streamlit independente,
-# cujo acionamento está ligado ao botão âncora (popover_anchor_button).
-# CORREÇÃO: Removido o argumento 'key' de st.popover
-with st.popover(" ", use_container_width=False):
+# Novo container invisível que abriga o popover
+# O ID é usado para esconder e acessar o elemento via JavaScript
+st.markdown('<div id="floating-cart-anchor-container">', unsafe_allow_html=True)
+# O popover agora é o elemento a ser clicado via JS
+# O título ('🛒') é o texto do botão popover (que está escondido)
+with st.popover("🛒", use_container_width=False) as popover_anchor:
     st.header("🛒 Detalhes do Pedido")
     if carrinho_vazio:
         st.info("Seu carrinho está vazio.")
@@ -1116,6 +1118,8 @@ with st.popover(" ", use_container_width=False):
                         st.rerun()
                 else:
                     st.warning("Preencha seu nome e contato.")
+st.markdown('</div>', unsafe_allow_html=True) # Fecha o container invisível
+
 
 # --- FIM DA REESTRUTURAÇÃO DO CABEÇALHO E CARRINHO ---
 
@@ -1199,10 +1203,11 @@ else:
 # --- ADICIONA OS BOTÕES FLUTUANTES NO FINAL DO SCRIPT ---
 
 # 1. BOTÃO DO CARRINHO FLUTUANTE (Posicionado acima do WhatsApp)
-# O clique no botão flutuante simula o clique no botão âncora invisível (Anchor for floating cart) do popover.
+# A função de clique agora busca o botão do popover dentro do container invisível e clica nele.
+# O Streamlit cria um botão dentro do popover com o texto fornecido ("🛒")
 cart_float_button_html = f"""
 <div class='cart-float' 
-     onclick="document.querySelector('[data-testid=stButton] button[title=\\"Anchor for floating cart\\"]').click();"
+     onclick="document.querySelector('#floating-cart-anchor-container button').click();"
      title="Abrir Carrinho de Pedidos">
     🛒
     <span class='cart-count'>{num_itens}</span>
