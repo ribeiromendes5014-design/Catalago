@@ -461,13 +461,8 @@ def remover_do_carrinho(produto_id):
 
 def render_product_image(link_imagem):
     placeholder_html = """<div class="product-image-container" style="background-color: #f0f0f0; border-radius: 8px;"><span style="color: #a0a0a0; font-size: 1.1rem; font-weight: bold;">Sem Imagem</span></div>"""
-    
     if link_imagem and str(link_imagem).strip().startswith('http'):
-        st.image(
-            link_imagem,
-            caption='',
-            use_container_width=True 
-        )
+        st.markdown(f'<div class="product-image-container"><img src="{link_imagem}"></div>', unsafe_allow_html=True)
     else:
         st.markdown(placeholder_html, unsafe_allow_html=True)
 
@@ -634,20 +629,7 @@ st.markdown(f"""
 [data-testid="stSidebarHeader"], [data-testid="stToolbar"], a[data-testid="stAppDeployButton"], [data-testid="stStatusWidget"], [data-testid="stDecoration"] {{ display: none !important; }}
 div[data-testid="stPopover"] > div:first-child > button {{ display: none; }}
 .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
-
-/* CORREÇÃO PARA MODO ESCURO: Força a cor do texto para ser escura dentro do container principal */
-div.block-container {{ 
-    background-color: rgba(255, 255, 255, 0.95); 
-    border-radius: 10px; 
-    padding: 2rem; 
-    margin-top: 1rem; 
-    color: #262626; /* Cor de texto padrão forçada para preto escuro */
-}}
-/* Garante que o texto em parágrafos e títulos também seja escuro, superando o modo escuro do celular */
-div.block-container p, div.block-container h1, div.block-container h2, div.block-container h3, div.block-container h4, div.block-container h5, div.block-container h6, div.block-container span {{
-    color: #262626 !important;
-}}
-
+div.block-container {{ background-color: rgba(255, 255, 255, 0.95); border-radius: 10px; padding: 2rem; margin-top: 1rem; }}
 .pink-bar-container {{ background-color: #E91E63; padding: 20px 0; width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
 .pink-bar-content {{ width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; }}
 .cart-badge-button {{ background-color: #C2185B; color: white; border-radius: 12px; padding: 8px 15px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; transition: background-color 0.3s; display: inline-flex; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-width: 150px; justify-content: center; }}
@@ -655,29 +637,44 @@ div.block-container p, div.block-container h1, div.block-container h2, div.block
 .cart-count {{ background-color: white; color: #E91E63; border-radius: 50%; padding: 2px 7px; margin-left: 8px; font-size: 14px; line-height: 1; }}
 div[data-testid="stButton"] > button {{ background-color: #E91E63; color: white; border-radius: 10px; border: 1px solid #C2185B; font-weight: bold; }}
 div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: white; border: 1px solid #E91E63; }}
-
-/* PLACEHOLDER SEM IMAGEM */
-.product-image-container {{ height: 220px; display: flex; align-items: center; justify-content: center; margin-bottom: 1rem; border-radius: 8px; }}
-
-/* CORREÇÃO DE ALTURA PARA IMAGENS st.image */
-[data-testid="stVerticalBlock"] [data-testid^="stImage"] {{
-    min-height: 320px; /* Aumentado para acomodar a nova altura máxima */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 1rem;
-}}
-[data-testid="stVerticalBlock"] [data-testid^="stImage"] img {{
-    max-height: 300px; /* Aumentado de 200px para 300px */
-    width: auto; 
-    object-fit: contain;
-    border-radius: 8px; 
-}}
-
+.product-image-container {{ height: 220px; display: flex; align-items: center; justify-content: center; margin-bottom: 1rem; overflow: hidden; }}
+.product-image-container img {{ max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }}
 .esgotado-badge {{ background-color: #757575; color: white; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
 .estoque-baixo-badge {{ background-color: #FFC107; color: black; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
 </style>
 """, unsafe_allow_html=True)
+
+
+def copy_to_clipboard_js(text_to_copy):
+    js_code = f"""
+    <script>
+    function copyTextToClipboard(text) {{
+      if (navigator.clipboard) {{
+        navigator.clipboard.writeText(text).then(function() {{
+          alert('Resumo do pedido copiado!');
+        }}, function(err) {{
+          console.error('Não foi possível copiar o texto: ', err);
+          alert('Erro ao copiar o texto. Tente novamente.');
+        }});
+      }} else {{
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {{
+          document.execCommand('copy');
+          alert('Resumo do pedido copiado!');
+        }} catch (err) {{
+          console.error('Fallback: Não foi possível copiar o texto: ', err);
+          alert('Erro ao copiar o texto. Tente novamente.');
+        }}
+        document.body.removeChild(textArea);
+      }}
+    }}
+    </script>
+    """
+    st.markdown(js_code, unsafe_allow_html=True)
 
 
 st_autorefresh(interval=6000000000, key="auto_refresh_catalogo")
@@ -707,10 +704,7 @@ if st.session_state.pedido_confirmado:
 
     st.text_area("Resumo do Pedido (Clique para copiar)", resumo_texto, height=300)
     
-    # NOTE: copy_to_clipboard_js needs to be defined if the user wants this functionality to work.
-    # For now, I will assume it's defined elsewhere or the user accepts this limitation.
-    # If the user asks for this function, I will add it.
-    # copy_to_clipboard_js(resumo_texto) 
+    copy_to_clipboard_js(resumo_texto)
     st.markdown(
         f'<button class="cart-badge-button" style="background-color: #25D366; width: 100%; margin-bottom: 15px;" onclick="copyTextToClipboard(\'{resumo_texto.replace("'", "\\'")}\')">✅ Copiar Resumo</button>',
         unsafe_allow_html=True
@@ -1035,3 +1029,4 @@ else:
         with cols[i % 4]:
             # 3. OTIMIZAÇÃO: Passa o DF indexado para a função de renderização
             render_product_card(product_id, row, key_prefix=unique_key, df_catalogo_indexado=st.session_state.df_catalogo_indexado)
+
