@@ -701,9 +701,36 @@ if st.session_state.pedido_confirmado:
     st.stop()
 
 
-col_logo, col_titulo = st.columns([1.5, 4.5])
-col_logo.image(LOGO_DOCEBELLA_URL, width=200)
-col_titulo.title("Catálogo de Pedidos Doce&Bella")
+st.markdown(f"""
+<style>
+/* Estilo do container do banner colorido */
+.banner-colored {{
+    background-color: #e91e63; /* <-- AQUI ESTÁ A ALTERAÇÃO */
+    padding: 20px 30px; /* Espaçamento interno */
+    border-radius: 10px; /* Bordas arredondadas */
+    display: flex; /* Para alinhar itens lado a lado */
+    align-items: center; /* Centraliza verticalmente */
+    gap: 25px; /* Espaço entre o logo e o título */
+    margin-bottom: 20px; /* Espaço abaixo do banner */
+}}
+
+.banner-colored img {{
+    max-height: 80px; /* Altura máxima do logo */
+    width: auto;
+}}
+
+.banner-colored h1 {{
+    color: white; /* Cor do texto */
+    font-size: 2.3rem; /* Tamanho da fonte */
+    margin: 0; /* Remove margens */
+}}
+</style>
+
+<div class="banner-colored">
+    <img src="{LOGO_DOCEBELLA_URL}" alt="Doce&Bella Logo">
+    <h1>Catálogo de Pedidos Doce&Bella</h1>
+</div>
+""", unsafe_allow_html=True)
 
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
@@ -982,6 +1009,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
