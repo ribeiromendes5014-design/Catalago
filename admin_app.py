@@ -299,7 +299,7 @@ with tab_pedidos:
                     c1, c2 = st.columns(2)
                     if c1.button("✅ Finalizar", key=f"fin_{id_pedido}", disabled=progresso!=100, use_container_width=True):
                         if atualizar_status_pedido(id_pedido, "Finalizado", df_catalogo): st.success("Pedido finalizado!"); st.rerun()
-                    if c2.button("✖️ Cancelar", key=f"can_{id_pedido}", type="secondary, use_container_width=True):
+                    if c2.button("✖️ Cancelar", key=f"can_{id_pedido}", type="secondary", use_container_width=True):
                         if atualizar_status_pedido(id_pedido, "Cancelado", df_catalogo): st.warning("Pedido cancelado!"); st.rerun()
                         
         st.header("✅ Pedidos Finalizados e Cancelados")
@@ -376,4 +376,5 @@ with tab_cupons:
     st.subheader("📝 Cupons Cadastrados")
     df_cupons = carregar_dados(SHEET_NAME_CUPONS)
     if not df_cupons.empty: st.dataframe(df_cupons, use_container_width=True)
+
 
