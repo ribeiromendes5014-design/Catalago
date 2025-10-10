@@ -88,31 +88,38 @@ def write_csv_to_github(df, sheet_name, commit_message):
         st.error(f"Falha no Commit: {put_response.json().get('message', 'Erro')}"); return False
 
 def parse_json_from_string(json_string):
-    """Versão final: detecta JSON duplamente escapado, corrige e retorna dicionário"""
+    """Corrige JSON com aspas triplas ou duplamente escapadas"""
+    import json, ast
+
     if pd.isna(json_string) or not isinstance(json_string, str) or not json_string.strip():
         return {}
 
-    s = json_string.strip()
+    s = str(json_string).strip()
 
-    # 🔧 Remove aspas externas e corrige aspas duplas
-    if s.startswith('"') and s.endswith('"'):
-        s = s[1:-1]
+    # 🔧 Remove aspas externas extras e converte escape triplo
+    s = s.strip()
+    s = s.replace('\\"', '"')
     s = s.replace('""', '"')
+    if s.startswith('"') and s.endswith('"'):
+        s = s[1:-1].strip()
 
-    # 🌀 Tenta decodificar 2 vezes, pois o CSV vem com escape duplo
-    try:
-        data = json.loads(s)
-        if isinstance(data, str):  # se ainda for string, decodifica de novo
-            data = json.loads(data)
-        return data
-    except Exception:
-        pass
+    # 🔁 Tenta várias formas de decodificar
+    for _ in range(3):
+        try:
+            data = json.loads(s)
+            if isinstance(data, str):
+                s = data
+                continue
+            return data
+        except Exception:
+            pass
+        try:
+            return ast.literal_eval(s)
+        except Exception:
+            pass
 
-    # 🧩 Última tentativa: formato Python dict
-    try:
-        return ast.literal_eval(s)
-    except Exception:
-        return {}
+    # 🔚 Se nada funcionar, retorna vazio
+    return {}
 
 # --- FUNÇÕES CRUD COMPLETAS ---
 def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponivel, cashback):
@@ -347,6 +354,7 @@ with tab_cupons:
     st.subheader("📝 Cupons Cadastrados")
     df_cupons = carregar_dados(SHEET_NAME_CUPONS)
     if not df_cupons.empty: st.dataframe(df_cupons, use_container_width=True)
+
 
 
 
