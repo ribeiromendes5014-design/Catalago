@@ -214,6 +214,7 @@ with tab_pedidos:
     if st.button("Recarregar Pedidos"): st.session_state['data_version'] += 1; st.rerun()
     df_pedidos = carregar_dados(SHEET_NAME_PEDIDOS)
     df_catalogo = carregar_dados(SHEET_NAME_CATALOGO)
+    df_pedidos = df_pedidos.fillna("")
     if df_pedidos.empty: st.info("Nenhum pedido encontrado.")
     else:
         df_pedidos['DATA_HORA'] = pd.to_datetime(df_pedidos['DATA_HORA'], errors='coerce')
@@ -329,4 +330,5 @@ with tab_cupons:
     st.subheader("📝 Cupons Cadastrados")
     df_cupons = carregar_dados(SHEET_NAME_CUPONS)
     if not df_cupons.empty: st.dataframe(df_cupons, use_container_width=True)
+
 
