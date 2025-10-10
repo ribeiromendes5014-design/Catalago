@@ -17,9 +17,7 @@ import ast
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 DATA_REPO_NAME = os.environ.get("DATA_REPO_NAME", os.environ.get("REPO_NAME"))
 BRANCH = os.environ.get("BRANCH")
-# === MUDANÇAS NOVAS ===
 ESTOQUE_BAIXO_LIMITE = 5 # Define o limite para exibir o alerta de "Últimas Unidades"
-# === FIM DAS MUDANÇAS NOVAS ===
 
 # URLs da API
 GITHUB_BASE_API = f"https://api.github.com/repos/{DATA_REPO_NAME}/contents/"
@@ -29,9 +27,10 @@ SHEET_NAME_CATALOGO_CSV = "produtos_estoque.csv"
 SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
 SHEET_NAME_PEDIDOS_CSV = "pedidos.csv"
 SHEET_NAME_VIDEOS_CSV = "video.csv"
-# === NOVO ARQUIVO: Clientes para consulta de Cashback ===
 SHEET_NAME_CLIENTES_CASHBACK_CSV = "clientes_cash.csv"
-# =======================================================
+# === NOVO ARQUIVO: Cupons de Desconto ===
+SHEET_NAME_CUPONS_CSV = "cupons.csv"
+# ========================================
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-na-zvania-3.jpg'
 LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
 
@@ -39,10 +38,16 @@ LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
 # Inicialização do Carrinho de Compras e Estado
 if 'carrinho' not in st.session_state:
     st.session_state.carrinho = {}
-# === MUDANÇAS NOVAS ===
 if 'pedido_confirmado' not in st.session_state:
     st.session_state.pedido_confirmado = None
-# === FIM DAS MUDANÇAS NOVAS ---
+# === NOVO ESTADO: Gerenciamento do Cupom ===
+if 'cupom_aplicado' not in st.session_state:
+    st.session_state.cupom_aplicado = None
+if 'desconto_cupom' not in st.session_state:
+    st.session_state.desconto_cupom = 0.0
+if 'cupom_mensagem' not in st.session_state:
+    st.session_state.cupom_mensagem = ""
+# ==========================================
 
 
 # --- Funções de Conexão GITHUB ---
@@ -60,7 +65,9 @@ def get_data_from_github(file_name):
         response = requests.get(api_url, headers=headers_content)
 
         if response.status_code == 404:
-            st.error(f"Erro 404: Arquivo '{file_name}' não encontrado no repositório '{DATA_REPO_NAME}' na branch '{BRANCH}'. Verifique o nome do arquivo/branch/repo.")
+            # Não exibe erro para cupons, pois é um arquivo opcional
+            if file_name != SHEET_NAME_CUPONS_CSV:
+                st.error(f"Erro 404: Arquivo '{file_name}' não encontrado no repositório '{DATA_REPO_NAME}' na branch '{BRANCH}'. Verifique o nome do arquivo/branch/repo.")
             return None
 
         response.raise_for_status()
@@ -84,12 +91,41 @@ def get_data_from_github(file_name):
         return df
 
     except requests.exceptions.HTTPError as e:
-        st.error(f"Erro HTTP ao acessar '{file_name}' via API ({e.response.status_code}). URL: {api_url}")
+        if e.response.status_code != 404: # Ignora erro 404 para arquivos opcionais como cupons
+            st.error(f"Erro HTTP ao acessar '{file_name}' via API ({e.response.status_code}). URL: {api_url}")
         return None
     except Exception as e:
         st.error(f"Erro ao carregar '{file_name}' via API do GitHub: {e}")
         return None
 
+# === NOVA FUNÇÃO: Carregar Cupons ===
+@st.cache_data(ttl=30)
+def carregar_cupons():
+    """Carrega os cupons ativos do 'cupons.csv' do GitHub."""
+    df = get_data_from_github(SHEET_NAME_CUPONS_CSV)
+    
+    colunas_essenciais = ['NOME_CUPOM', 'TIPO_DESCONTO', 'VALOR_DESCONTO', 'STATUS']
+    if df is None or df.empty:
+        # Se o arquivo não existe, retorna um DF vazio sem aviso.
+        return pd.DataFrame(columns=colunas_essenciais)
+
+    for col in colunas_essenciais:
+        if col not in df.columns:
+            st.warning(f"A planilha de cupons existe, mas a coluna essencial '{col}' não foi encontrada. A função de cupons será desativada.")
+            return pd.DataFrame(columns=colunas_essenciais)
+
+    df_ativo = df[df['STATUS'].astype(str).str.strip().str.upper() == 'ATIVO'].copy()
+    df_essencial = df_ativo[colunas_essenciais].copy()
+
+    df_essencial['NOME_CUPOM'] = df_essencial['NOME_CUPOM'].astype(str).str.strip().str.upper()
+    df_essencial['TIPO_DESCONTO'] = df_essencial['TIPO_DESCONTO'].astype(str).str.strip().str.upper()
+    df_essencial['VALOR_DESCONTO'] = pd.to_numeric(
+        df_essencial['VALOR_DESCONTO'].astype(str).str.replace(',', '.'), 
+        errors='coerce'
+    )
+    
+    return df_essencial.dropna(subset=colunas_essenciais).reset_index(drop=True)
+# =======================================
 
 @st.cache_data(ttl=5)
 def carregar_promocoes():
@@ -123,20 +159,13 @@ def carregar_catalogo():
         st.warning(f"Catálogo indisponível. Verifique o arquivo '{SHEET_NAME_CATALOGO_CSV}' no GitHub.")
         return pd.DataFrame()
 
-    # --- CORREÇÃO DE RECÊNCIA: usa o ID como base da recência para maior precisão ---
     if 'ID' in df_produtos.columns:
         df_produtos['RECENCIA'] = pd.to_numeric(df_produtos['ID'], errors='coerce')
-        
-        # === CORREÇÃO DE DUPLICATAS (Sem remoção e sem aviso, conforme solicitado) ===
         df_produtos['ID'] = pd.to_numeric(df_produtos['ID'], errors='coerce').astype('Int64')
         df_produtos.dropna(subset=['ID'], inplace=True)
-        # === FIM DA CORREÇÃO DE DUPLICATAS ===
-
     else:
         df_produtos['RECENCIA'] = range(len(df_produtos), 0, -1)
-    # --- FIM DA CORREÇÃO DE RECÊNCIA ---
 
-    # --- LÓGICA ROBUSTA PARA ENCONTRAR E RENOMEAR COLUNAS ---
     colunas_minimas = ['PRECOVISTA', 'ID', 'NOME']
     for col in colunas_minimas:
         if col not in df_produtos.columns:
@@ -158,7 +187,6 @@ def carregar_catalogo():
         df_produtos['LINKIMAGEM'] = ""
 
     df_produtos.rename(columns=mapa_renomeacao, inplace=True)
-    # --- FIM DA LÓGICA ROBUSTA ---
 
     if 'DISPONIVEL' not in df_produtos.columns:
         df_produtos['DISPONIVEL'] = 'SIM'
@@ -203,10 +231,6 @@ def carregar_catalogo():
     return df_final.set_index('ID').reset_index()
 
 
-# =========================================================================
-# === NOVAS FUNÇÕES DE CASHBACK (CORRIGIDAS PARA O ACENTO E CASE) ===
-# =========================================================================
-
 @st.cache_data(ttl=1) 
 def carregar_clientes_cashback():
     """Carrega os clientes do cashback, limpa o contato e renomeia as colunas para facilitar."""
@@ -215,26 +239,21 @@ def carregar_clientes_cashback():
     if df is None or df.empty:
         return pd.DataFrame(columns=['NOME', 'CONTATO', 'CASHBACK_DISPONIVEL', 'NIVEL_ATUAL'])
         
-    # Corrigindo a leitura da coluna 'Cashback Disponível' e 'Telefone' (o nome original pode ser 'TELEFONE')
     df.rename(columns={
-        'CASHBACK_DISPONIVEL': 'CASHBACK_DISPONIVEL', # Se for tudo em CAPS, é a forma que o Streamlit lê 'Cashback Disponível'
+        'CASHBACK_DISPONIVEL': 'CASHBACK_DISPONIVEL',
         'NIVEL_ATUAL': 'NIVEL_ATUAL', 
-        'TELEFONE': 'CONTATO', # Assumindo que o campo 'Telefone' é lido como 'TELEFONE' em CAPS pelo get_data_from_github
+        'TELEFONE': 'CONTATO',
         'NOME': 'NOME'
     }, inplace=True)
     
-    # Tentativa de ajuste para lidar com o nome da coluna original (Cashback Disponível)
     if 'CASHBACK_DISPONÍVEL' in df.columns:
         df.rename(columns={'CASHBACK_DISPONÍVEL': 'CASHBACK_DISPONIVEL'}, inplace=True)
 
-    # Assumindo que a coluna de telefone é 'TELEFONE'
     if 'TELEFONE' in df.columns:
         df.rename(columns={'TELEFONE': 'CONTATO'}, inplace=True)
     elif 'CONTATO' not in df.columns:
-         # Última tentativa para achar o telefone
         if 'TELEFONE' in df.columns: df.rename(columns={'TELEFONE': 'CONTATO'}, inplace=True)
         
-    # Limpa o telefone para ser usado como chave única
     if 'CONTATO' in df.columns:
         df['CONTATO'] = df['CONTATO'].astype(str).str.replace(r'\D', '', regex=True).str.strip() 
         df['CASHBACK_DISPONIVEL'] = pd.to_numeric(df['CASHBACK_DISPONIVEL'], errors='coerce').fillna(0.0)
@@ -251,10 +270,8 @@ DF_CLIENTES_CASH = carregar_clientes_cashback()
 
 def buscar_cliente_cashback(numero_contato, df_clientes_cash):
     """Busca um cliente pelo número de contato (limpo) e retorna saldo e nível."""
-    # Limpa o contato do usuário para fazer a busca
     contato_limpo = str(numero_contato).replace('(', '').replace(')', '').replace('-', '').replace(' ', '').strip()
     
-    # Garante que o DataFrame não está vazio
     if df_clientes_cash.empty:
         return False, None, 0.00, 'NENHUM'
         
@@ -268,10 +285,6 @@ def buscar_cliente_cashback(numero_contato, df_clientes_cash):
     else:
         return False, None, 0.00, 'NENHUM'
         
-# =========================================================================
-# FIM NOVAS FUNÇÕES DE CASHBACK
-# =========================================================================
-
 
 # --- Funções do Aplicativo ---
 
@@ -280,7 +293,6 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json, pedido
     file_path = SHEET_NAME_PEDIDOS_CSV
     api_url = f"{GITHUB_BASE_API}{file_path}"
 
-    # Adicione a coluna 'STATUS' no cabeçalho
     novo_cabecalho = 'ID_PEDIDO,DATA_HORA,NOME_CLIENTE,CONTATO_CLIENTE,ITENS_PEDIDO,VALOR_TOTAL,LINKIMAGEM,STATUS,itens_json'
 
     headers_get = {
@@ -316,9 +328,7 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json, pedido
     timestamp = int(datetime.now().timestamp())
     data_hora = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     id_pedido = timestamp
-    # === MUDANÇA CRÍTICA: Status inicial agora é PENDENTE ===
     status = "PENDENTE"
-    # ======================================================
     link_imagem = ""
 
     try:
@@ -357,9 +367,7 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json, pedido
     try:
         response_put = requests.put(api_url, headers=headers_put, data=json.dumps(commit_data))
         response_put.raise_for_status()
-        # === MUDANÇAS NOVAS ===
         st.session_state.pedido_confirmado = pedido_data
-        # === FIM DAS MUDANÇAS NOVAS ===
         return True
     except requests.exceptions.HTTPError as e:
         st.error(f"Erro ao salvar o pedido (Commit no GitHub). Status {e.response.status_code}. "
@@ -369,13 +377,12 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json, pedido
         st.error(f"Erro desconhecido ao enviar o pedido: {e}")
         return False
 
-# === FUNÇÃO DE ADIÇÃO DE QUANTIDADE (Usada no card e no carrinho) ===
+
 def adicionar_qtd_ao_carrinho(produto_id, produto_row, quantidade):
     produto_nome = produto_row['NOME']
     produto_preco = produto_row['PRECO_FINAL']
     produto_imagem = produto_row.get('LINKIMAGEM', '')
     
-    # Obtém o estoque máximo garantindo que seja um número inteiro positivo
     quantidade_max = int(produto_row.get('QUANTIDADE', 999999))
     
     if quantidade_max <= 0:
@@ -383,7 +390,6 @@ def adicionar_qtd_ao_carrinho(produto_id, produto_row, quantidade):
          return
 
     if produto_id in st.session_state.carrinho:
-        # Soma a quantidade já existente + a quantidade a adicionar
         nova_quantidade = st.session_state.carrinho[produto_id]['quantidade'] + quantidade
         
         if nova_quantidade > quantidade_max:
@@ -393,7 +399,6 @@ def adicionar_qtd_ao_carrinho(produto_id, produto_row, quantidade):
             
         st.session_state.carrinho[produto_id]['quantidade'] = nova_quantidade
     else:
-        # Primeira adição
         if quantidade > quantidade_max:
              st.warning(f"⚠️ Quantidade solicitada ({quantidade}) excede o estoque ({quantidade_max}) para '{produto_nome}'.")
              return
@@ -405,7 +410,7 @@ def adicionar_qtd_ao_carrinho(produto_id, produto_row, quantidade):
         }
     st.toast(f"✅ {quantidade}x {produto_nome} adicionado(s)!", icon="🛍️"); time.sleep(0.1)
 
-# Esta função agora é um placeholder e não é usada diretamente no card, mas é mantida por compatibilidade.
+
 def adicionar_ao_carrinho(produto_id, produto_row):
     pass 
 
@@ -422,24 +427,22 @@ def render_product_image(link_imagem):
     else:
         st.markdown(placeholder_html, unsafe_allow_html=True)
 
-# === MUDANÇAS NOVAS (Função para limpar o carrinho) ===
 def limpar_carrinho():
     st.session_state.carrinho = {}
+    # Limpa também o estado do cupom
+    st.session_state.cupom_aplicado = None
+    st.session_state.desconto_cupom = 0.0
+    st.session_state.cupom_mensagem = ""
     st.toast("🗑️ Pedido limpo!", icon="🧹")
     st.rerun()
-# === FIM DAS MUDANÇAS NOVAS ===
 
-# === INÍCIO DA FUNÇÃO RENDER_PRODUCT_CARD (MOVIMENTO PARA CIMA) ===
 def render_product_card(prod_id, row, key_prefix):
     """Renderiza um card de produto com suporte para abas de foto e vídeo, seletor de quantidade e feedback de estoque."""
     with st.container(border=True):
         
-        # --- PREPARAÇÃO DE DADOS (Correção de tipo para segurança) ---
-        # Garante que NOME e DESCRICAOCURTA sejam sempre strings (Correção do float.strip)
         produto_nome = str(row['NOME'])
         descricao_curta = str(row.get('DESCRICAOCURTA', '')).strip()
         
-        # === LÓGICA DE ESTOQUE ===
         estoque_atual = int(row.get('QUANTIDADE', 999999)) 
         esgotado = estoque_atual <= 0
         estoque_baixo = estoque_atual > 0 and estoque_atual <= ESTOQUE_BAIXO_LIMITE
@@ -448,7 +451,6 @@ def render_product_card(prod_id, row, key_prefix):
             st.markdown('<span class="esgotado-badge">🚫 ESGOTADO</span>', unsafe_allow_html=True)
         elif estoque_baixo:
             st.markdown(f'<span class="estoque-baixo-badge">⚠️ Últimas {estoque_atual} Unidades!</span>', unsafe_allow_html=True)
-        # === FIM DA LÓGICA DE ESTOQUE ===
 
         youtube_url = row.get('YOUTUBE_URL')
 
@@ -475,10 +477,9 @@ def render_product_card(prod_id, row, key_prefix):
             """, unsafe_allow_html=True)
 
         st.markdown(f"**{produto_nome}**")
-        st.caption(descricao_curta) # Usa a variável corrigida
+        st.caption(descricao_curta)
 
         with st.expander("Ver detalhes"):
-            # Lógica de Detalhes 
             descricao_principal = row.get('DESCRICAOLONGA')
             detalhes_str = row.get('DETALHESGRADE')
             
@@ -489,7 +490,6 @@ def render_product_card(prod_id, row, key_prefix):
                 st.info('Sem informações detalhadas disponíveis para este produto.')
             else:
                 if tem_descricao:
-                    # Usa 'descricao_curta' que já é string
                     if descricao_principal.strip() != descricao_curta:
                         st.subheader('Descrição')
                         st.markdown(descricao_principal)
@@ -514,7 +514,6 @@ def render_product_card(prod_id, row, key_prefix):
         col_preco, col_botao = st.columns([2, 2])
 
         with col_preco:
-            # Lógica de Preço e Cashback 
             cashback_percent = pd.to_numeric(row.get('CASHBACKPERCENT'), errors='coerce')
             cashback_html = ""
 
@@ -543,7 +542,6 @@ def render_product_card(prod_id, row, key_prefix):
                 """, unsafe_allow_html=True)
 
 
-        # === SELETOR DE QUANTIDADE NO CARD ===
         with col_botao:
             item_ja_no_carrinho = prod_id in st.session_state.carrinho
 
@@ -552,7 +550,6 @@ def render_product_card(prod_id, row, key_prefix):
                 
             elif item_ja_no_carrinho:
                 qtd_atual = st.session_state.carrinho[prod_id]['quantidade']
-                # Exibe o botão de indicador
                 st.button(
                     f"✅ {qtd_atual}x NO PEDIDO", 
                     key=f'btn_add_qtd_{key_prefix}', 
@@ -560,7 +557,6 @@ def render_product_card(prod_id, row, key_prefix):
                     disabled=True 
                 )
             else:
-                # Se não esgotado E não está no carrinho, mostra o seletor normal
                 qtd_a_adicionar = st.number_input(
                     label=f'Qtd_Input_{key_prefix}',
                     min_value=1,
@@ -575,8 +571,6 @@ def render_product_card(prod_id, row, key_prefix):
                     if qtd_a_adicionar >= 1:
                         adicionar_qtd_ao_carrinho(prod_id, row, qtd_a_adicionar)
                         st.rerun()
-        # === FIM SELETOR DE QUANTIDADE ===
-# === FIM DA FUNÇÃO RENDER_PRODUCT_CARD ===
 
 
 # --- Layout do Aplicativo (CONTINUAÇÃO) ---
@@ -604,22 +598,19 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 </style>
 """, unsafe_allow_html=True)
 
-# === MUDANÇAS NOVAS (JS para copiar o resumo do pedido) ===
-# Função JS para copiar texto (usada após o envio do pedido)
+
 def copy_to_clipboard_js(text_to_copy):
     js_code = f"""
     <script>
     function copyTextToClipboard(text) {{
       if (navigator.clipboard) {{
         navigator.clipboard.writeText(text).then(function() {{
-          // St.toast não está disponível em JS, mas podemos usar um alerta simples
           alert('Resumo do pedido copiado!');
         }}, function(err) {{
           console.error('Não foi possível copiar o texto: ', err);
           alert('Erro ao copiar o texto. Tente novamente.');
         }});
       }} else {{
-        // Fallback para navegadores mais antigos (usando um textarea temporário)
         const textArea = document.createElement("textarea");
         textArea.value = text;
         document.body.appendChild(textArea);
@@ -635,17 +626,14 @@ def copy_to_clipboard_js(text_to_copy):
         document.body.removeChild(textArea);
       }}
     }}
-    // Chama a função ao renderizar o botão, mas de forma segura com onclick
-    // O botão deve ser gerado separadamente com um ID
     </script>
     """
     st.markdown(js_code, unsafe_allow_html=True)
-# === FIM DAS MUDANÇAS NOVAS ===
 
 
 st_autorefresh(interval=5000, key="auto_refresh_catalogo")
 
-# --- LÓGICA DE CONFIRMAÇÃO DE PEDIDO (Nova Seção) ---
+
 if st.session_state.pedido_confirmado:
     st.balloons()
     st.success("🎉 Pedido enviado com sucesso! Utilize o resumo abaixo para confirmar o pedido pelo WhatsApp.")
@@ -660,10 +648,8 @@ if st.session_state.pedido_confirmado:
         f"***📝 RESUMO DO PEDIDO - DOCE&BELLA ***\n\n"
         f"🛒 Cliente: {pedido['nome']}\n"
         f"📞 Contato: {pedido['contato']}\n"
-        # NOVO: Adiciona informações de Nível/Cashback na confirmação
         f"💎 Nível Atual: {pedido.get('cliente_nivel_atual', 'N/A')}\n"
         f"💰 Saldo Cashback: R$ {pedido.get('cliente_saldo_cashback', 0.00):.2f}\n\n"
-        # FIM NOVO
         f"📦 Itens Pedidos:\n"
         f"{itens_formatados}\n\n"
         f"💰 VALOR TOTAL: R$ {pedido['total']:.2f}\n\n"
@@ -672,25 +658,22 @@ if st.session_state.pedido_confirmado:
 
     st.text_area("Resumo do Pedido (Clique para copiar)", resumo_texto, height=300)
     
-    # Botão de Copiar (usando JS)
     copy_to_clipboard_js(resumo_texto)
     st.markdown(
         f'<button class="cart-badge-button" style="background-color: #25D366; width: 100%; margin-bottom: 15px;" onclick="copyTextToClipboard(\'{resumo_texto.replace("'", "\\'")}\')">✅ Copiar Resumo</button>',
         unsafe_allow_html=True
     )
     
-    # Após exibir, limpa a variável de confirmação
     if st.button("Voltar ao Catálogo"):
         st.session_state.pedido_confirmado = None
+        limpar_carrinho() # Limpa tudo ao voltar
         st.rerun()
     st.stop()
-# --- FIM DA LÓGICA DE CONFIRMAÇÃO ---
 
-# --- LOGO E TÍTULO (Alterado) ---
+
 col_logo, col_titulo = st.columns([1.5, 4.5])
 col_logo.image(LOGO_DOCEBELLA_URL, width=200)
 col_titulo.title("Catálogo de Pedidos Doce&Bella")
-# --- FIM DA ALTERAÇÃO ---
 
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
@@ -698,7 +681,6 @@ carrinho_vazio = not st.session_state.carrinho
 
 st.markdown("<div class='pink-bar-container'><div class='pink-bar-content'>", unsafe_allow_html=True)
 
-# A busca principal está na barra rosa, mas usaremos o novo filtro na seção de produtos.
 col_pesquisa, col_carrinho = st.columns([5, 1])
 with col_pesquisa:
     st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
@@ -716,26 +698,33 @@ with col_carrinho:
         if carrinho_vazio:
             st.info("Seu carrinho está vazio.")
         else:
-            # AQUI ESTÁ O TOTAL GERAL DO PEDIDO (que deve aparecer no topo)
-            st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_acumulado:.2f}</h3>", unsafe_allow_html=True)
+            # === CÁLCULO DO TOTAL COM DESCONTO DO CUPOM ===
+            desconto_cupom = st.session_state.get('desconto_cupom', 0.0)
+            total_com_desconto = total_acumulado - desconto_cupom
+
+            if total_com_desconto < 0:
+                total_com_desconto = 0 # O total não pode ser negativo
+
+            st.markdown(f"Subtotal: `R$ {total_acumulado:.2f}`")
+            if desconto_cupom > 0:
+                st.markdown(f"Desconto (`{st.session_state.cupom_aplicado}`): <span style='color: #2E7D32;'>- R$ {desconto_cupom:.2f}</span>", unsafe_allow_html=True)
+            
+            st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_com_desconto:.2f}</h3>", unsafe_allow_html=True)
             st.markdown("---")
             
-            # === NOVO CABEÇALHO PARA CLAREZA ===
+            # === LISTAGEM DOS ITENS NO CARRINHO ===
             col_h1, col_h2, col_h3, col_h4 = st.columns([3, 1.5, 2.5, 1])
             col_h2.markdown("**Qtd**")
             col_h3.markdown("**Subtotal**")
             col_h4.markdown("")
             st.markdown('<div style="margin-top: -10px; border-top: 1px solid #ccc;"></div>', unsafe_allow_html=True)
-            # ==================================
             
             df_catalogo_completo = carregar_catalogo().set_index('ID')
             
             for prod_id, item in list(st.session_state.carrinho.items()):
                 c1, c2, c3, c4 = st.columns([3, 1.5, 2.5, 1])
-                
                 c1.write(f"*{item['nome']}*")
                 
-                # === Lógica de Max Qtd no Carrinho (mantida) ===
                 if prod_id in df_catalogo_completo.index:
                     max_qtd = df_catalogo_completo.loc[prod_id, 'QUANTIDADE']
                     if isinstance(max_qtd, pd.Series):
@@ -764,7 +753,6 @@ with col_carrinho:
                 if nova_quantidade != item['quantidade']:
                     st.session_state.carrinho[prod_id]['quantidade'] = nova_quantidade
                     st.rerun()
-                # === Fim Lógica de Max Qtd no Carrinho ===
 
                 c3.markdown(f"**R$ {item['preco']*item['quantidade']:.2f}**<br><span style='font-size: 0.8rem; color: #757575;'>(R$ {item['preco']:.2f} un.)</span>", unsafe_allow_html=True)
                 
@@ -773,26 +761,63 @@ with col_carrinho:
                     st.rerun()
             st.markdown("---")
             
-            # === MUDANÇAS NOVAS (Botão Limpar Carrinho) ===
+            # === NOVA SEÇÃO DE CUPOM DE DESCONTO ===
+            st.subheader("🎟️ Cupom de Desconto")
+            
+            cupom_col1, cupom_col2 = st.columns([3, 1])
+            
+            with cupom_col1:
+                codigo_cupom = st.text_input("Código do Cupom", key="cupom_input", label_visibility="collapsed").upper()
+            
+            with cupom_col2:
+                if st.button("Aplicar", key="aplicar_cupom_btn", use_container_width=True):
+                    if codigo_cupom:
+                        df_cupons = carregar_cupons()
+                        cupom_valido = df_cupons[df_cupons['NOME_CUPOM'] == codigo_cupom]
+                        
+                        if not cupom_valido.empty:
+                            cupom_info = cupom_valido.iloc[0]
+                            tipo = cupom_info['TIPO_DESCONTO']
+                            valor = cupom_info['VALOR_DESCONTO']
+                            
+                            desconto = 0.0
+                            if tipo == 'PERCENTUAL':
+                                desconto = (valor / 100) * total_acumulado
+                            elif tipo == 'FIXO':
+                                desconto = valor
+                            
+                            st.session_state.cupom_aplicado = codigo_cupom
+                            st.session_state.desconto_cupom = desconto
+                            st.session_state.cupom_mensagem = f"✅ Cupom '{codigo_cupom}' aplicado!"
+                        else:
+                            st.session_state.cupom_aplicado = None
+                            st.session_state.desconto_cupom = 0.0
+                            st.session_state.cupom_mensagem = "❌ Cupom inválido ou expirado."
+                    else:
+                        st.session_state.cupom_mensagem = "⚠️ Digite um código de cupom."
+                    st.rerun()
+
+            if st.session_state.cupom_mensagem:
+                if "✅" in st.session_state.cupom_mensagem:
+                    st.success(st.session_state.cupom_mensagem)
+                else:
+                    st.error(st.session_state.cupom_mensagem)
+
+            st.markdown("---")
+            # ==========================================
+
             st.button("🗑️ Limpar Pedido", on_click=limpar_carrinho, use_container_width=True)
             st.markdown("---")
-            # === FIM DAS MUDANÇAS NOVAS ===
             
-            # =========================================================================================
-            # === NOVA SEÇÃO DE FINALIZAÇÃO COM INPUTS FORA DO FORMULÁRIO PARA REFRESH AUTOMÁTICO ===
-            # =========================================================================================
             st.subheader("Finalizar Pedido")
 
-            # Inputs fora do formulário para disparar a consulta dinâmica
             nome_input = st.text_input("Seu Nome Completo:", key='checkout_nome_dynamic')
             contato_input = st.text_input("Seu Contato (WhatsApp - apenas números, com DDD):", key='checkout_contato_dynamic')
             
-            # --- LÓGICA DE CONSULTA DE CASHBACK E NÍVEL (DINÂMICA) ---
             nivel_cliente = 'N/A'
             saldo_cashback = 0.00
             
             if nome_input and contato_input and DF_CLIENTES_CASH is not None and not DF_CLIENTES_CASH.empty:
-                # Tenta buscar no DF de Clientes Cashback
                 existe, nome_encontrado, saldo_cashback, nivel_cliente = buscar_cliente_cashback(contato_input, DF_CLIENTES_CASH)
 
                 if existe:
@@ -802,24 +827,21 @@ with col_carrinho:
                     )
                 elif contato_input.strip():
                     st.info("👋 **Novo Cliente!** Você começará a acumular cashback após a finalização do seu primeiro pedido no painel de administração.")
-            # -----------------------------------------------
 
-            # Formulário agora contém apenas o botão de submissão
             with st.form("form_finalizar_pedido", clear_on_submit=True):
-                # Campos de entrada vazios, apenas para satisfazer o requisito do formulário, 
-                # mas usaremos os valores dos inputs dinâmicos
                 st.text_input("Nome (Preenchido)", value=nome_input, disabled=True, label_visibility="collapsed")
                 st.text_input("Contato (Preenchido)", value=contato_input, disabled=True, label_visibility="collapsed")
 
-
                 if st.form_submit_button("✅ Enviar Pedido", type="primary", use_container_width=True):
-                    # Valida usando os valores dos inputs dinâmicos
                     if nome_input and contato_input:
                         
                         contato_limpo = contato_input.replace('(', '').replace(')', '').replace('-', '').replace(' ', '').strip()
                         
                         detalhes = {
-                            "total": total_acumulado,
+                            "subtotal": total_acumulado,
+                            "desconto_cupom": st.session_state.desconto_cupom,
+                            "cupom_aplicado": st.session_state.cupom_aplicado,
+                            "total": total_com_desconto, # Salva o total com desconto
                             "itens": [
                                 {
                                     "id": int(k),
@@ -835,20 +857,20 @@ with col_carrinho:
                             "cliente_saldo_cashback": saldo_cashback,
                         }
                         
-                        if salvar_pedido(nome_input, contato_limpo, total_acumulado, json.dumps(detalhes, ensure_ascii=False), detalhes):
+                        # Salva o pedido com o valor final (já com desconto)
+                        if salvar_pedido(nome_input, contato_limpo, total_com_desconto, json.dumps(detalhes, ensure_ascii=False), detalhes):
                             st.session_state.carrinho = {}
+                            # Limpa o cupom após o pedido ser salvo
+                            st.session_state.cupom_aplicado = None
+                            st.session_state.desconto_cupom = 0.0
+                            st.session_state.cupom_mensagem = ""
                             st.rerun()
                     else:
                         st.warning("Preencha seu nome e contato.")
-            # =========================================================================================
-            # === FIM NOVO FORMULÁRIO ===
-            # =========================================================================================
 
 st.markdown("</div></div>", unsafe_allow_html=True)
 
 df_catalogo = carregar_catalogo()
-
-# --- NOVO BLOCO: FILTRO POR CATEGORIA E BUSCA AVANÇADA ---
 
 if 'CATEGORIA' in df_catalogo.columns:
     categorias = df_catalogo['CATEGORIA'].dropna().astype(str).unique().tolist()
@@ -859,11 +881,8 @@ else:
     if "Geral" not in df_catalogo.columns:
          st.warning("A coluna 'CATEGORIA' não foi encontrada no seu arquivo de catálogo. O filtro não será exibido.")
 
-
-# 2. Widgets de Filtro e Ordenação
 col_filtro_cat, col_select_ordem, _ = st.columns([1, 1, 3])
 
-# Variável de termo da busca principal (capturada na barra rosa)
 termo = st.session_state.get('termo_pesquisa_barra', '').lower()
 
 with col_filtro_cat:
@@ -875,21 +894,15 @@ with col_filtro_cat:
     if termo:
         st.markdown(f'<div style="font-size: 0.8rem; color: #E91E63;">Busca ativa desabilita filtro.</div>', unsafe_allow_html=True)
 
-
-# 3. Lógica de Filtragem
-
 df_filtrado = df_catalogo.copy()
 
 if not termo and categoria_selecionada != "TODAS AS CATEGORIAS":
     df_filtrado = df_filtrado[df_filtrado['CATEGORIA'].astype(str) == categoria_selecionada]
-
 elif termo:
     df_filtrado = df_filtrado[df_filtrado.apply(
         lambda row: termo in str(row['NOME']).lower() or termo in str(row['DESCRICAOLONGA']).lower(), 
         axis=1
     )]
-# --- FIM DO NOVO BLOCO DE FILTRO ---
-
 
 if df_filtrado.empty:
     if termo:
@@ -899,7 +912,6 @@ if df_filtrado.empty:
 else:
     st.subheader("✨ Nossos Produtos")
 
-    # --- WIDGET DE ORDENAÇÃO (movido para a coluna ao lado do filtro) ---
     with col_select_ordem:
         opcoes_ordem = ['Lançamento', 'Promoção', 'Menor Preço', 'Maior Preço', 'Nome do Produto (A-Z)']
         ordem_selecionada = st.selectbox(
@@ -907,9 +919,7 @@ else:
             opcoes_ordem,
             key='ordem_produtos'
         )
-    # --- FIM DA ALTERAÇÃO ---
 
-    # --- LÓGICA DE ORDENAÇÃO CORRIGIDA E OTIMIZADA ---
     df_filtrado['EM_PROMOCAO'] = df_filtrado['PRECO_PROMOCIONAL'].notna()
 
     if ordem_selecionada == 'Lançamento':
@@ -926,7 +936,6 @@ else:
         df_ordenado = df_filtrado
 
     df_filtrado = df_ordenado
-    # --- FIM DA LÓGICA DE ORDENAÇÃO ---
 
     cols = st.columns(4)
     for i, row in df_filtrado.reset_index(drop=True).iterrows():
