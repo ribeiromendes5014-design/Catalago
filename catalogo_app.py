@@ -1201,13 +1201,13 @@ else:
 # --- ADICIONA OS BOTÕES FLUTUANTES NO FINAL DO SCRIPT ---
 
 # Formata o total para exibição
-total_display = f"R$ {total_acumulado:.2f}".replace('.', ',')
+total_display = f"R$ {total_acumulado:.2f}" # Using dot for consistency, CSS can be updated if comma is desired
 
 # 1. BOTÃO DO CARRINHO FLUTUANTE (Posicionado acima do WhatsApp)
 # Adiciona o número de itens e o total formatado no HTML.
 cart_float_button_html = f"""
 <div class='cart-float' 
-     onclick="document.querySelector('#floating-cart-anchor-container button').click();"
+     onclick="document.querySelector('[data-testid=\"stPopover\"]').click();"
      title="Total: {total_display} ({num_itens} itens)">
     <span style="font-size: 1.2rem;">🛒</span>
     <span class='cart-text'>({num_itens} itens)</span>
@@ -1230,4 +1230,5 @@ whatsapp_button_html = f"""
 
 st.markdown(whatsapp_button_html, unsafe_allow_html=True)
 # --- FIM DO BLOCO ADICIONADO ---
+
 
