@@ -880,8 +880,8 @@ st.markdown(f"""
 <style>
 #MainMenu, footer, [data-testid="stSidebar"] {{visibility: hidden;}}
 [data-testid="stSidebarHeader"], [data-testid="stToolbar"], a[data-testid="stAppDeployButton"], [data-testid="stStatusWidget"], [data-testid="stDecoration"] {{ display: none !important; }}
-/* Oculta o botão do popover invisível para o hack do botão flutuante */
-div[data-testid="stPopover"] > div:first-child > button[title*="Popover Oculto"] {{ display: none !important; }}
+/* CORREÇÃO: Usamos um seletor mais específico para ocultar o botão Streamlit do popover */
+div[data-testid="stPopover"] > div:first-child > button[title*="Popover Oculto Carrinho"] {{ display: none !important; }}
 
 .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
 
@@ -1183,12 +1183,11 @@ else:
 
 # --- 1. BOTÃO POPOVER DO CARRINHO (OCULTO) ---
 # O popover REAL do Streamlit é criado aqui. O botão ativador é oculto via CSS.
-# O botão flutuante em HTML irá "clicar" neste elemento para abrir o popover.
 HIDDEN_POPOVER_TITLE = "Popover Oculto Carrinho"
 
-# O Streamlit coloca o botão do popover dentro de um div. Vamos envolver o popover
-# em um div com uma classe específica para ocultá-lo, evitando conflitos com outros elementos.
-st.markdown(f'<div style="display: none !important; visibility: hidden !important; height: 0;">', unsafe_allow_html=True)
+# Envolvemos o popover em um div com um ID para garantir que o CSS de ocultação funcione
+# A classe 'hidden-popover-container' será usada para ocultar o botão Streamlit.
+st.markdown(f'<div id="hidden-popover-container" style="display: none; visibility: hidden; height: 0;">', unsafe_allow_html=True)
 with st.popover(HIDDEN_POPOVER_TITLE, use_container_width=False, help=HIDDEN_POPOVER_TITLE):
     # Passa as variáveis calculadas corretamente
     render_cart_popover(total_acumulado, desconto_cupom, total_com_desconto, cashback_a_ganhar, df_catalogo_completo)
@@ -1199,14 +1198,19 @@ st.markdown('</div>', unsafe_allow_html=True)
 popover_click_script = f"""
 <script>
     function openFloatingCart() {{
-        // Tenta encontrar o botão Streamlit que tem o 'help' do nosso popover oculto.
-        // O seletor é o mais robusto que o Streamlit permite para este hack.
-        const hiddenButton = document.querySelector('button[title="{HIDDEN_POPOVER_TITLE}"]');
-        
-        if (hiddenButton) {{
-            hiddenButton.click();
+        // Encontra o botão Streamlit real dentro do container oculto
+        const container = document.getElementById('hidden-popover-container');
+        if (container) {{
+            // Busca o botão dentro do container pelo título
+            const hiddenButton = container.querySelector('button[title="{HIDDEN_POPOVER_TITLE}"]');
+            
+            if (hiddenButton) {{
+                hiddenButton.click();
+            }} else {{
+                console.warn("Hidden popover button not found inside container. Title: {HIDDEN_POPOVER_TITLE}");
+            }}
         }} else {{
-            console.warn("Hidden popover button not found. Title used: {HIDDEN_POPOVER_TITLE}");
+            console.warn("Hidden popover container not found.");
         }}
     }}
 </script>
