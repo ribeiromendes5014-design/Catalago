@@ -33,6 +33,9 @@ SHEET_NAME_CUPONS_CSV = "cupons.csv"
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-na-zvania-3.jpg'
 LOGO_DOCEBELLA_URL = "https://i.ibb.co/S9kT5nS/logo_docebella.png"
 
+# NÚMERO DE TELEFONE PARA O BOTÃO FLUTUANTE DO WHATSAPP
+NUMERO_WHATSAPP = "5541987876191" # SEU DDD + Número
+
 
 # Inicialização do Carrinho de Compras e Estado
 if 'carrinho' not in st.session_state:
@@ -198,12 +201,38 @@ def carregar_catalogo():
         df_produtos.dropna(subset=['ID'], inplace=True)
     else:
         df_produtos['RECENCIA'] = range(len(df_produtos), 0, -1)
-
+        
+    # --- NOVO: Lidar com PRECOVISTA e PRECOCARTAO ---
     colunas_minimas = ['PRECOVISTA', 'ID', 'NOME']
     for col in colunas_minimas:
         if col not in df_produtos.columns:
             st.error(f"Coluna essencial '{col}' não encontrada no '{SHEET_NAME_CATALOGO_CSV}'. O aplicativo não pode continuar.")
             return pd.DataFrame()
+    
+    # Renomeia PRECOVISTA para PRECO
+    mapa_renomeacao = {'PRECOVISTA': 'PRECO', 'MARCA': 'DESCRICAOCURTA'}
+    df_produtos.rename(columns=mapa_renomeacao, inplace=True)
+    
+    # Garante que PRECOCARTAO existe, senão, copia PRECO
+    if 'PRECOCARTAO' not in df_produtos.columns:
+        df_produtos['PRECOCARTAO'] = df_produtos['PRECO']
+    
+    # Converte colunas de preço para numérico
+    df_produtos['PRECO'] = pd.to_numeric(df_produtos['PRECO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
+    df_produtos['PRECOCARTAO'] = pd.to_numeric(df_produtos['PRECOCARTAO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(df_produtos['PRECO'])
+    
+    # Adiciona CONDICAOPAGAMENTO (se não existir, calcula a simulação de 3x no cartão)
+    if 'CONDICAOPAGAMENTO' not in df_produtos.columns:
+        def gerar_condicao_pagamento(row):
+            preco_cartao = row['PRECOCARTAO']
+            if preco_cartao > 0:
+                parcela = preco_cartao / 3
+                return f"3x de R$ {parcela:.2f} no cartão"
+            return 'Preço à vista'
+            
+        df_produtos['CONDICAOPAGAMENTO'] = df_produtos.apply(gerar_condicao_pagamento, axis=1)
+    
+    # --- FIM: Lidar com PRECOVISTA e PRECOCARTAO ---
 
     coluna_foto_encontrada = None
     nomes_possiveis_foto = ['FOTOURL', 'LINKIMAGEM', 'FOTO_URL', 'IMAGEM', 'URL_FOTO', 'LINK']
@@ -211,23 +240,26 @@ def carregar_catalogo():
         if nome in df_produtos.columns:
             coluna_foto_encontrada = nome
             break
-
-    mapa_renomeacao = {'PRECOVISTA': 'PRECO', 'MARCA': 'DESCRICAOCURTA'}
+            
     if coluna_foto_encontrada:
-        mapa_renomeacao[coluna_foto_encontrada] = 'LINKIMAGEM'
+        df_produtos.rename(columns={coluna_foto_encontrada: 'LINKIMAGEM'}, inplace=True, errors='ignore')
     else:
         st.warning("Nenhuma coluna de imagem encontrada (Ex: FOTOURL, IMAGEM). Os produtos serão exibidos sem fotos.")
         df_produtos['LINKIMAGEM'] = ""
 
-    df_produtos.rename(columns=mapa_renomeacao, inplace=True)
+    df_produtos.rename(columns={'MARCA': 'DESCRICAOCURTA'}, inplace=True, errors='ignore')
 
     if 'DISPONIVEL' not in df_produtos.columns:
         df_produtos['DISPONIVEL'] = 'SIM'
     if 'DESCRICAOLONGA' not in df_produtos.columns:
         df_produtos['DESCRICAOLONGA'] = df_produtos.get('CATEGORIA', '')
 
-    df_produtos['PRECO'] = pd.to_numeric(df_produtos['PRECO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
     df_produtos = df_produtos[df_produtos['DISPONIVEL'].astype(str).str.strip().str.lower() == 'sim'].copy()
+    
+    # Garante que a coluna de percentual de cashback existe e é numérica
+    if 'CASHBACKPERCENT' not in df_produtos.columns:
+        df_produtos['CASHBACKPERCENT'] = 0.0
+    df_produtos['CASHBACKPERCENT'] = pd.to_numeric(df_produtos['CASHBACKPERCENT'], errors='coerce').fillna(0.0)
     
     if 'QUANTIDADE' in df_produtos.columns:
         df_produtos['QUANTIDADE'] = pd.to_numeric(df_produtos['QUANTIDADE'], errors='coerce').fillna(0)
@@ -240,8 +272,11 @@ def carregar_catalogo():
     df_promocoes = carregar_promocoes()
 
     if not df_promocoes.empty:
+        # Usa PRECOCARTAO se estiver na promoção e for o menor preço
+        # Por simplicidade e consistência, a promoção aplica-se ao PRECO_FINAL (preço à vista ou promocional)
+        # O PRECOCARTAO é mantido apenas para a exibição da condição de pagamento
         df_final = pd.merge(df_produtos.reset_index(), df_promocoes[['ID_PRODUTO', 'PRECO_PROMOCIONAL']], left_on='ID', right_on='ID_PRODUTO', how='left')
-        df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO'])
+        df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO']) # PRECO_FINAL é o preço à vista ou promocional
         df_final.drop(columns=['ID_PRODUTO'], inplace=True, errors='ignore')
     else:
         df_final = df_produtos.reset_index()
@@ -412,6 +447,21 @@ def salvar_pedido(nome_cliente, contato_cliente, valor_total, itens_json, pedido
         st.error(f"Erro desconhecido ao enviar o pedido: {e}")
         return False
 
+# Função para calcular o cashback total do carrinho
+def calcular_cashback_total(carrinho, df_catalogo_indexado):
+    """Calcula o total de cashback a ser ganho pelos itens no carrinho."""
+    cashback_total = 0.0
+    for prod_id, item in carrinho.items():
+        if prod_id in df_catalogo_indexado.index:
+            row = df_catalogo_indexado.loc[prod_id]
+            cashback_percent = pd.to_numeric(row.get('CASHBACKPERCENT'), errors='coerce')
+            preco_final = item['preco'] # Já é o preço final com promoção
+            
+            if pd.notna(cashback_percent) and cashback_percent > 0:
+                cashback_valor_unitario = (cashback_percent / 100) * preco_final
+                cashback_total += cashback_valor_unitario * item['quantidade']
+    return cashback_total
+
 
 def adicionar_qtd_ao_carrinho(produto_id, produto_row, quantidade):
     produto_nome = produto_row['NOME']
@@ -553,23 +603,35 @@ def render_product_card(prod_id, row, key_prefix, df_catalogo_indexado):
 
         col_preco, col_botao = st.columns([2, 2])
 
+        # Obtém a condição de pagamento
+        condicao_pagamento = row.get('CONDICAOPAGAMENTO', 'Preço à vista')
+        
         with col_preco:
             cashback_percent = pd.to_numeric(row.get('CASHBACKPERCENT'), errors='coerce')
             cashback_html = ""
 
             if pd.notna(cashback_percent) and cashback_percent > 0:
+                # O cashback é baseado no PRECO_FINAL (preço à vista/promocional)
                 cashback_valor_calculado = (cashback_percent / 100) * preco_final
                 cashback_html = f"""
-                <span style='color: #D32F2F; font-size: 0.8rem; font-weight: bold;'>
-                    🔥 R$ {cashback_valor_calculado:.2f}
+                <span style='color: #2E7D32; font-size: 0.8rem; font-weight: bold;'>
+                    Cashback: R$ {cashback_valor_calculado:.2f}
                 </span>
                 """
+                
+            # HTML para exibir a condição de pagamento
+            condicao_html = f"""
+            <span style='color: #757575; font-size: 0.85rem; font-weight: normal; margin-top: 5px; display: block;'>
+                ({condicao_pagamento})
+            </span>
+            """
 
             if is_promotion:
                 st.markdown(f"""
                 <div style="line-height: 1.2;">
                     <span style='text-decoration: line-through; color: #757575; font-size: 0.9rem;'>R$ {preco_original:.2f}</span>
                     <h4 style='color: #D32F2F; margin:0;'>R$ {preco_final:.2f}</h4>
+                    {condicao_html}
                     {cashback_html}
                 </div>
                 """, unsafe_allow_html=True)
@@ -577,8 +639,9 @@ def render_product_card(prod_id, row, key_prefix, df_catalogo_indexado):
                 st.markdown(f"""
                 <div style='display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px;'>
                     <h4 style='color: #880E4F; margin:0; line-height:1;'>R$ {preco_final:.2f}</h4>
-                    {cashback_html}
                 </div>
+                {condicao_html}
+                {cashback_html}
                 """, unsafe_allow_html=True)
 
 
@@ -654,6 +717,38 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 .product-image-container img {{ max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }}
 .esgotado-badge {{ background-color: #757575; color: white; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
 .estoque-baixo-badge {{ background-color: #FFC107; color: black; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
+
+/* --- NOVO CSS para o Botão Flutuante --- */
+.whatsapp-float {
+    position: fixed;
+    width: 60px;
+    height: 60px;
+    bottom: 40px; /* Distância do fundo da tela */
+    right: 40px; /* Distância da lateral direita */
+    background-color: #25D366; /* Verde do WhatsApp */
+    color: #FFF;
+    border-radius: 50px;
+    text-align: center;
+    font-size: 30px;
+    box-shadow: 2px 2px 3px #999;
+    z-index: 1000; /* Garante que fique acima de outros elementos */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    text-decoration: none; /* Garante que o link não tenha sublinhado */
+}
+
+.whatsapp-float:hover {
+    background-color: #128C7E;
+    color: white;
+    transform: scale(1.05);
+}
+/* Oculta o link "feio" do Streamlit e usa apenas o estilo CSS */
+.stApp a[data-testid="stLinkButton"] {
+    text-decoration: none !important;
+}
+/* --- Fim do Novo CSS --- */
 </style>
 """, unsafe_allow_html=True)
 
@@ -711,7 +806,10 @@ if st.session_state.pedido_confirmado:
         f"💰 Saldo Cashback: R$ {pedido.get('cliente_saldo_cashback', 0.00):.2f}\n\n"
         f"📦 Itens Pedidos:\n"
         f"{itens_formatados}\n\n"
-        f"💰 VALOR TOTAL: R$ {pedido['total']:.2f}\n\n"
+        f"🎟️ Cupom Aplicado: {pedido.get('cupom_aplicado', 'Nenhum')}\n"
+        f"📉 Desconto Total: R$ {pedido.get('desconto_cupom', 0.0):.2f}\n\n"
+        f"✅ CASHBACK A SER GANHO: R$ {pedido.get('cashback_a_ganhar', 0.0):.2f}\n" # NOVO: Cashback total
+        f"💰 VALOR TOTAL A PAGAR: R$ {pedido['total']:.2f}\n\n"
         f"Obrigado por seu pedido!"
     )
 
@@ -765,6 +863,10 @@ total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
 
+# NOVO: Cálculo do cashback total no carrinho
+df_catalogo_completo = st.session_state.df_catalogo_indexado 
+cashback_a_ganhar = calcular_cashback_total(st.session_state.carrinho, df_catalogo_completo)
+
 st.markdown("<div class='pink-bar-container'><div class='pink-bar-content'>", unsafe_allow_html=True)
 
 col_pesquisa, col_carrinho = st.columns([5, 1])
@@ -792,7 +894,10 @@ with col_carrinho:
 
             st.markdown(f"Subtotal: `R$ {total_acumulado:.2f}`")
             if desconto_cupom > 0:
-                st.markdown(f"Desconto (`{st.session_state.cupom_aplicado}`): <span style='color: #2E7D32;'>- R$ {desconto_cupom:.2f}</span>", unsafe_allow_html=True)
+                st.markdown(f"Desconto (`{st.session_state.cupom_aplicado}`): <span style='color: #D32F2F;'>- R$ {desconto_cupom:.2f}</span>", unsafe_allow_html=True)
+            
+            # NOVO: Exibição do cashback
+            st.markdown(f"<span style='color: #2E7D32; font-weight: bold;'>Cashback a Ganhar: R$ {cashback_a_ganhar:.2f}</span>", unsafe_allow_html=True)
             
             st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_com_desconto:.2f}</h3>", unsafe_allow_html=True)
             st.markdown("---")
@@ -954,6 +1059,7 @@ with col_carrinho:
                             "contato": contato_limpo,
                             "cliente_nivel_atual": nivel_cliente, 
                             "cliente_saldo_cashback": saldo_cashback,
+                            "cashback_a_ganhar": cashback_a_ganhar, # Adiciona o cashback total aos detalhes
                         }
                         
                         if salvar_pedido(nome_input, contato_limpo, total_com_desconto, json.dumps(detalhes, ensure_ascii=False), detalhes):
@@ -1042,3 +1148,19 @@ else:
         with cols[i % 4]:
             # 3. OTIMIZAÇÃO: Passa o DF indexado para a função de renderização
             render_product_card(product_id, row, key_prefix=unique_key, df_catalogo_indexado=st.session_state.df_catalogo_indexado)
+
+
+# --- ADICIONA O BOTÃO FLUTUANTE NO FINAL DO SCRIPT ---
+MENSAGEM_PADRAO = "Olá, vi o catálogo de pedidos da Doce&Bella e gostaria de ajuda!"
+LINK_WHATSAPP = f"https://wa.me/{NUMERO_WHATSAPP}?text={requests.utils.quote(MENSAGEM_PADRAO)}"
+
+# HTML do botão flutuante (usa o CSS que você definiu)
+whatsapp_button_html = f"""
+<a href="{LINK_WHATSAPP}" class="whatsapp-float" target="_blank" title="Fale Conosco pelo WhatsApp">
+    <span style="margin-top: -5px;">📞</span>
+</a>
+"""
+
+# Injeta o botão flutuante
+st.markdown(whatsapp_button_html, unsafe_allow_html=True)
+# --- FIM DO BLOCO ADICIONADO ---
