@@ -719,36 +719,21 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 .estoque-baixo-badge {{ background-color: #FFC107; color: black; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
 
 /* --- NOVO CSS para o Botão Flutuante --- */
-.whatsapp-float {
+st.markdown(f"""
+<style>
+.whatsapp-float {{
     position: fixed;
+    bottom: 40px;
+    right: 40px;
+    background-color: #25D366;
+    color: white;
+    border-radius: 50px;
     width: 60px;
     height: 60px;
-    bottom: 40px; /* Distância do fundo da tela */
-    right: 40px; /* Distância da lateral direita */
-    background-color: #25D366; /* Verde do WhatsApp */
-    color: #FFF;
-    border-radius: 50px;
     text-align: center;
     font-size: 30px;
     box-shadow: 2px 2px 3px #999;
-    z-index: 1000; /* Garante que fique acima de outros elementos */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.3s;
-    text-decoration: none; /* Garante que o link não tenha sublinhado */
-}
-
-.whatsapp-float:hover {
-    background-color: #128C7E;
-    color: white;
-    transform: scale(1.05);
-}
-/* Oculta o link "feio" do Streamlit e usa apenas o estilo CSS */
-.stApp a[data-testid="stLinkButton"] {
-    text-decoration: none !important;
-}
-/* --- Fim do Novo CSS --- */
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1164,3 +1149,4 @@ whatsapp_button_html = f"""
 # Injeta o botão flutuante
 st.markdown(whatsapp_button_html, unsafe_allow_html=True)
 # --- FIM DO BLOCO ADICIONADO ---
+
