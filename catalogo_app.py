@@ -919,7 +919,6 @@ cashback_a_ganhar = calcular_cashback_total(st.session_state.carrinho, df_catalo
 st.markdown("<div class='pink-bar-container'><div class='pink-bar-content'>", unsafe_allow_html=True)
 
 # A barra superior agora tem apenas o campo de busca
-# CORREÇÃO: Removido use_container_width=True de st.text_input para resolver o TypeError.
 st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
 
 st.markdown("</div></div>", unsafe_allow_html=True)
