@@ -36,6 +36,9 @@ LOGO_DOCEBELLA_URL = "https://i.ibb.co/S9kT5nS/logo_docebella.png"
 # NÚMERO DE TELEFONE PARA O BOTÃO FLUTUANTE DO WHATSAPP
 NUMERO_WHATSAPP = "5541987876191" # SEU DDD + Número
 
+# TÍTULO ÚNICO PARA O POPOVER OCULTO
+HIDDEN_POPOVER_TITLE = "Popover Oculto Carrinho"
+
 
 # Inicialização do Carrinho de Compras e Estado
 if 'carrinho' not in st.session_state:
@@ -524,10 +527,14 @@ def limpar_carrinho():
     st.toast("🗑️ Pedido limpo!", icon="🧹")
     st.rerun()
     
+# NOVA FUNÇÃO: Renderiza o conteúdo do Popover do Carrinho
 def render_cart_popover(total_acumulado, desconto_cupom, total_com_desconto, cashback_a_ganhar, df_catalogo_completo):
     """Renderiza o conteúdo do popover do carrinho."""
     st.header("🛒 Detalhes do Pedido")
-    if not st.session_state.carrinho:
+    
+    carrinho_vazio = not st.session_state.carrinho
+
+    if carrinho_vazio:
         st.info("Seu carrinho está vazio.")
         return
 
@@ -670,6 +677,7 @@ def render_cart_popover(total_acumulado, desconto_cupom, total_com_desconto, cas
             st.info("👋 **Novo Cliente!** Você começará a acumular cashback após a finalização do seu primeiro pedido no painel de administração.")
 
     with st.form("form_finalizar_pedido", clear_on_submit=True):
+        # Os campos disabled abaixo apenas replicam o valor, já que o form reseta o state ao submit
         st.text_input("Nome (Preenchido)", value=nome_input, disabled=True, label_visibility="collapsed")
         st.text_input("Contato (Preenchido)", value=contato_input, disabled=True, label_visibility="collapsed")
 
@@ -707,7 +715,6 @@ def render_cart_popover(total_acumulado, desconto_cupom, total_com_desconto, cas
                     st.rerun()
             else:
                 st.warning("Preencha seu nome e contato.")
-
 
 # (Continuação da renderização de produtos, etc.)
 
@@ -880,8 +887,9 @@ st.markdown(f"""
 <style>
 #MainMenu, footer, [data-testid="stSidebar"] {{visibility: hidden;}}
 [data-testid="stSidebarHeader"], [data-testid="stToolbar"], a[data-testid="stAppDeployButton"], [data-testid="stStatusWidget"], [data-testid="stDecoration"] {{ display: none !important; }}
-/* CORREÇÃO: Usamos um seletor mais específico para ocultar o botão Streamlit do popover */
-div[data-testid="stPopover"] > div:first-child > button[title*="Popover Oculto Carrinho"] {{ display: none !important; }}
+
+/* CORREÇÃO: Seletor específico para ocultar o botão Streamlit do popover */
+div[data-testid="stPopover"] > div:first-child > button[title*="{HIDDEN_POPOVER_TITLE}"] {{ display: none !important; }}
 
 .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
 
@@ -923,7 +931,7 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
     text-align: center;
     font-size: 30px;
     box-shadow: 2px 2px 3px #999;
-    z-index: 1000; /* Garante que fique por cima de outros elementos */
+    z-index: 1000;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1053,7 +1061,7 @@ st.markdown(f"""
 /* Estilo do container do banner colorido */
 .banner-colored {{
     background-color: #e91e63;
-    padding: 10px 25px; 
+    padding: 10px 25px;
     border-radius: 10px;
     display: flex;
     align-items: center;
@@ -1062,13 +1070,13 @@ st.markdown(f"""
 }}
 
 .banner-colored img {{
-    max-height: 60px; 
+    max-height: 60px;
     width: auto;
 }}
 
 .banner-colored h1 {{
     color: white;
-    font-size: 2rem; 
+    font-size: 2rem;
     margin: 0;
 }}
 </style>
@@ -1079,7 +1087,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- INÍCIO DO CÁLCULO DAS VARIÁVEIS PARA O POPOVER (MOVIMENTO DO CÓDIGO) ---
+# --- INÍCIO DO CÁLCULO DAS VARIÁVEIS PARA O POPOVER ---
 total_acumulado = sum(item['preco'] * item['quantidade'] for item in st.session_state.carrinho.values())
 num_itens = sum(item['quantidade'] for item in st.session_state.carrinho.values())
 carrinho_vazio = not st.session_state.carrinho
@@ -1088,7 +1096,6 @@ carrinho_vazio = not st.session_state.carrinho
 df_catalogo_completo = st.session_state.df_catalogo_indexado 
 cashback_a_ganhar = calcular_cashback_total(st.session_state.carrinho, df_catalogo_completo)
 
-# Variáveis que causaram o erro NameError
 desconto_cupom = st.session_state.get('desconto_cupom', 0.0)
 total_com_desconto = total_acumulado - desconto_cupom
 
@@ -1183,34 +1190,28 @@ else:
 
 # --- 1. BOTÃO POPOVER DO CARRINHO (OCULTO) ---
 # O popover REAL do Streamlit é criado aqui. O botão ativador é oculto via CSS.
-HIDDEN_POPOVER_TITLE = "Popover Oculto Carrinho"
+# Usamos um 'st.popover' isolado no final do script para garantir que ele seja renderizado por último.
+# Não precisamos mais do container <div>, pois vamos buscar o botão pelo `title` em todo o documento.
 
-# Envolvemos o popover em um div com um ID para garantir que o CSS de ocultação funcione
-# A classe 'hidden-popover-container' será usada para ocultar o botão Streamlit.
-st.markdown(f'<div id="hidden-popover-container" style="display: none; visibility: hidden; height: 0;">', unsafe_allow_html=True)
+# O popover com o título único (HIDDEN_POPOVER_TITLE) será renderizado,
+# mas seu botão será oculto pelo CSS lá em cima.
 with st.popover(HIDDEN_POPOVER_TITLE, use_container_width=False, help=HIDDEN_POPOVER_TITLE):
     # Passa as variáveis calculadas corretamente
     render_cart_popover(total_acumulado, desconto_cupom, total_com_desconto, cashback_a_ganhar, df_catalogo_completo)
-st.markdown('</div>', unsafe_allow_html=True)
 
 
 # Código JavaScript para encontrar o botão de popover oculto e simulá-lo
 popover_click_script = f"""
 <script>
     function openFloatingCart() {{
-        // Encontra o botão Streamlit real dentro do container oculto
-        const container = document.getElementById('hidden-popover-container');
-        if (container) {{
-            // Busca o botão dentro do container pelo título
-            const hiddenButton = container.querySelector('button[title="{HIDDEN_POPOVER_TITLE}"]');
-            
-            if (hiddenButton) {{
-                hiddenButton.click();
-            }} else {{
-                console.warn("Hidden popover button not found inside container. Title: {HIDDEN_POPOVER_TITLE}");
-            }}
+        // Busca o botão Streamlit com o título único em todo o documento
+        // O title é o argumento do st.popover
+        const hiddenButton = document.querySelector('button[title="{HIDDEN_POPOVER_TITLE}"]');
+        
+        if (hiddenButton) {{
+            hiddenButton.click();
         }} else {{
-            console.warn("Hidden popover container not found.");
+            console.warn("Hidden popover button not found. Title: {HIDDEN_POPOVER_TITLE}");
         }}
     }}
 </script>
@@ -1225,7 +1226,9 @@ cart_float_html = f"""
     <span class="cart-count-float">{num_itens}</span>
 </div>
 """
-st.markdown(cart_float_html, unsafe_allow_html=True)
+# Só injeta o botão se houver itens no carrinho ou se o número de itens for > 0
+if num_itens > 0:
+    st.markdown(cart_float_html, unsafe_allow_html=True)
 
 
 # --- 3. BOTÃO FLUTUANTE DO WHATSAPP ---
