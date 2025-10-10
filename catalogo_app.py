@@ -299,21 +299,29 @@ def carregar_clientes_cashback():
 DF_CLIENTES_CASH = carregar_clientes_cashback()
 
 
-def buscar_cliente_cashback(numero_contato, df_clientes_cash):
-    """Busca um cliente pelo número de contato (limpo) e retorna saldo e nível."""
+def buscar_cliente_cashback_otimizada(numero_contato: str, df_clientes_cash_idx: pd.DataFrame) -> tuple:
+    """
+    Busca um cliente pelo número de contato (usando o índice do DataFrame para alta performance)
+    e retorna saldo e nível.
+    """
     contato_limpo = str(numero_contato).replace('(', '').replace(')', '').replace('-', '').replace(' ', '').strip()
     
-    if df_clientes_cash.empty:
+    if df_clientes_cash_idx is None or df_clientes_cash_idx.empty:
         return False, None, 0.00, 'NENHUM'
         
-    cliente = df_clientes_cash[df_clientes_cash['CONTATO'] == contato_limpo]
-    
-    if not cliente.empty:
-        saldo = cliente['CASHBACK_DISPONIVEL'].iloc[0]
-        nome = cliente['NOME'].iloc[0]
-        nivel = cliente['NIVEL_ATUAL'].iloc[0] 
+    try:
+        # Usa .loc[] para uma busca quase instantânea pelo índice
+        cliente = df_clientes_cash_idx.loc[contato_limpo]
+        
+        # Se o cliente for encontrado, 'cliente' será uma Series do Pandas
+        saldo = cliente['CASHBACK_DISPONIVEL']
+        nome = cliente['NOME']
+        nivel = cliente['NIVEL_ATUAL']
         return True, nome, saldo, nivel
-    else:
+        
+    except KeyError:
+        # Se .loc[contato_limpo] não encontrar a chave, um KeyError é gerado.
+        # Capturamos esse erro para indicar que o cliente não foi encontrado.
         return False, None, 0.00, 'NENHUM'
         
 
@@ -1009,6 +1017,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
