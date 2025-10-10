@@ -217,19 +217,38 @@ def atualizar_status_pedido(id_pedido, novo_status, df_catalogo):
 def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
     data = parse_json_from_string(pedido_json)
     itens = data.get('itens', [])
+    if not itens:
+        st.warning("Nenhum item encontrado no pedido.")
+        return 0
+    
     total_itens, itens_sep = len(itens), 0
     key = f'pedido_{id_pedido}_itens'
     if key not in st.session_state: st.session_state[key] = [False] * total_itens
+
     for i, item in enumerate(itens):
         link_img = "https://placehold.co/150x150/e2e8f0/e2e8f0?text=Sem+Imagem"
-        prod = df_catalogo[df_catalogo['ID'] == int(item.get('id', -1))]
-        if not prod.empty and 'LINKIMAGEM' in prod.columns and pd.notna(prod.iloc[0]['LINKIMAGEM']):
-            link_img = str(prod.iloc[0]['LINKIMAGEM'])
+        prod_id = int(item.get('id', -1))
+        prod = df_catalogo[df_catalogo['ID'] == prod_id]
+        
+        cashback_percent = 0.0
+        if not prod.empty:
+            if 'LINKIMAGEM' in prod.columns and pd.notna(prod.iloc[0]['LINKIMAGEM']):
+                link_img = str(prod.iloc[0]['LINKIMAGEM'])
+            cashback_str = str(prod.iloc[0].get('CASHBACKPERCENT', '0')).replace(',', '.')
+            cashback_percent = float(cashback_str)
+
         c1, c2, c3 = st.columns([0.5, 1, 3.5])
         st.session_state[key][i] = c1.checkbox(" ", st.session_state[key][i], key=f"c_{id_pedido}_{i}", label_visibility="collapsed")
         c2.image(link_img, width=100)
         sub = float(item.get('preco', 0)) * int(item.get('quantidade', 0))
-        c3.markdown(f"**{item.get('nome', 'N/A')}**\n\n**Qtd:** {item.get('quantidade', 0)} | **Subtotal:** R$ {sub:.2f}")
+        
+        info_text = (
+            f"**Produto:** {item.get('nome', 'N/A')}\n\n"
+            f"**Quantidade:** {item.get('quantidade', 0)} | **Subtotal:** R$ {sub:.2f}\n\n"
+            f"**Cashback do produto:** {cashback_percent:.2f}%"
+        )
+        c3.markdown(info_text)
+        
         st.markdown("---")
         if st.session_state[key][i]: itens_sep += 1
     return 100 if total_itens == 0 else int((itens_sep / total_itens) * 100)
@@ -256,28 +275,30 @@ with tab_pedidos:
             for _, pedido in pendentes.iterrows():
                 data_hora = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indefinida"
                 with st.expander(f"Pedido de **{pedido.get('NOME_CLIENTE','N/A')}** - {data_hora} - Total: R$ {pedido.get('VALOR_TOTAL', 0.0):.2f}"):
+                    st.markdown(f"**Contato:** {pedido.get('CONTATO_CLIENTE', 'N/A')} | **ID do Pedido:** {pedido.get('ID_PEDIDO', 'N/A')}")
+                    
                     json_data = parse_json_from_string(pedido.get('ITENS_JSON'))
-                    st.code(str(pedido.get('ITENS_JSON'))[:500], language="json")
-                    st.json(parse_json_from_string(pedido.get('ITENS_JSON')))
-                    st.stop()
-                    subtotal = json_data.get('subtotal', 0.0)
                     desconto = json_data.get('desconto_cupom', pedido.get('VALOR_DESCONTO', 0.0))
-                    cupom = json_data.get('cupom_aplicado', pedido.get('CUPOM_APLICADO'))
-                    st.metric(label="Subtotal (sem desconto)", value=f"R$ {subtotal:.2f}")
-                    if pd.notna(cupom) and str(cupom).strip():
-                        st.metric(label=f"Desconto Cupom ({cupom})", value=f"- R$ {desconto:.2f}")
+                    
                     saldo_cashback = extract_customer_cashback(pedido.get('ITENS_JSON'))
                     st.metric(label="Saldo Cashback do Cliente", value=f"R$ {saldo_cashback:.2f}")
+
                     cashback = calcular_cashback_a_creditar(pedido.get('ITENS_JSON'), df_catalogo, desconto)
-                    if cashback > 0: st.success(f"**💰 Cashback a ser Creditado:** R$ {cashback:.2f}")
+                    if cashback > 0: 
+                        st.success(f"**💰 Cashback a ser Creditado:** R$ {cashback:.2f}")
+                        st.info("Este valor será creditado ao cliente após a finalização deste pedido.")
+
                     st.markdown("---")
+                    
                     progresso = exibir_itens_pedido(pedido.get('ID_PEDIDO'), pedido.get('ITENS_JSON'), df_catalogo)
-                    st.progress(progresso / 100, f"Progresso: {progresso}%")
+                    
+                    st.progress(progresso / 100, f"Progresso de Separação: {progresso}%")
                     c1, c2 = st.columns(2)
                     if c1.button("✅ Finalizar", key=f"fin_{pedido.get('ID_PEDIDO')}", disabled=progresso!=100, use_container_width=True):
                         if atualizar_status_pedido(pedido.get('ID_PEDIDO'), "Finalizado", df_catalogo): st.success("Pedido finalizado!"); st.rerun()
                     if c2.button("✖️ Cancelar", key=f"can_{pedido.get('ID_PEDIDO')}", type="secondary", use_container_width=True):
                         if atualizar_status_pedido(pedido.get('ID_PEDIDO'), "Cancelado", df_catalogo): st.warning("Pedido cancelado!"); st.rerun()
+                        
         st.header("✅ Pedidos Finalizados e Cancelados")
         concluidos = df_pedidos[df_pedidos.get('STATUS', pd.Series(dtype=str)).isin(['Finalizado', 'Cancelado'])]
         if concluidos.empty:
@@ -323,7 +344,6 @@ with tab_produtos:
                 if isinstance(d, str): d = d.upper() == 'TRUE'
                 
                 nome_e = st.text_input("Nome", value=prod.get('NOME', ''))
-                # --- CORREÇÃO DO ERRO APLICADA AQUI ---
                 preco_e = st.number_input("Preço (R$)", min_value=0.01, value=p_f, format="%.2f")
                 desc_c_e = st.text_input("Descrição Curta", value=prod.get('DESCRICAOCURTA', ''))
                 desc_l_e = st.text_area("Descrição Longa", value=prod.get('DESCRICAOLONGA', ''))
@@ -363,10 +383,3 @@ with tab_cupons:
     st.subheader("📝 Cupons Cadastrados")
     df_cupons = carregar_dados(SHEET_NAME_CUPONS)
     if not df_cupons.empty: st.dataframe(df_cupons, use_container_width=True)
-
-
-
-
-
-
-
