@@ -694,29 +694,18 @@ if st.session_state.df_catalogo_indexado is None:
 # --- CSS ---
 st.markdown(f"""
 <style>
-#MainMenu, footer, [data-testid="stSidebar"] {{visibility: hidden;}}
-[data-testid="stSidebarHeader"], [data-testid="stToolbar"], a[data-testid="stAppDeployButton"], [data-testid="stStatusWidget"], [data-testid="stDecoration"] {{ display: none !important; }}
-
-/* Novo ID para envolver e esconder o popover, garantindo que ele não afete o layout */
-#floating-cart-anchor-container {{
-    position: absolute !important;
-    top: 0px !important;
-    left: 0px !important;
-    width: 0px !important;
-    height: 0px !important;
-    overflow: hidden !important;
-    opacity: 0 !important;
-}}
-
+...
 /* Garante que o botão popover dentro do container acima não seja visível */
 #floating-cart-anchor-container button {{
     opacity: 0 !important; 
-    pointer-events: none !important; 
     width: 0px !important; 
     height: 0px !important;
     padding: 0px !important;
     margin: 0px !important;
 }}
+...
+</style>
+""", unsafe_allow_html=True)
 
 .stApp {{ background-image: url({BACKGROUND_IMAGE_URL}) !important; background-size: cover; background-attachment: fixed; }}
 
@@ -1241,3 +1230,4 @@ whatsapp_button_html = f"""
 
 st.markdown(whatsapp_button_html, unsafe_allow_html=True)
 # --- FIM DO BLOCO ADICIONADO ---
+
