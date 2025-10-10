@@ -82,8 +82,9 @@ def write_csv_to_github(df, sheet_name, commit_message):
     sha = response.json().get('sha') if response.status_code == 200 else None
     
     df_to_save = df.copy()
+    # --- CORREÇÃO DE ROBUSTEZ ---
     if 'CONTATO_LIMPO' in df_to_save.columns:
-        df_to_save = df_to_save.drop(columns=['CONTATO_LIMPO'])
+        df_to_save = df_to_save.drop(columns=['CONTATO_LIMPO'], errors='ignore')
 
     csv_content = df_to_save.fillna('').to_csv(index=False, sep=',')
     content_base64 = base64.b64encode(csv_content.encode('utf-8')).decode('utf-8')
@@ -96,8 +97,6 @@ def write_csv_to_github(df, sheet_name, commit_message):
         st.error(f"Falha no Commit: {put_response.json().get('message', 'Erro')}"); return False
 
 # --- FUNÇÕES CRUD COMPLETAS ---
-
-# PRODUTOS
 def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponivel, cashback_percent_prod):
     df = carregar_dados(SHEET_NAME_CATALOGO).copy()
     novo_id = (df['ID'].max() + 1) if not df.empty and df['ID'].notna().any() else 1
@@ -118,14 +117,12 @@ def excluir_produto(id_produto):
     df = df[df['ID'] != int(id_produto)]
     return write_csv_to_github(df, SHEET_NAME_CATALOGO, f"Excluir produto ID: {id_produto}")
 
-# PROMOÇÕES
 def criar_promocao(id_produto, nome_produto, preco_original, preco_promocional, data_inicio, data_fim):
     df = carregar_dados(SHEET_NAME_PROMOCOES)
     nova_linha = {'ID_PROMOCAO': int(time.time()), 'ID_PRODUTO': str(id_produto), 'NOME_PRODUTO': nome_produto, 'PRECO_ORIGINAL': str(preco_original), 'PRECO_PROMOCIONAL': str(preco_promocional).replace('.', ','), 'STATUS': "Ativa", 'DATA_INICIO': str(data_inicio), 'DATA_FIM': str(data_fim)}
     df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
     return write_csv_to_github(df, SHEET_NAME_PROMOCOES, f"Criar promoção para {nome_produto}")
 
-# CUPONS
 def criar_cupom(codigo, tipo_desconto, valor, data_validade, valor_minimo, limite_usos):
     df = carregar_dados(SHEET_NAME_CUPONS)
     if not df.empty and codigo.upper() in df['CODIGO'].str.upper().tolist():
@@ -139,13 +136,10 @@ def criar_cupom(codigo, tipo_desconto, valor, data_validade, valor_minimo, limit
 def lancar_venda_cashback(nome: str, contato: str, valor_cashback_credito: float, valor_final_compra: float):
     contato_limpo = re.sub(r'\D', '', str(contato))
     df_clientes = carregar_dados(SHEET_NAME_CLIENTES_CASH)
-    
     if df_clientes.empty or 'CONTATO' not in df_clientes.columns:
         df_clientes = pd.DataFrame(columns=['NOME', 'CONTATO', 'CASHBACK_DISPONIVEL', 'GASTO_ACUMULADO', 'NIVEL_ATUAL', 'PRIMEIRA_COMPRA_FEITA'])
-
     df_clientes['CONTATO_LIMPO'] = df_clientes['CONTATO'].astype(str).str.replace(r'\D', '', regex=True)
     cliente_idx = df_clientes[df_clientes['CONTATO_LIMPO'] == contato_limpo].index
-    
     if cliente_idx.empty:
         novo_cliente = {'NOME': nome, 'CONTATO': contato_limpo, 'CASHBACK_DISPONIVEL': valor_cashback_credito, 'GASTO_ACUMULADO': valor_final_compra, 'NIVEL_ATUAL': 'Prata', 'PRIMEIRA_COMPRA_FEITA': 'TRUE'}
         df_clientes = pd.concat([df_clientes, pd.DataFrame([novo_cliente])], ignore_index=True)
@@ -154,7 +148,6 @@ def lancar_venda_cashback(nome: str, contato: str, valor_cashback_credito: float
         df_clientes.loc[idx, 'CASHBACK_DISPONIVEL'] = df_clientes.loc[idx].get('CASHBACK_DISPONIVEL', 0.0) + valor_cashback_credito
         df_clientes.loc[idx, 'GASTO_ACUMULADO'] = df_clientes.loc[idx].get('GASTO_ACUMULADO', 0.0) + valor_final_compra
         df_clientes.loc[idx, 'PRIMEIRA_COMPRA_FEITA'] = 'TRUE'
-    
     if write_csv_to_github(df_clientes, SHEET_NAME_CLIENTES_CASH, f"CRÉDITO CASHBACK: {nome} (R$ {valor_cashback_credito:.2f})"):
         st.toast(f"Cashback creditado: +R$ {valor_cashback_credito:.2f}", icon='💵')
         return True
@@ -198,13 +191,10 @@ def atualizar_status_pedido(id_pedido, novo_status, df_catalogo):
             valor_desconto = pedido.get('VALOR_DESCONTO', 0.0)
             valor_final_pago = pedido.get('VALOR_TOTAL', 0.0)
             cashback = calcular_cashback_a_creditar(pedido.get('ITENS_JSON'), df_catalogo, valor_desconto)
-            
             if cashback > 0:
                 if not lancar_venda_cashback(pedido.get('NOME_CLIENTE'), pedido.get('CONTATO_CLIENTE'), cashback, valor_final_pago):
                     st.error("Falha ao creditar cashback. Status não alterado."); return False
-            
             df.loc[idx, 'VALOR_CASHBACK_CREDITADO'] = cashback
-        
         df.loc[idx, 'STATUS'] = novo_status
         return write_csv_to_github(df, SHEET_NAME_PEDIDOS, f"Status pedido {id_pedido} para {novo_status}")
     return False
@@ -249,13 +239,15 @@ with tab_pedidos:
         if 'ITENS_JSON' in df_pedidos.columns:
             df_pedidos['SALDO_CASHBACK_CLIENTE_PEDIDO'] = df_pedidos['ITENS_JSON'].apply(extract_customer_cashback)
         else: df_pedidos['SALDO_CASHBACK_CLIENTE_PEDIDO'] = 0.0
-        if 'STATUS' not in df_pedidos.columns: df_pedidos['STATUS'] = 'PENDENTE'
+        if 'STATUS' not in df_pedidos.columns: df_pedidos['STATUS'] = ''
+        df_pedidos['STATUS'] = df_pedidos['STATUS'].fillna('') # Garante que não haja NaN
             
         df_pedidos['DATA_HORA'] = pd.to_datetime(df_pedidos['DATA_HORA'], errors='coerce')
         df_pedidos.sort_values(by="DATA_HORA", ascending=False, inplace=True)
         
         st.header("⏳ Pedidos Pendentes")
-        pedidos_pendentes = df_pedidos[df_pedidos['STATUS'] == 'PENDENTE']
+        # --- CORREÇÃO DO FILTRO ---
+        pedidos_pendentes = df_pedidos[~df_pedidos['STATUS'].isin(['Finalizado', 'Cancelado'])]
         if pedidos_pendentes.empty:
             st.info("Nenhum pedido pendente.")
         else:
@@ -265,23 +257,17 @@ with tab_pedidos:
                 
                 with st.expander(f"Pedido de **{pedido.get('NOME_CLIENTE','N/A')}** - {data_hora} - Total: R$ {valor_final_a_exibir:.2f}"):
                     col_botoes1, col_botoes2 = st.columns(2)
-                    
-                    cupom = pedido.get('CUPOM_APLICADO')
-                    desconto = pedido.get('VALOR_DESCONTO', 0.0)
+                    cupom = pedido.get('CUPOM_APLICADO'); desconto = pedido.get('VALOR_DESCONTO', 0.0)
                     if pd.notna(cupom) and str(cupom).strip(): st.success(f"🎟️ Cupom: **{cupom}** (-R$ {desconto:.2f})")
-
                     st.markdown(f"**Saldo Cashback Cliente:** R$ {pedido.get('SALDO_CASHBACK_CLIENTE_PEDIDO', 0.0):.2f}")
                     cashback = calcular_cashback_a_creditar(pedido.get('ITENS_JSON'), df_catalogo, desconto)
                     if cashback > 0: st.markdown(f"**💰 Cashback a ser Creditado:** R$ {cashback:.2f}")
                     st.markdown("---")
-
                     progresso = exibir_itens_pedido(pedido.get('ID_PEDIDO'), pedido.get('ITENS_JSON'), df_catalogo)
                     st.progress(progresso / 100, f"Progresso: {progresso}%")
-                    
                     with col_botoes1:
                         if st.button("✅ Finalizar", key=f"finalizar_{pedido.get('ID_PEDIDO')}", disabled=progresso!=100, use_container_width=True):
                             if atualizar_status_pedido(pedido.get('ID_PEDIDO'), "Finalizado", df_catalogo): st.success("Pedido finalizado!"); st.rerun()
-                    
                     with col_botoes2:
                         if st.button("✖️ Cancelar", key=f"cancelar_{pedido.get('ID_PEDIDO')}", type="secondary", use_container_width=True):
                             if atualizar_status_pedido(pedido.get('ID_PEDIDO'), "Cancelado", df_catalogo): st.warning("Pedido cancelado!"); st.rerun()
@@ -303,22 +289,18 @@ with tab_produtos:
     df_produtos = carregar_dados(SHEET_NAME_CATALOGO)
     with st.expander("➕ Adicionar Novo Produto"):
         with st.form("form_novo_produto", clear_on_submit=True):
-            nome = st.text_input("Nome do Produto")
-            preco = st.number_input("Preço (R$)", 0.01, format="%.2f")
-            desc_curta = st.text_input("Descrição Curta")
-            desc_longa = st.text_area("Descrição Longa")
-            link_img = st.text_input("Link da Imagem")
-            cashback = st.number_input("Cashback (%)", 0.0, 100.0, format="%.2f")
+            nome = st.text_input("Nome do Produto"); preco = st.number_input("Preço (R$)", 0.01, format="%.2f")
+            desc_curta = st.text_input("Descrição Curta"); desc_longa = st.text_area("Descrição Longa")
+            link_img = st.text_input("Link da Imagem"); cashback = st.number_input("Cashback (%)", 0.0, 100.0, format="%.2f")
             disponivel = st.checkbox("Disponível para Venda", True)
             if st.form_submit_button("Salvar Novo Produto"):
                 if nome and preco > 0:
                     if adicionar_produto(nome, preco, desc_curta, desc_longa, link_img, disponivel, cashback): st.success("Produto adicionado!"); st.rerun()
     st.markdown("---")
     st.subheader("📝 Editar/Excluir Produtos")
-    if df_produtos.empty:
-        st.info("Nenhum produto cadastrado.")
+    if df_produtos.empty: st.info("Nenhum produto cadastrado.")
     else:
-        opcoes = df_produtos.apply(lambda r: f"{r['ID']} - {r['NOME']}", axis=1).tolist()
+        opcoes = df_produtos.apply(lambda r: f"{r.get('ID', 'N/A')} - {r.get('NOME', 'N/A')}", axis=1).tolist()
         selecionado = st.selectbox("Selecione para Editar", opcoes)
         if selecionado:
             id_prod = int(selecionado.split(' - ')[0])
@@ -328,15 +310,10 @@ with tab_produtos:
                 cash_f = float(str(produto.get('CASHBACKPERCENT', '0.0')).replace(',', '.'))
                 disp = produto.get('DISPONIVEL', False)
                 if isinstance(disp, str): disp = disp.upper() == 'TRUE'
-                
-                nome_e = st.text_input("Nome", value=produto.get('NOME', ''))
-                preco_e = st.number_input("Preço", 0.01, value=preco_f, format="%.2f")
-                desc_c_e = st.text_input("Descrição Curta", value=produto.get('DESCRICAOCURTA', ''))
-                desc_l_e = st.text_area("Descrição Longa", value=produto.get('DESCRICAOLONGA', ''))
-                link_e = st.text_input("Link Imagem", value=produto.get('LINKIMAGEM', ''))
-                cash_e = st.number_input("Cashback (%)", 0.0, 100.0, value=cash_f, format="%.2f")
+                nome_e = st.text_input("Nome", value=produto.get('NOME', '')); preco_e = st.number_input("Preço", 0.01, value=preco_f, format="%.2f")
+                desc_c_e = st.text_input("Descrição Curta", value=produto.get('DESCRICAOCURTA', '')); desc_l_e = st.text_area("Descrição Longa", value=produto.get('DESCRICAOLONGA', ''))
+                link_e = st.text_input("Link Imagem", value=produto.get('LINKIMAGEM', '')); cash_e = st.number_input("Cashback (%)", 0.0, 100.0, value=cash_f, format="%.2f")
                 disp_e = st.checkbox("Disponível", value=disp)
-                
                 c1, c2 = st.columns(2)
                 if c1.form_submit_button("💾 Salvar", type="primary"):
                     if atualizar_produto(id_prod, nome_e, preco_e, desc_c_e, desc_l_e, link_e, disp_e, cash_e): st.success("Produto atualizado!"); st.rerun()
