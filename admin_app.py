@@ -93,7 +93,7 @@ def write_csv_to_github(df, sheet_name, commit_message):
         st.error(f"Falha no Commit: {put_response.json().get('message', 'Erro')}"); return False
 
 # --- FUNÇÕES DE CASHBACK ---
-def lancar_venda_cashback(nome: str, contato: str, valor_cashback_credito: float):
+def lancar_venda_cashback(nome: str, contato: str, valor_cashback_credito: float, valor_final_compra: float):
     contato_limpo = re.sub(r'\D', '', str(contato))
     df_clientes = carregar_dados(SHEET_NAME_CLIENTES_CASH)
     
@@ -104,11 +104,13 @@ def lancar_venda_cashback(nome: str, contato: str, valor_cashback_credito: float
     cliente_idx = df_clientes[df_clientes['CONTATO_LIMPO'] == contato_limpo].index
     
     if cliente_idx.empty:
-        novo_cliente = {'NOME': nome, 'CONTATO': contato_limpo, 'CASHBACK_DISPONIVEL': valor_cashback_credito, 'GASTO_ACUMULADO': 0.0, 'NIVEL_ATUAL': 'Prata', 'PRIMEIRA_COMPRA_FEITA': 'TRUE'}
+        novo_cliente = {'NOME': nome, 'CONTATO': contato_limpo, 'CASHBACK_DISPONIVEL': valor_cashback_credito, 'GASTO_ACUMULADO': valor_final_compra, 'NIVEL_ATUAL': 'Prata', 'PRIMEIRA_COMPRA_FEITA': 'TRUE'}
         df_clientes = pd.concat([df_clientes, pd.DataFrame([novo_cliente])], ignore_index=True)
     else:
         idx = cliente_idx[0]
         df_clientes.loc[idx, 'CASHBACK_DISPONIVEL'] = df_clientes.loc[idx].get('CASHBACK_DISPONIVEL', 0.0) + valor_cashback_credito
+        # --- CORREÇÃO DO GASTO ACUMULADO ---
+        df_clientes.loc[idx, 'GASTO_ACUMULADO'] = df_clientes.loc[idx].get('GASTO_ACUMULADO', 0.0) + valor_final_compra
         df_clientes.loc[idx, 'PRIMEIRA_COMPRA_FEITA'] = 'TRUE'
     
     if write_csv_to_github(df_clientes, SHEET_NAME_CLIENTES_CASH, f"CRÉDITO CASHBACK: {nome} (R$ {valor_cashback_credito:.2f})"):
@@ -152,11 +154,15 @@ def atualizar_status_pedido(id_pedido, novo_status, df_catalogo):
         if novo_status == 'Finalizado' and df.loc[idx, 'STATUS'] != 'Finalizado':
             pedido = df.loc[idx]
             valor_desconto = pedido.get('VALOR_DESCONTO', 0.0)
+            valor_final_pago = pedido.get('VALOR_TOTAL', 0.0) # Valor final para o gasto acumulado
             cashback = calcular_cashback_a_creditar(pedido.get('ITENS_JSON'), df_catalogo, valor_desconto)
+            
             if cashback > 0:
-                if not lancar_venda_cashback(pedido.get('NOME_CLIENTE'), pedido.get('CONTATO_CLIENTE'), cashback):
+                if not lancar_venda_cashback(pedido.get('NOME_CLIENTE'), pedido.get('CONTATO_CLIENTE'), cashback, valor_final_pago):
                     st.error("Falha ao creditar cashback. Status não alterado."); return False
+            
             df.loc[idx, 'VALOR_CASHBACK_CREDITADO'] = cashback
+        
         df.loc[idx, 'STATUS'] = novo_status
         return write_csv_to_github(df, SHEET_NAME_PEDIDOS, f"Status pedido {id_pedido} para {novo_status}")
     return False
@@ -198,49 +204,37 @@ with tab_pedidos:
     if df_pedidos.empty:
         st.info("Nenhum pedido foi encontrado.")
     else:
+        # Garante colunas essenciais
         if 'ITENS_JSON' in df_pedidos.columns:
             df_pedidos['SALDO_CASHBACK_CLIENTE_PEDIDO'] = df_pedidos['ITENS_JSON'].apply(extract_customer_cashback)
         else:
             df_pedidos['SALDO_CASHBACK_CLIENTE_PEDIDO'] = 0.0
+        if 'STATUS' not in df_pedidos.columns:
+            df_pedidos['STATUS'] = 'PENDENTE' # Default
             
         df_pedidos['DATA_HORA'] = pd.to_datetime(df_pedidos['DATA_HORA'], errors='coerce')
+        df_pedidos.sort_values(by="DATA_HORA", ascending=False, inplace=True)
         
-        for _, pedido in df_pedidos.sort_values(by="DATA_HORA", ascending=False).iterrows():
-            if pedido.get('STATUS') != 'Finalizado':
-                
-                # --- LÓGICA DE CÁLCULO DE VALOR CORRIGIDA ---
-                valor_total_csv = pedido.get('VALOR_TOTAL', 0.0)
-                valor_final_a_exibir = 0.0
-
-                try:
-                    json_data = ast.literal_eval(str(pedido.get('ITENS_JSON', '{}')))
-                    subtotal = sum(float(i.get('preco', 0)) * int(i.get('quantidade', 0)) for i in json_data.get('itens', []))
-                    desconto = float(json_data.get('desconto_cupom', 0.0))
-                    valor_total_json = subtotal - desconto
-                except:
-                    valor_total_json = 0.0
-
-                valor_final_a_exibir = valor_total_csv if valor_total_csv > 0.0 else valor_total_json
-
+        # --- SEÇÃO DE PEDIDOS PENDENTES ---
+        st.header("⏳ Pedidos Pendentes")
+        pedidos_pendentes = df_pedidos[df_pedidos['STATUS'] == 'PENDENTE']
+        if pedidos_pendentes.empty:
+            st.info("Nenhum pedido pendente.")
+        else:
+            for _, pedido in pedidos_pendentes.iterrows():
+                valor_final_a_exibir = pedido.get('VALOR_TOTAL', 0.0)
                 data_hora = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indefinida"
                 
                 with st.expander(f"Pedido de **{pedido.get('NOME_CLIENTE','N/A')}** - {data_hora} - Total: R$ {valor_final_a_exibir:.2f}"):
+                    col_botoes1, col_botoes2 = st.columns(2)
                     
-                    # --- LÓGICA DE EXIBIÇÃO DO CUPOM ---
-                    cupom_aplicado, valor_desconto = None, pedido.get('VALOR_DESCONTO', 0.0)
-                    try:
-                        json_data = ast.literal_eval(str(pedido.get('ITENS_JSON', '{}')))
-                        cupom_aplicado = json_data.get('cupom_aplicado')
-                        if valor_desconto == 0.0 and 'desconto_cupom' in json_data:
-                            valor_desconto = float(json_data['desconto_cupom'])
-                    except: pass
-                    
-                    if cupom_aplicado and valor_desconto > 0:
-                        st.success(f"🎟️ Cupom Aplicado: **{cupom_aplicado}** (-R$ {valor_desconto:.2f})")
+                    cupom_aplicado = pedido.get('CUPOM_APLICADO')
+                    valor_desconto = pedido.get('VALOR_DESCONTO', 0.0)
+                    if pd.notna(cupom_aplicado) and str(cupom_aplicado).strip():
+                        st.success(f"🎟️ Cupom: **{cupom_aplicado}** (-R$ {valor_desconto:.2f})")
 
                     saldo_anterior = pedido.get('SALDO_CASHBACK_CLIENTE_PEDIDO', 0.0)
                     st.markdown(f"**Saldo Cashback do Cliente:** **R$ {saldo_anterior:.2f}**")
-                    
                     cashback_a_creditar = calcular_cashback_a_creditar(pedido.get('ITENS_JSON'), df_catalogo, valor_desconto)
                     if cashback_a_creditar > 0.00:
                         st.markdown(f"**💰 Cashback a ser Creditado:** **R$ {cashback_a_creditar:.2f}**")
@@ -248,11 +242,29 @@ with tab_pedidos:
 
                     progresso = exibir_itens_pedido(pedido.get('ID_PEDIDO'), pedido.get('ITENS_JSON'), df_catalogo)
                     st.progress(progresso / 100, f"Progresso: {progresso}%")
-                    if st.button("✅ Finalizar Pedido", key=f"finalizar_{pedido.get('ID_PEDIDO')}", disabled=progresso != 100):
-                        if atualizar_status_pedido(pedido.get('ID_PEDIDO'), "Finalizado", df_catalogo):
-                            st.success(f"Pedido {pedido.get('ID_PEDIDO')} finalizado!"); st.rerun()
-                        else: st.error("Falha ao finalizar.")
-                        
+                    
+                    with col_botoes1:
+                        if st.button("✅ Finalizar Pedido", key=f"finalizar_{pedido.get('ID_PEDIDO')}", disabled=progresso != 100, use_container_width=True):
+                            if atualizar_status_pedido(pedido.get('ID_PEDIDO'), "Finalizado", df_catalogo):
+                                st.success(f"Pedido {pedido.get('ID_PEDIDO')} finalizado!"); st.rerun()
+                    
+                    with col_botoes2:
+                        if st.button("✖️ Cancelar Pedido", key=f"cancelar_{pedido.get('ID_PEDIDO')}", type="secondary", use_container_width=True):
+                            if atualizar_status_pedido(pedido.get('ID_PEDIDO'), "Cancelado", df_catalogo):
+                                st.warning(f"Pedido {pedido.get('ID_PEDIDO')} cancelado!"); st.rerun()
+        
+        # --- SEÇÃO DE PEDIDOS FINALIZADOS (RESTAURADA) ---
+        st.header("✅ Pedidos Finalizados")
+        pedidos_finalizados = df_pedidos[df_pedidos['STATUS'] == 'Finalizado']
+        if pedidos_finalizados.empty:
+            st.info("Nenhum pedido finalizado.")
+        else:
+            for _, pedido in pedidos_finalizados.iterrows():
+                data_hora = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indefinida"
+                with st.expander(f"Pedido finalizado de **{pedido.get('NOME_CLIENTE','N/A')}** - {data_hora} - Total: R$ {pedido.get('VALOR_TOTAL', 0.0):.2f}"):
+                     st.write(f"ID do Pedido: {pedido.get('ID_PEDIDO')}")
+                     st.info(f"Cashback creditado neste pedido: R$ {pedido.get('VALOR_CASHBACK_CREDITADO', 0.0):.2f}")
+
 # --- Outras Abas ---
 with tab_produtos:
     st.header("🛍️ Gerenciamento de Produtos")
@@ -264,6 +276,5 @@ with tab_promocoes:
     
 with tab_cupons:
     st.header("🎟️ Gerenciador de Cupons de Desconto")
-    # A lógica da aba de cupons permanece a mesma
     st.info("Seção de gerenciamento de cupons.")
 
