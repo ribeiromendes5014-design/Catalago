@@ -11,6 +11,7 @@ import base64
 from io import StringIO
 import os
 import ast
+import pytz
 
 
 # --- Variáveis de Configuração ---
@@ -968,6 +969,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
