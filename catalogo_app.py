@@ -735,47 +735,52 @@ with col_carrinho:
             
             df_catalogo_completo = carregar_catalogo().set_index('ID')
             
+            # === CORREÇÃO 1: EXIBIÇÃO DO SUBTOTAL DO ITEM ===
             for prod_id, item in list(st.session_state.carrinho.items()):
                 c1, c2, c3, c4 = st.columns([3, 1.5, 2.5, 1])
                 c1.write(f"*{item['nome']}*")
                 
+                # ... (lógica de quantidade do item, não precisa mudar)
                 if prod_id in df_catalogo_completo.index:
                     max_qtd = df_catalogo_completo.loc[prod_id, 'QUANTIDADE']
                     if isinstance(max_qtd, pd.Series):
                          max_qtd = max_qtd.iloc[0]
                 else:
                     max_qtd = 999999
-                
                 max_qtd = int(max_qtd)
-
                 if item['quantidade'] > max_qtd:
                     st.session_state.carrinho[prod_id]['quantidade'] = max_qtd
                     item['quantidade'] = max_qtd
                     st.toast(f"Ajustado: {item['nome']} ao estoque máximo de {max_qtd}.", icon="⚠️")
                     st.rerun()
-
                 nova_quantidade = c2.number_input(
-                    label=f'Qtd_{prod_id}',
-                    min_value=1,
-                    max_value=max_qtd,
-                    value=item['quantidade'],
-                    step=1,
-                    key=f'qtd_{prod_id}_popover',
+                    label=f'Qtd_{prod_id}', min_value=1, max_value=max_qtd,
+                    value=item['quantidade'], step=1, key=f'qtd_{prod_id}_popover',
                     label_visibility="collapsed"
                 )
-                
                 if nova_quantidade != item['quantidade']:
                     st.session_state.carrinho[prod_id]['quantidade'] = nova_quantidade
                     st.rerun()
+                # ... (fim da lógica de quantidade)
 
-                c3.markdown(f"**R$ {item['preco']*item['quantidade']:.2f}**<br><span style='font-size: 0.8rem; color: #757575;'>(R$ {item['preco']:.2f} un.)</span>", unsafe_allow_html=True)
+                # AQUI ESTÁ A CORREÇÃO DA EXIBIÇÃO DO SUBTOTAL
+                subtotal_item = item['preco'] * item['quantidade']
+                preco_unitario = item['preco']
+                html_preco = f"""
+                <div style="text-align: left; white-space: nowrap;">
+                    <strong>R$ {subtotal_item:.2f}</strong>
+                    <br>
+                    <span style='font-size: 0.8rem; color: #757575;'>(R$ {preco_unitario:.2f} un.)</span>
+                </div>
+                """
+                c3.markdown(html_preco, unsafe_allow_html=True)
                 
                 if c4.button("X", key=f'rem_{prod_id}_popover'):
                     remover_do_carrinho(prod_id)
                     st.rerun()
             st.markdown("---")
             
-            # === LÓGICA DE CUPOM ATUALIZADA ===
+            # === CORREÇÃO 2: LÓGICA DO CUPOM DE DESCONTO ===
             st.subheader("🎟️ Cupom de Desconto")
             
             cupom_col1, cupom_col2 = st.columns([3, 1])
@@ -793,8 +798,8 @@ with col_carrinho:
                             cupom_info = cupom_encontrado.iloc[0]
                             valor_minimo = cupom_info['VALOR_MINIMO_PEDIDO']
 
-                            # Verifica o valor mínimo do pedido
-                            if total_acumulado >= valor_minimo:
+                            # AQUI ESTÁ A CORREÇÃO DA COMPARAÇÃO DE VALORES
+                            if float(total_acumulado) >= float(valor_minimo):
                                 tipo = cupom_info['TIPO_DESCONTO']
                                 valor = cupom_info['VALOR_DESCONTO']
                                 
@@ -826,11 +831,11 @@ with col_carrinho:
                     st.error(st.session_state.cupom_mensagem)
 
             st.markdown("---")
-            # ==========================================
-
+            
             st.button("🗑️ Limpar Pedido", on_click=limpar_carrinho, use_container_width=True)
             st.markdown("---")
             
+            # ... O resto do código (Finalizar Pedido) continua o mesmo ...
             st.subheader("Finalizar Pedido")
 
             nome_input = st.text_input("Seu Nome Completo:", key='checkout_nome_dynamic')
@@ -963,6 +968,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
