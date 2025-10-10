@@ -745,38 +745,48 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 
 /* --- CSS para o Botão Flutuante do Carrinho --- */
 .cart-float {{
+    /* Ajusta largura e altura para acomodar texto mais complexo */
+    width: 150px; 
+    height: 70px;
+    
     position: fixed;
-    bottom: 110px; /* Position above WhatsApp button (bottom: 40px) */
+    bottom: 110px; 
     right: 40px;
-    background-color: #E91E63; /* Pink color for cart */
+    background-color: #E91E63; 
     color: white;
-    border-radius: 50px;
-    width: 60px;
-    height: 60px;
-    text-align: center;
-    font-size: 28px;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-    z-index: 1000; /* Ensure it is on top */
+    border-radius: 12px; /* Usa borda quadrada mais suave */
+    
+    /* Centraliza o conteúdo (ícone e texto) */
     display: flex;
+    flex-direction: column; /* Coloca os elementos em coluna */
     align-items: center;
     justify-content: center;
+    
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    z-index: 1000; 
     transition: background-color 0.3s;
     cursor: pointer;
+    padding: 5px;
 }}
 .cart-float:hover {{ background-color: #C2185B; }}
+
+/* Esconde o contador antigo, pois usaremos texto no corpo do botão */
 .cart-float .cart-count {{
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    background-color: #FFEB3B; /* Yellow badge */
-    color: #E91E63;
-    border-radius: 50%;
-    padding: 2px 6px;
-    font-size: 14px;
-    font-weight: bold;
-    line-height: 1;
-    border: 2px solid white;
+    display: none;
 }}
+
+.cart-float .cart-text {{
+    font-size: 0.8rem;
+    font-weight: bold;
+    line-height: 1.2;
+    margin-top: 3px;
+}}
+.cart-float .cart-total {{
+    font-size: 1rem;
+    font-weight: bold;
+    margin-top: -3px; /* Aproxima do texto */
+}}
+
 
 /* Adjust WhatsApp float position and Z-index */
 .whatsapp-float {{
@@ -1201,14 +1211,18 @@ else:
 
 # --- ADICIONA OS BOTÕES FLUTUANTES NO FINAL DO SCRIPT ---
 
+# Formata o total para exibição
+total_display = f"R$ {total_acumulado:.2f}".replace('.', ',')
+
 # 1. BOTÃO DO CARRINHO FLUTUANTE (Posicionado acima do WhatsApp)
-# A função de clique agora busca o botão do popover dentro do container invisível e clica nele.
-# O Streamlit cria um botão dentro do popover com o texto fornecido ("🛒")
+# Adiciona o número de itens e o total formatado no HTML.
 cart_float_button_html = f"""
 <div class='cart-float' 
      onclick="document.querySelector('#floating-cart-anchor-container button').click();"
-     title="Abrir Carrinho de Pedidos">
-    🛒
+     title="Total: {total_display} ({num_itens} itens)">
+    <span style="font-size: 1.2rem;">🛒</span>
+    <span class='cart-text'>({num_itens} itens)</span>
+    <span class='cart-total'>{total_display}</span>
     <span class='cart-count'>{num_itens}</span>
 </div>
 """
