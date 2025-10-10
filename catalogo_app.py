@@ -461,9 +461,16 @@ def remover_do_carrinho(produto_id):
 
 def render_product_image(link_imagem):
     placeholder_html = """<div class="product-image-container" style="background-color: #f0f0f0; border-radius: 8px;"><span style="color: #a0a0a0; font-size: 1.1rem; font-weight: bold;">Sem Imagem</span></div>"""
+    
     if link_imagem and str(link_imagem).strip().startswith('http'):
-        st.markdown(f'<div class="product-image-container"><img src="{link_imagem}"></div>', unsafe_allow_html=True)
+        # MUDE PARA st.image para habilitar a ampliação (lightbox)
+        st.image(
+            link_imagem,
+            use_column_width=True,  # Ocupa a largura do card
+            caption=""              # Opcional: Adicione uma legenda se necessário
+        )
     else:
+        # Mantém o placeholder HTML quando não há imagem
         st.markdown(placeholder_html, unsafe_allow_html=True)
 
 def limpar_carrinho():
@@ -1042,3 +1049,4 @@ else:
         with cols[i % 4]:
             # 3. OTIMIZAÇÃO: Passa o DF indexado para a função de renderização
             render_product_card(product_id, row, key_prefix=unique_key, df_catalogo_indexado=st.session_state.df_catalogo_indexado)
+
