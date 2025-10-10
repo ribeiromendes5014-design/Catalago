@@ -117,7 +117,8 @@ def parse_json_from_string(json_string):
 def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponivel, cashback):
     df = carregar_dados(SHEET_NAME_CATALOGO).copy()
     novo_id = (df['ID'].max() + 1) if not df.empty and df['ID'].notna().any() else 1
-    nova_linha = {'ID': novo_id, 'NOME': nome, 'PRECO': str(preco), 'DESCRICAOCURTA': desc_curta, 'DESCRICAOLONGA': desc_longa, 'LINKIMAGEM': link_imagem, 'DISPONIVEL': disponivel, 'CASHBACKPERCENT': str(cashback)}
+    # Garante que os nomes das colunas correspondam ao CSV ao adicionar
+    nova_linha = {'ID': novo_id, 'NOME': nome, 'PRECOVISTA': str(preco), 'DESCRICAOCURTA': desc_curta, 'DESCRICAOLONGA': desc_longa, 'FOTOURL': link_imagem, 'DISPONIVEL': disponivel, 'CASHBACKPERCENT': str(cashback)}
     df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
     return write_csv_to_github(df, SHEET_NAME_CATALOGO, f"Adicionar produto: {nome}")
 
@@ -125,7 +126,8 @@ def atualizar_produto(id_prod, nome, preco, desc_curta, desc_longa, link_img, di
     df = carregar_dados(SHEET_NAME_CATALOGO)
     idx = df[df['ID'] == int(id_prod)].index
     if not idx.empty:
-        df.loc[idx[0], ['NOME', 'PRECO', 'DESCRICAOCURTA', 'DESCRICAOLONGA', 'LINKIMAGEM', 'DISPONIVEL', 'CASHBACKPERCENT']] = [nome, str(preco), desc_curta, desc_longa, link_img, disp, str(cash)]
+        # Garante que os nomes das colunas correspondam ao CSV ao atualizar
+        df.loc[idx[0], ['NOME', 'PRECOVISTA', 'DESCRICAOCURTA', 'DESCRICAOLONGA', 'FOTOURL', 'DISPONIVEL', 'CASHBACKPERCENT']] = [nome, str(preco), desc_curta, desc_longa, link_img, disp, str(cash)]
         return write_csv_to_github(df, SHEET_NAME_CATALOGO, f"Atualizar produto ID: {id_prod}")
     return False
 
@@ -203,7 +205,7 @@ def atualizar_status_pedido(id_pedido, novo_status, df_catalogo):
         st.error(f"Erro: Pedido com ID {id_pedido} não encontrado para atualização.")
         return False
 
-# --- FUNÇÃO ATUALIZADA PARA MOSTRAR IMAGEM ---
+# --- INÍCIO DA CORREÇÃO ---
 def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
     data = parse_json_from_string(pedido_json)
     itens = data.get('itens', [])
@@ -216,31 +218,27 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
     if key not in st.session_state: st.session_state[key] = [False] * total_itens
 
     for i, item in enumerate(itens):
-        # Define uma imagem padrão caso o produto não tenha foto
         link_img = "https://placehold.co/100x100/e2e8f0/cccccc?text=Sem+Foto"
         
         prod_id = int(item.get('id', -1))
-        # Busca o produto no catálogo de produtos (produtos_estoque.csv)
         produto_no_catalogo = df_catalogo[df_catalogo['ID'] == prod_id]
         
         cashback_percent = 0.0
-        # Se o produto for encontrado no catálogo, busca o link da imagem
         if not produto_no_catalogo.empty:
-            link_imagem_produto = produto_no_catalogo.iloc[0].get('LINKIMAGEM')
+            # CORREÇÃO: Busca pela coluna 'FOTOURL' (em maiúsculas, pois o código padroniza os nomes)
+            link_imagem_produto = produto_no_catalogo.iloc[0].get('FOTOURL')
             if link_imagem_produto and pd.notna(link_imagem_produto):
                 link_img = str(link_imagem_produto)
 
             cashback_str = str(produto_no_catalogo.iloc[0].get('CASHBACKPERCENT', '0')).replace(',', '.')
             cashback_percent = float(cashback_str)
 
-        # Layout para exibir o item do pedido
         col_check, col_img, col_info = st.columns([0.5, 1, 3.5])
         
         with col_check:
             st.session_state[key][i] = st.checkbox(" ", st.session_state[key][i], key=f"c_{id_pedido}_{i}", label_visibility="collapsed")
         
         with col_img:
-            # Mostra a imagem do produto
             st.image(link_img, width=100)
             
         with col_info:
@@ -256,6 +254,7 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
         if st.session_state[key][i]: itens_sep += 1
         
     return 100 if total_itens == 0 else int((itens_sep / total_itens) * 100)
+# --- FIM DA CORREÇÃO ---
 
 st.set_page_config(page_title="Admin Doce&Bella", layout="wide")
 st.title("⭐ Painel de Administração | Doce&Bella")
@@ -317,13 +316,17 @@ with tab_produtos:
     df_prods = carregar_dados(SHEET_NAME_CATALOGO)
     with st.expander("➕ Adicionar Novo Produto"):
         with st.form("form_novo_produto", clear_on_submit=True):
-            nome, preco = st.text_input("Nome"), st.number_input("Preço", 0.01, format="%.2f")
-            desc_c, desc_l = st.text_input("Descrição Curta"), st.text_area("Descrição Longa")
-            link, cash = st.text_input("Link Imagem"), st.number_input("Cashback (%)", 0.0, 100.0, format="%.2f")
+            nome = st.text_input("Nome")
+            preco = st.number_input("Preço", 0.01, format="%.2f")
+            desc_c = st.text_input("Descrição Curta")
+            desc_l = st.text_area("Descrição Longa")
+            link = st.text_input("Link Imagem (FotoURL)")
+            cash = st.number_input("Cashback (%)", 0.0, 100.0, format="%.2f")
             disp = st.checkbox("Disponível", True)
             if st.form_submit_button("Salvar"):
-                if nome and preco > 0 and adicionar_produto(nome, preco, desc_c, desc_l, link, disp, cash):
-                    st.success("Produto adicionado!"); st.rerun()
+                if nome and preco > 0:
+                    if adicionar_produto(nome, preco, desc_c, desc_l, link, disp, cash):
+                        st.success("Produto adicionado!"); st.rerun()
     st.subheader("📝 Editar/Excluir")
     if df_prods.empty: st.info("Nenhum produto.")
     else:
@@ -333,7 +336,8 @@ with tab_produtos:
             id_prod = int(sel.split(' - ')[0])
             prod = df_prods[df_prods['ID'] == id_prod].iloc[0]
             with st.form(f"form_edit_{id_prod}"):
-                p_f = float(str(prod.get('PRECO','0.01')).replace(',','.'))
+                # Usa PRECOVISTA, conforme o CSV
+                p_f = float(str(prod.get('PRECOVISTA','0.01')).replace(',','.'))
                 c_f = float(str(prod.get('CASHBACKPERCENT','0.0')).replace(',','.'))
                 d = prod.get('DISPONIVEL', False)
                 if isinstance(d, str): d = d.upper() == 'TRUE'
@@ -342,15 +346,18 @@ with tab_produtos:
                 preco_e = st.number_input("Preço (R$)", min_value=0.01, value=p_f, format="%.2f")
                 desc_c_e = st.text_input("Descrição Curta", prod.get('DESCRICAOCURTA', ''))
                 desc_l_e = st.text_area("Descrição Longa", prod.get('DESCRICAOLONGA', ''))
-                link_e = st.text_input("Link Imagem", prod.get('LINKIMAGEM', ''))
+                # Usa FOTOURL, conforme o CSV
+                link_e = st.text_input("Link Imagem (FotoURL)", prod.get('FOTOURL', ''))
                 cash_e = st.number_input("Cashback (%)", min_value=0.0, max_value=100.0, value=c_f, format="%.2f")
                 disp_e = st.checkbox("Disponível", d)
                 
                 c1, c2 = st.columns(2)
-                if c1.form_submit_button("💾 Salvar Alterações", type="primary", use_container_width=True) and atualizar_produto(id_prod, nome_e, preco_e, desc_c_e, desc_l_e, link_e, disp_e, cash_e):
-                    st.success("Produto atualizado!"); st.rerun()
-                if c2.form_submit_button("🗑️ Excluir Produto", use_container_width=True) and excluir_produto(id_prod):
-                    st.success("Produto excluído!"); st.rerun()
+                if c1.form_submit_button("💾 Salvar Alterações", type="primary", use_container_width=True):
+                    if atualizar_produto(id_prod, nome_e, preco_e, desc_c_e, desc_l_e, link_e, disp_e, cash_e):
+                        st.success("Produto atualizado!"); st.rerun()
+                if c2.form_submit_button("🗑️ Excluir Produto", use_container_width=True):
+                    if excluir_produto(id_prod):
+                        st.success("Produto excluído!"); st.rerun()
 
 with tab_promocoes:
     st.header("🔥 Gerenciador de Promoções")
@@ -368,8 +375,9 @@ with tab_cupons:
             val_min, uso_ilim = st.number_input("Compra mínima (R$)", 0.0, format="%.2f"), st.checkbox("Uso ilimitado")
             limite = st.number_input("Limite de usos", 1, step=1, disabled=uso_ilim)
             if st.form_submit_button("Salvar Cupom"):
-                if codigo and valor > 0 and criar_cupom(codigo, tipo, valor, None if sem_val else validade, val_min, 0 if uso_ilim else limite):
-                    st.success("Cupom criado!"); st.rerun()
+                if codigo and valor > 0:
+                    if criar_cupom(codigo, tipo, valor, None if sem_val else validade, val_min, 0 if uso_ilim else limite):
+                        st.success("Cupom criado!"); st.rerun()
     st.subheader("📝 Cupons Cadastrados")
     df_cupons = carregar_dados(SHEET_NAME_CUPONS)
     if not df_cupons.empty: st.dataframe(df_cupons, use_container_width=True)
