@@ -16,6 +16,7 @@ import re
 SHEET_NAME_CATALOGO = "produtos_estoque"
 SHEET_NAME_PEDIDOS = "pedidos"
 SHEET_NAME_PROMOCOES = "promocoes"
+SHEET_NAME_CUPONS = "cupons"
 # === NOVO: ARQUIVO DE CASHBACK E CONSTANTES ===
 SHEET_NAME_CLIENTES_CASH = "clientes_cash"
 CASHBACK_LANCAMENTOS_CSV = "lancamentos.csv"
@@ -1036,6 +1037,7 @@ with tab_promocoes:
                         st.rerun()
                     else:
                         st.error("Falha ao excluir promoção.")
+
 
 
 
