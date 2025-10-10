@@ -1257,13 +1257,13 @@ function openFloatingCart() {
 st.markdown(popover_click_script, unsafe_allow_html=True)
 
 
-# --- 2. BOTÃO FLUTUANTE DE CARRINHO (VISÍVEL) ---
 cart_float_html = f"""
-<div class="cart-float" onclick="openFloatingCart();" title="Abrir Meu Pedido">
+<div class="cart-float" onclick="window.openFloatingCart();" title="Abrir Meu Pedido">
     <span style="font-size: 28px;">🛍️</span>
     <span class="cart-count-float">{num_itens}</span>
 </div>
 """
+
 # Só injeta o botão se houver itens no carrinho ou se o número de itens for > 0
 if num_itens > 0:
     st.markdown(cart_float_html, unsafe_allow_html=True)
@@ -1283,3 +1283,4 @@ whatsapp_button_html = f"""
 # Injeta o botão flutuante
 st.markdown(whatsapp_button_html, unsafe_allow_html=True)
 # --- FIM DO BLOCO ADICIONADO ---
+
