@@ -17,25 +17,38 @@ SHEET_NAME_CATALOGO = "produtos_estoque"
 SHEET_NAME_PEDIDOS = "pedidos"
 SHEET_NAME_PROMOCOES = "promocoes"
 SHEET_NAME_CLIENTES_CASH = "clientes_cash"
-SHEET_NAME_CUPONS = "cupons" 
+SHEET_NAME_CUPONS = "cupons" # <-- NOVO: Adicionado para cupons
 CASHBACK_LANCAMENTOS_CSV = "lancamentos.csv"
+# Constantes de Cálculo (Baseado no fluxo cashback_system.py)
 BONUS_INDICACAO_PERCENTUAL = 0.03
 CASHBACK_INDICADO_PRIMEIRA_COMPRA = 0.05
+# ==============================================
 
-# --- Configurações do Repositório ---
+# --- Configurações do Repositório de Pedidos Externo ---
+# Assumindo que os dados de Pedidos e Clientes Cashback estão aqui:
 PEDIDOS_REPO_FULL = "ribeiromendes5014-design/fluxo"
 PEDIDOS_BRANCH = "main"
 
+# --- Controle de Cache para forçar o reload do GitHub ---
 if 'data_version' not in st.session_state:
     st.session_state['data_version'] = 0
 
+# --- Configurações do GitHub (Lendo do st.secrets) ---
 try:
     GITHUB_TOKEN = st.secrets["github"]["token"]
     REPO_NAME_FULL = st.secrets["github"]["repo_name"]
     BRANCH = st.secrets["github"]["branch"]
-    HEADERS = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+
+    # URLs de API
+    GITHUB_RAW_BASE_URL = f"https://raw.githubusercontent.com/{REPO_NAME_FULL}/{BRANCH}"
+    GITHUB_API_BASE_URL = f"https://api.github.com/repos/{REPO_NAME_FULL}/contents"
+
+    HEADERS = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json",
+    }
 except KeyError:
-    st.error("Erro de configuração: As chaves do GitHub precisam estar no secrets.toml."); st.stop()
+    st.error("Erro de configuração: As chaves 'token', 'repo_name' e 'branch' do GitHub precisam estar configuradas no secrets.toml."); st.stop()
 
 # --- Funções Base do GitHub ---
 @st.cache_data(ttl=5)
@@ -277,4 +290,5 @@ with tab_promocoes:
 with tab_cupons:
     st.header("🎟️ Gerenciador de Cupons de Desconto")
     st.info("Seção de gerenciamento de cupons.")
+
 
