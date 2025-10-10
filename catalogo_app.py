@@ -1232,3 +1232,4 @@ st.markdown(whatsapp_button_html, unsafe_allow_html=True)
 # --- FIM DO BLOCO ADICIONADO ---
 
 
+
