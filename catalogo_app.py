@@ -1211,37 +1211,37 @@ with st.popover(HIDDEN_POPOVER_TITLE, use_container_width=False, help=HIDDEN_POP
     render_cart_popover(total_acumulado, desconto_cupom, total_com_desconto, cashback_a_ganhar, df_catalogo_completo)
 
 
-# --- 2. LÓGICA DO BOTÃO FLUTUANTE DO CARRINHO ---
-
-# >>>>>>> INÍCIO DA CORREÇÃO <<<<<<<
-# O script javascript complexo foi removido.
-# O HTML do botão flutuante agora usa um seletor JavaScript direto e robusto,
-# conforme sua sugestão, para clicar no botão do popover pelo seu título único.
+# --- 2. LÓGICA DO BOTÃO FLUTUANTE DO CARRINHO (CORRIGIDA) ---
 cart_float_html = f"""
-<div class="cart-float" onclick="document.querySelector('button[title=\\'{HIDDEN_POPOVER_TITLE}\\']').click();" title="Abrir Meu Pedido">
+<div class="cart-float" onclick="window.openFloatingCart();" title="Abrir Meu Pedido">
     <span style="font-size: 28px;">🛍️</span>
     <span class="cart-count-float">{num_itens}</span>
 </div>
 """
-# >>>>>>> FIM DA CORREÇÃO <<<<<<<
 
-# Só mostra o botão do carrinho se houver itens nele.
+# Injeta o botão se houver itens no carrinho
 if num_itens > 0:
     st.markdown(cart_float_html, unsafe_allow_html=True)
 
-
-# --- 3. BOTÃO FLUTUANTE DO WHATSAPP ---
-MENSAGEM_PADRAO = "Olá, vi o catálogo de pedidos da Doce&Bella e gostaria de ajuda!"
-LINK_WHATSAPP = f"https://wa.me/{NUMERO_WHATSAPP}?text={requests.utils.quote(MENSAGEM_PADRAO)}"
-
-# HTML do botão flutuante
-whatsapp_button_html = f"""
-<a href="{LINK_WHATSAPP}" class="whatsapp-float" target="_blank" title="Fale Conosco pelo WhatsApp">
-     <span style="font-size: 28px;">💬</span>
-</a>
+# Injetar o script JS que realmente abre o popover
+popover_click_script = """
+<script>
+window.openFloatingCart = function() {
+    setTimeout(() => {
+        // Tenta encontrar o botão do popover oculto
+        const hiddenPopoverBtn = document.querySelector('button[data-testid="stPopoverButton"]');
+        if (hiddenPopoverBtn) {
+            hiddenPopoverBtn.click();
+            console.log("✅ Carrinho aberto com sucesso!");
+        } else {
+            console.warn("⚠️ Botão do popover não encontrado no DOM.");
+        }
+    }, 300);
+}
+</script>
 """
+st.markdown(popover_click_script, unsafe_allow_html=True)
 
-# Injeta o botão do WhatsApp na página
-st.markdown(whatsapp_button_html, unsafe_allow_html=True)
 # --- FIM DO BLOCO ADICIONADO ---
+
 
