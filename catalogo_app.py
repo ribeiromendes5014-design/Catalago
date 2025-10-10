@@ -460,12 +460,9 @@ def remover_do_carrinho(produto_id):
         st.toast(f"❌ {nome} removido.", icon="🗑️")
 
 def render_product_image(link_imagem):
-    # O placeholder_html é mantido apenas para o caso de SEM IMAGEM
     placeholder_html = """<div class="product-image-container" style="background-color: #f0f0f0; border-radius: 8px;"><span style="color: #a0a0a0; font-size: 1.1rem; font-weight: bold;">Sem Imagem</span></div>"""
     
     if link_imagem and str(link_imagem).strip().startswith('http'):
-        # CORRIGIDO: Usando o parâmetro 'use_container_width=True' 
-        # (Isso também permite a ampliação nativa ao clicar)
         st.image(
             link_imagem,
             caption='',
@@ -1056,6 +1053,7 @@ else:
         with cols[i % 4]:
             # 3. OTIMIZAÇÃO: Passa o DF indexado para a função de renderização
             render_product_card(product_id, row, key_prefix=unique_key, df_catalogo_indexado=st.session_state.df_catalogo_indexado)
+
 
 
 
