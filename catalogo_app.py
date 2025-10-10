@@ -535,7 +535,7 @@ def render_product_card(prod_id, row, key_prefix, df_catalogo_indexado):
         # Usa a linha de dados que já veio, evitando re-busca
         estoque_atual = int(row.get('QUANTIDADE', 999999)) 
         esgotado = estoque_atual <= 0
-        estoque_baixo = estoque_atual > 0 and estoque_atual <= ESTOQUE_BAIXO_LIMITE
+        estoque_baixo = estoque_atual > 0 and estoque_baixo <= ESTOQUE_BAIXO_LIMITE
         
         if esgotado:
             st.markdown('<span class="esgotado-badge">🚫 ESGOTADO</span>', unsafe_allow_html=True)
@@ -724,7 +724,7 @@ div.block-container p, div.block-container h1, div.block-container h2, div.block
     color: #262626 !important;
 }}
 
-.pink-bar-container {{ background-color: #E91E63; padding: 20px 0; width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
+.pink-bar-container {{ background-color: #E91E63; padding: 10px 0; width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
 .pink-bar-content {{ width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; }}
 
 div[data-testid="stButton"] > button {{ background-color: #E91E63; color: white; border-radius: 10px; border: 1px solid #C2185B; font-weight: bold; }}
@@ -910,7 +910,8 @@ cashback_a_ganhar = calcular_cashback_total(st.session_state.carrinho, df_catalo
 st.markdown("<div class='pink-bar-container'><div class='pink-bar-content'>", unsafe_allow_html=True)
 
 # A barra superior agora tem apenas o campo de busca
-st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...", use_container_width=True)
+# CORREÇÃO: Removido use_container_width=True de st.text_input para resolver o TypeError.
+st.text_input("Buscar...", key='termo_pesquisa_barra', label_visibility="collapsed", placeholder="Buscar produtos...")
 
 st.markdown("</div></div>", unsafe_allow_html=True)
 
