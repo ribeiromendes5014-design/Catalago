@@ -1211,23 +1211,19 @@ with st.popover(HIDDEN_POPOVER_TITLE, use_container_width=False, help=HIDDEN_POP
     render_cart_popover(total_acumulado, desconto_cupom, total_com_desconto, cashback_a_ganhar, df_catalogo_completo)
 
 
-# --- 2. LÓGICA DO BOTÃO FLUTUANTE ---
+# --- 2. LÓGICA DO BOTÃO FLUTUANTE DO CARRINHO ---
 
-# >>>>>>> INÍCIO DA CORREÇÃO <<<<<<<
 # Código JavaScript para encontrar e clicar no botão de popover oculto.
-# A versão anterior não funcionava porque procurava por um 'id' que não existia.
-# Esta versão busca o botão pelo seu 'title', que é definido unicamente pela nossa variável.
+# Esta função é chamada pelo 'href' do nosso novo botão <a>.
 popover_click_script = f"""
 <script>
-// Define a função no escopo global (window) para que o 'onclick' do HTML a encontre.
-window.openFloatingCart = function() {{
+function openFloatingCart() {{
     // Procura em todo o documento por um botão cujo atributo 'title'
     // seja exatamente o título que demos ao nosso popover oculto.
     const hiddenButton = document.querySelector('button[title="{HIDDEN_POPOVER_TITLE}"]');
 
     if (hiddenButton) {{
         hiddenButton.click(); // Simula o clique no botão encontrado.
-        console.log("✅ Popover do carrinho aberto com sucesso.");
     }} else {{
         // Este log ajuda a depurar caso o botão não seja encontrado.
         console.warn("⚠️ Botão do popover oculto não encontrado. Verifique o título: '{HIDDEN_POPOVER_TITLE}'");
@@ -1236,16 +1232,15 @@ window.openFloatingCart = function() {{
 </script>
 """
 st.markdown(popover_click_script, unsafe_allow_html=True)
-# >>>>>>> FIM DA CORREÇÃO <<<<<<<
 
 
-# HTML do botão flutuante que o usuário vê.
-# O 'onclick' agora chama a função corrigida que acabamos de definir.
+# HTML do botão flutuante, agora como uma tag <a>, copiando o padrão do WhatsApp.
+# O 'href' chama a função JavaScript diretamente, que é um método mais robusto.
 cart_float_html = f"""
-<div class="cart-float" onclick="window.openFloatingCart();" title="Abrir Meu Pedido">
+<a href="javascript:openFloatingCart()" class="cart-float" title="Abrir Meu Pedido">
     <span style="font-size: 28px;">🛍️</span>
     <span class="cart-count-float">{num_itens}</span>
-</div>
+</a>
 """
 
 # Só mostra o botão do carrinho se houver itens nele.
@@ -1267,3 +1262,4 @@ whatsapp_button_html = f"""
 # Injeta o botão do WhatsApp na página
 st.markdown(whatsapp_button_html, unsafe_allow_html=True)
 # --- FIM DO BLOCO ADICIONADO ---
+
