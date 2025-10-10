@@ -162,54 +162,38 @@ def extract_customer_cashback(json_data):
     data = parse_json_from_string(json_data)
     return data.get("cliente_saldo_cashback", 0.0)
 
-# --- INÍCIO DA CORREÇÃO DE CASHBACK ---
 def calcular_cashback_a_creditar(pedido_json, df_catalogo, desconto):
     data = parse_json_from_string(pedido_json)
     itens = data.get('itens', [])
-    
-    # Usa o subtotal (valor antes do desconto) para calcular a proporção do desconto por item.
     subtotal = sum(float(i.get('preco', 0)) * int(i.get('quantidade', 0)) for i in itens)
     if subtotal == 0: return 0.0
-    
     cashback_total = 0.0
     for item in itens:
         produto_catalogo = df_catalogo[df_catalogo['ID'] == int(item.get('id', -1))]
         if not produto_catalogo.empty:
             cashback_percent = float(str(produto_catalogo.iloc[0].get('CASHBACKPERCENT', '0')).replace(',', '.'))
-            
             if cashback_percent > 0:
                 subtotal_item = float(item.get('preco', 0)) * int(item.get('quantidade', 0))
-                
-                # Calcula a proporção do desconto total que se aplica a este item.
                 proporcao_item = subtotal_item / subtotal if subtotal > 0 else 0
                 desconto_item = desconto * proporcao_item
-                
-                # O valor final é a base para o cálculo do cashback.
                 valor_final_item = subtotal_item - desconto_item
-                
                 cashback_total += valor_final_item * (cashback_percent / 100)
-                
     return round(cashback_total, 2)
-# --- FIM DA CORREÇÃO DE CASHBACK ---
 
 def atualizar_status_pedido(id_pedido, novo_status, df_catalogo):
     df = carregar_dados(SHEET_NAME_PEDIDOS)
     df['ID_PEDIDO'] = df['ID_PEDIDO'].astype(str)
     idx = df[df['ID_PEDIDO'] == str(id_pedido)].index
-    
     if not idx.empty:
         idx = idx[0]
         if novo_status == 'Finalizado' and df.loc[idx, 'STATUS'] != 'Finalizado':
             pedido = df.loc[idx]
-            
             json_data = parse_json_from_string(pedido.get('ITENS_JSON'))
             desconto_val = json_data.get('desconto_cupom', pedido.get('VALOR_DESCONTO', 0.0))
             desconto = pd.to_numeric(desconto_val, errors='coerce')
             if pd.isna(desconto): desconto = 0.0
-
             valor_pago = pd.to_numeric(pedido.get('VALOR_TOTAL', 0.0), errors='coerce')
             cashback = calcular_cashback_a_creditar(pedido.get('ITENS_JSON'), df_catalogo, desconto)
-            
             if cashback > 0:
                 lancar_venda_cashback(pedido.get('NOME_CLIENTE'), pedido.get('CONTATO_CLIENTE'), cashback, valor_pago)
             df.loc[idx, 'VALOR_CASHBACK_CREDITADO'] = cashback
@@ -219,6 +203,7 @@ def atualizar_status_pedido(id_pedido, novo_status, df_catalogo):
         st.error(f"Erro: Pedido com ID {id_pedido} não encontrado para atualização.")
         return False
 
+# --- FUNÇÃO ATUALIZADA PARA MOSTRAR IMAGEM ---
 def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
     data = parse_json_from_string(pedido_json)
     itens = data.get('itens', [])
@@ -231,31 +216,45 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
     if key not in st.session_state: st.session_state[key] = [False] * total_itens
 
     for i, item in enumerate(itens):
-        link_img = "https://placehold.co/150x150/e2e8f0/e2e8f0?text=Sem+Imagem"
+        # Define uma imagem padrão caso o produto não tenha foto
+        link_img = "https://placehold.co/100x100/e2e8f0/cccccc?text=Sem+Foto"
+        
         prod_id = int(item.get('id', -1))
-        prod = df_catalogo[df_catalogo['ID'] == prod_id]
+        # Busca o produto no catálogo de produtos (produtos_estoque.csv)
+        produto_no_catalogo = df_catalogo[df_catalogo['ID'] == prod_id]
         
         cashback_percent = 0.0
-        if not prod.empty:
-            if 'LINKIMAGEM' in prod.columns and pd.notna(prod.iloc[0]['LINKIMAGEM']):
-                link_img = str(prod.iloc[0]['LINKIMAGEM'])
-            cashback_str = str(prod.iloc[0].get('CASHBACKPERCENT', '0')).replace(',', '.')
+        # Se o produto for encontrado no catálogo, busca o link da imagem
+        if not produto_no_catalogo.empty:
+            link_imagem_produto = produto_no_catalogo.iloc[0].get('LINKIMAGEM')
+            if link_imagem_produto and pd.notna(link_imagem_produto):
+                link_img = str(link_imagem_produto)
+
+            cashback_str = str(produto_no_catalogo.iloc[0].get('CASHBACKPERCENT', '0')).replace(',', '.')
             cashback_percent = float(cashback_str)
 
-        c1, c2, c3 = st.columns([0.5, 1, 3.5])
-        st.session_state[key][i] = c1.checkbox(" ", st.session_state[key][i], key=f"c_{id_pedido}_{i}", label_visibility="collapsed")
-        c2.image(link_img, width=100)
-        sub = float(item.get('preco', 0)) * int(item.get('quantidade', 0))
+        # Layout para exibir o item do pedido
+        col_check, col_img, col_info = st.columns([0.5, 1, 3.5])
         
-        info_text = (
-            f"**Produto:** {item.get('nome', 'N/A')}\n\n"
-            f"**Quantidade:** {item.get('quantidade', 0)} | **Subtotal:** R$ {sub:.2f}\n\n"
-            f"**Cashback do produto:** {cashback_percent:.2f}%"
-        )
-        c3.markdown(info_text)
+        with col_check:
+            st.session_state[key][i] = st.checkbox(" ", st.session_state[key][i], key=f"c_{id_pedido}_{i}", label_visibility="collapsed")
+        
+        with col_img:
+            # Mostra a imagem do produto
+            st.image(link_img, width=100)
+            
+        with col_info:
+            sub = float(item.get('preco', 0)) * int(item.get('quantidade', 0))
+            info_text = (
+                f"**Produto:** {item.get('nome', 'N/A')}\n\n"
+                f"**Quantidade:** {item.get('quantidade', 0)} | **Subtotal:** R$ {sub:.2f}\n\n"
+                f"**Cashback do produto:** {cashback_percent:.2f}%"
+            )
+            st.markdown(info_text)
         
         st.markdown("---")
         if st.session_state[key][i]: itens_sep += 1
+        
     return 100 if total_itens == 0 else int((itens_sep / total_itens) * 100)
 
 st.set_page_config(page_title="Admin Doce&Bella", layout="wide")
@@ -340,13 +339,11 @@ with tab_produtos:
                 if isinstance(d, str): d = d.upper() == 'TRUE'
                 
                 nome_e = st.text_input("Nome", prod.get('NOME', ''))
-                # --- INÍCIO DA CORREÇÃO DO ERRO ---
                 preco_e = st.number_input("Preço (R$)", min_value=0.01, value=p_f, format="%.2f")
                 desc_c_e = st.text_input("Descrição Curta", prod.get('DESCRICAOCURTA', ''))
                 desc_l_e = st.text_area("Descrição Longa", prod.get('DESCRICAOLONGA', ''))
                 link_e = st.text_input("Link Imagem", prod.get('LINKIMAGEM', ''))
                 cash_e = st.number_input("Cashback (%)", min_value=0.0, max_value=100.0, value=c_f, format="%.2f")
-                # --- FIM DA CORREÇÃO DO ERRO ---
                 disp_e = st.checkbox("Disponível", d)
                 
                 c1, c2 = st.columns(2)
@@ -376,5 +373,4 @@ with tab_cupons:
     st.subheader("📝 Cupons Cadastrados")
     df_cupons = carregar_dados(SHEET_NAME_CUPONS)
     if not df_cupons.empty: st.dataframe(df_cupons, use_container_width=True)
-
 
