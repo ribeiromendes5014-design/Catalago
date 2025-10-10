@@ -667,6 +667,33 @@ def extract_customer_cashback(itens_json_string):
         except Exception:
             # Retorna 0.0 se falhar em todas as tentativas
             return 0.0
+    def criar_cupom(codigo, tipo_desconto, valor, data_validade, valor_minimo, limite_usos):
+    df = carregar_dados(SHEET_NAME_CUPONS).copy()
+    
+    # Validação para evitar cupons duplicados
+    if not df.empty and codigo.upper() in df['CODIGO'].str.upper().tolist():
+        st.error(f"O código de cupom '{codigo}' já existe!")
+        return False
+
+    nova_linha = {
+        'CODIGO': codigo.upper(),
+        'TIPO_DESCONTO': tipo_desconto,
+        'VALOR': valor,
+        'DATA_VALIDADE': str(data_validade) if data_validade else '', # Salva como string ou vazio
+        'VALOR_MINIMO_PEDIDO': valor_minimo,
+        'LIMITE_USOS': limite_usos,
+        'USOS_ATUAIS': 0,
+        'STATUS': 'ATIVO'
+    }
+
+    if not df.empty:
+        df_nova = pd.DataFrame([nova_linha])
+        df = pd.concat([df, df_nova], ignore_index=True)
+    else:
+        df = pd.DataFrame([nova_linha])
+    
+    commit_msg = f"Criar novo cupom: {codigo.upper()}"
+    return write_csv_to_github(df, SHEET_NAME_CUPONS, commit_msg)
 
 with tab_pedidos:
     st.header("📋 Pedidos Recebidos")
@@ -1037,6 +1064,7 @@ with tab_promocoes:
                         st.rerun()
                     else:
                         st.error("Falha ao excluir promoção.")
+
 
 
 
