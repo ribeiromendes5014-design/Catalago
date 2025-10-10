@@ -28,9 +28,7 @@ SHEET_NAME_PROMOCOES_CSV = "promocoes.csv"
 SHEET_NAME_PEDIDOS_CSV = "pedidos.csv"
 SHEET_NAME_VIDEOS_CSV = "video.csv"
 SHEET_NAME_CLIENTES_CASHBACK_CSV = "clientes_cash.csv"
-# === NOVO ARQUIVO: Cupons de Desconto ===
 SHEET_NAME_CUPONS_CSV = "cupons.csv"
-# ========================================
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-na-zvania-3.jpg'
 LOGO_DOCEBELLA_URL = "https://i.ibb.co/cdqJ92W/logo_docebella.png"
 
@@ -40,14 +38,12 @@ if 'carrinho' not in st.session_state:
     st.session_state.carrinho = {}
 if 'pedido_confirmado' not in st.session_state:
     st.session_state.pedido_confirmado = None
-# === NOVO ESTADO: Gerenciamento do Cupom ===
 if 'cupom_aplicado' not in st.session_state:
     st.session_state.cupom_aplicado = None
 if 'desconto_cupom' not in st.session_state:
     st.session_state.desconto_cupom = 0.0
 if 'cupom_mensagem' not in st.session_state:
     st.session_state.cupom_mensagem = ""
-# ==========================================
 
 
 # --- Funções de Conexão GITHUB ---
@@ -65,7 +61,6 @@ def get_data_from_github(file_name):
         response = requests.get(api_url, headers=headers_content)
 
         if response.status_code == 404:
-            # Não exibe erro para cupons, pois é um arquivo opcional
             if file_name != SHEET_NAME_CUPONS_CSV:
                 st.error(f"Erro 404: Arquivo '{file_name}' não encontrado no repositório '{DATA_REPO_NAME}' na branch '{BRANCH}'. Verifique o nome do arquivo/branch/repo.")
             return None
@@ -91,40 +86,62 @@ def get_data_from_github(file_name):
         return df
 
     except requests.exceptions.HTTPError as e:
-        if e.response.status_code != 404: # Ignora erro 404 para arquivos opcionais como cupons
+        if e.response.status_code != 404:
             st.error(f"Erro HTTP ao acessar '{file_name}' via API ({e.response.status_code}). URL: {api_url}")
         return None
     except Exception as e:
         st.error(f"Erro ao carregar '{file_name}' via API do GitHub: {e}")
         return None
 
-# === NOVA FUNÇÃO: Carregar Cupons ===
+# === FUNÇÃO DE CUPONS ATUALIZADA ===
 @st.cache_data(ttl=30)
 def carregar_cupons():
-    """Carrega os cupons ativos do 'cupons.csv' do GitHub."""
+    """Carrega os cupons do 'cupons.csv' do GitHub, validando todas as novas regras."""
     df = get_data_from_github(SHEET_NAME_CUPONS_CSV)
     
-    colunas_essenciais = ['NOME_CUPOM', 'TIPO_DESCONTO', 'VALOR_DESCONTO', 'STATUS']
+    # Novas colunas essenciais
+    colunas_essenciais = ['CODIGO', 'TIPO_DESCONTO', 'VALOR', 'DATA_VALIDADE', 
+                           'VALOR_MINIMO_PEDIDO', 'LIMITE_USOS', 'USOS_ATUAIS', 'STATUS']
+                           
     if df is None or df.empty:
-        # Se o arquivo não existe, retorna um DF vazio sem aviso.
         return pd.DataFrame(columns=colunas_essenciais)
 
-    for col in colunas_essenciais:
+    # Renomeia colunas para manter a compatibilidade interna, se necessário, ou usa os nomes novos
+    df.rename(columns={'CODIGO': 'NOME_CUPOM', 'VALOR': 'VALOR_DESCONTO'}, inplace=True)
+    # Garante que as colunas renomeadas estejam na lista para verificação
+    colunas_essenciais_renomeadas = ['NOME_CUPOM', 'TIPO_DESCONTO', 'VALOR_DESCONTO', 'DATA_VALIDADE', 
+                                    'VALOR_MINIMO_PEDIDO', 'LIMITE_USOS', 'USOS_ATUAIS', 'STATUS']
+
+    for col in colunas_essenciais_renomeadas:
         if col not in df.columns:
             st.warning(f"A planilha de cupons existe, mas a coluna essencial '{col}' não foi encontrada. A função de cupons será desativada.")
-            return pd.DataFrame(columns=colunas_essenciais)
+            return pd.DataFrame(columns=colunas_essenciais_renomeadas)
 
+    # 1. Filtra por STATUS 'ATIVO'
     df_ativo = df[df['STATUS'].astype(str).str.strip().str.upper() == 'ATIVO'].copy()
-    df_essencial = df_ativo[colunas_essenciais].copy()
+    if df_ativo.empty:
+        return pd.DataFrame(columns=colunas_essenciais_renomeadas)
 
-    df_essencial['NOME_CUPOM'] = df_essencial['NOME_CUPOM'].astype(str).str.strip().str.upper()
-    df_essencial['TIPO_DESCONTO'] = df_essencial['TIPO_DESCONTO'].astype(str).str.strip().str.upper()
-    df_essencial['VALOR_DESCONTO'] = pd.to_numeric(
-        df_essencial['VALOR_DESCONTO'].astype(str).str.replace(',', '.'), 
-        errors='coerce'
-    )
+    # 2. Converte tipos de dados e trata erros
+    df_ativo['NOME_CUPOM'] = df_ativo['NOME_CUPOM'].astype(str).str.strip().str.upper()
+    df_ativo['TIPO_DESCONTO'] = df_ativo['TIPO_DESCONTO'].astype(str).str.strip().str.upper()
+    df_ativo['VALOR_DESCONTO'] = pd.to_numeric(df_ativo['VALOR_DESCONTO'].astype(str).str.replace(',', '.'), errors='coerce')
+    df_ativo['VALOR_MINIMO_PEDIDO'] = pd.to_numeric(df_ativo['VALOR_MINIMO_PEDIDO'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
+    df_ativo['LIMITE_USOS'] = pd.to_numeric(df_ativo['LIMITE_USOS'], errors='coerce').fillna(999999)
+    df_ativo['USOS_ATUAIS'] = pd.to_numeric(df_ativo['USOS_ATUAIS'], errors='coerce').fillna(0)
     
-    return df_essencial.dropna(subset=colunas_essenciais).reset_index(drop=True)
+    # 3. Validação da DATA_VALIDADE
+    # Converte para datetime, tratando erros. 'coerce' transforma inválidos em NaT (Not a Time)
+    df_ativo['DATA_VALIDADE'] = pd.to_datetime(df_ativo['DATA_VALIDADE'], errors='coerce')
+    # Remove cupons com data de validade inválida ou passada (compara apenas a data, ignorando a hora)
+    df_ativo = df_ativo.dropna(subset=['DATA_VALIDADE'])
+    df_ativo = df_ativo[df_ativo['DATA_VALIDADE'].dt.normalize() >= datetime.now().normalize()]
+
+    # 4. Validação do LIMITE_USOS
+    df_ativo = df_ativo[df_ativo['USOS_ATUAIS'] < df_ativo['LIMITE_USOS']]
+
+    # Remove linhas onde conversões essenciais falharam (ex: VALOR_DESCONTO)
+    return df_ativo.dropna(subset=['NOME_CUPOM', 'VALOR_DESCONTO']).reset_index(drop=True)
 # =======================================
 
 @st.cache_data(ttl=5)
@@ -429,7 +446,6 @@ def render_product_image(link_imagem):
 
 def limpar_carrinho():
     st.session_state.carrinho = {}
-    # Limpa também o estado do cupom
     st.session_state.cupom_aplicado = None
     st.session_state.desconto_cupom = 0.0
     st.session_state.cupom_mensagem = ""
@@ -666,7 +682,7 @@ if st.session_state.pedido_confirmado:
     
     if st.button("Voltar ao Catálogo"):
         st.session_state.pedido_confirmado = None
-        limpar_carrinho() # Limpa tudo ao voltar
+        limpar_carrinho()
         st.rerun()
     st.stop()
 
@@ -698,12 +714,11 @@ with col_carrinho:
         if carrinho_vazio:
             st.info("Seu carrinho está vazio.")
         else:
-            # === CÁLCULO DO TOTAL COM DESCONTO DO CUPOM ===
             desconto_cupom = st.session_state.get('desconto_cupom', 0.0)
             total_com_desconto = total_acumulado - desconto_cupom
 
             if total_com_desconto < 0:
-                total_com_desconto = 0 # O total não pode ser negativo
+                total_com_desconto = 0
 
             st.markdown(f"Subtotal: `R$ {total_acumulado:.2f}`")
             if desconto_cupom > 0:
@@ -712,7 +727,6 @@ with col_carrinho:
             st.markdown(f"<h3 style='color: #E91E63; margin-top: 0;'>Total: R$ {total_com_desconto:.2f}</h3>", unsafe_allow_html=True)
             st.markdown("---")
             
-            # === LISTAGEM DOS ITENS NO CARRINHO ===
             col_h1, col_h2, col_h3, col_h4 = st.columns([3, 1.5, 2.5, 1])
             col_h2.markdown("**Qtd**")
             col_h3.markdown("**Subtotal**")
@@ -761,38 +775,46 @@ with col_carrinho:
                     st.rerun()
             st.markdown("---")
             
-            # === NOVA SEÇÃO DE CUPOM DE DESCONTO ===
+            # === LÓGICA DE CUPOM ATUALIZADA ===
             st.subheader("🎟️ Cupom de Desconto")
             
             cupom_col1, cupom_col2 = st.columns([3, 1])
             
             with cupom_col1:
-                codigo_cupom = st.text_input("Código do Cupom", key="cupom_input", label_visibility="collapsed").upper()
+                codigo_cupom_input = st.text_input("Código do Cupom", key="cupom_input", label_visibility="collapsed").upper()
             
             with cupom_col2:
                 if st.button("Aplicar", key="aplicar_cupom_btn", use_container_width=True):
-                    if codigo_cupom:
-                        df_cupons = carregar_cupons()
-                        cupom_valido = df_cupons[df_cupons['NOME_CUPOM'] == codigo_cupom]
+                    if codigo_cupom_input:
+                        df_cupons_validos = carregar_cupons()
+                        cupom_encontrado = df_cupons_validos[df_cupons_validos['NOME_CUPOM'] == codigo_cupom_input]
                         
-                        if not cupom_valido.empty:
-                            cupom_info = cupom_valido.iloc[0]
-                            tipo = cupom_info['TIPO_DESCONTO']
-                            valor = cupom_info['VALOR_DESCONTO']
-                            
-                            desconto = 0.0
-                            if tipo == 'PERCENTUAL':
-                                desconto = (valor / 100) * total_acumulado
-                            elif tipo == 'FIXO':
-                                desconto = valor
-                            
-                            st.session_state.cupom_aplicado = codigo_cupom
-                            st.session_state.desconto_cupom = desconto
-                            st.session_state.cupom_mensagem = f"✅ Cupom '{codigo_cupom}' aplicado!"
+                        if not cupom_encontrado.empty:
+                            cupom_info = cupom_encontrado.iloc[0]
+                            valor_minimo = cupom_info['VALOR_MINIMO_PEDIDO']
+
+                            # Verifica o valor mínimo do pedido
+                            if total_acumulado >= valor_minimo:
+                                tipo = cupom_info['TIPO_DESCONTO']
+                                valor = cupom_info['VALOR_DESCONTO']
+                                
+                                desconto = 0.0
+                                if tipo == 'PERCENTUAL':
+                                    desconto = (valor / 100) * total_acumulado
+                                elif tipo == 'FIXO':
+                                    desconto = valor
+                                
+                                st.session_state.cupom_aplicado = codigo_cupom_input
+                                st.session_state.desconto_cupom = desconto
+                                st.session_state.cupom_mensagem = f"✅ Cupom '{codigo_cupom_input}' aplicado!"
+                            else:
+                                st.session_state.cupom_aplicado = None
+                                st.session_state.desconto_cupom = 0.0
+                                st.session_state.cupom_mensagem = f"❌ O valor mínimo para este cupom é de R$ {valor_minimo:.2f}."
                         else:
                             st.session_state.cupom_aplicado = None
                             st.session_state.desconto_cupom = 0.0
-                            st.session_state.cupom_mensagem = "❌ Cupom inválido ou expirado."
+                            st.session_state.cupom_mensagem = "❌ Cupom inválido, expirado ou esgotado."
                     else:
                         st.session_state.cupom_mensagem = "⚠️ Digite um código de cupom."
                     st.rerun()
@@ -841,7 +863,7 @@ with col_carrinho:
                             "subtotal": total_acumulado,
                             "desconto_cupom": st.session_state.desconto_cupom,
                             "cupom_aplicado": st.session_state.cupom_aplicado,
-                            "total": total_com_desconto, # Salva o total com desconto
+                            "total": total_com_desconto,
                             "itens": [
                                 {
                                     "id": int(k),
@@ -857,10 +879,8 @@ with col_carrinho:
                             "cliente_saldo_cashback": saldo_cashback,
                         }
                         
-                        # Salva o pedido com o valor final (já com desconto)
                         if salvar_pedido(nome_input, contato_limpo, total_com_desconto, json.dumps(detalhes, ensure_ascii=False), detalhes):
                             st.session_state.carrinho = {}
-                            # Limpa o cupom após o pedido ser salvo
                             st.session_state.cupom_aplicado = None
                             st.session_state.desconto_cupom = 0.0
                             st.session_state.cupom_mensagem = ""
