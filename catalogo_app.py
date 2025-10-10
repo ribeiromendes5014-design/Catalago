@@ -457,6 +457,9 @@ def calcular_cashback_total(carrinho, df_catalogo_indexado):
     for prod_id, item in carrinho.items():
         if prod_id in df_catalogo_indexado.index:
             row = df_catalogo_indexado.loc[prod_id]
+            # Handle cases where prod_id might be duplicated in the index
+            if isinstance(row, pd.DataFrame):
+                row = row.iloc[0]
             cashback_percent = pd.to_numeric(row.get('CASHBACKPERCENT'), errors='coerce')
             preco_final = item['preco'] # Já é o preço final com promoção
             
@@ -474,7 +477,19 @@ def adicionar_qtd_ao_carrinho(produto_id, produto_row, quantidade):
     # Busca a quantidade máxima do catálogo indexado no session_state
     df_catalogo = st.session_state.df_catalogo_indexado
     
-    quantidade_max = int(df_catalogo.loc[produto_id, 'QUANTIDADE'] if produto_id in df_catalogo.index else 999999)
+    # --- FIX START ---
+    # This block corrects the TypeError by handling cases where duplicate product IDs
+    # might cause df_catalogo.loc to return a pandas Series instead of a single value.
+    if produto_id in df_catalogo.index:
+        quantidade_value = df_catalogo.loc[produto_id, 'QUANTIDADE']
+        # If the index has duplicates, .loc can return a Series. Take the first value.
+        if isinstance(quantidade_value, pd.Series):
+            quantidade_max = int(quantidade_value.iloc[0])
+        else:
+            quantidade_max = int(quantidade_value)
+    else:
+        quantidade_max = 999999
+    # --- FIX END ---
     
     if quantidade_max <= 0:
          st.warning(f"⚠️ Produto '{produto_nome}' está esgotado.")
@@ -1210,6 +1225,16 @@ function openFloatingCart() {
         const container = document.getElementById('hidden-popover-container');
         if (!container) {
             console.warn("❌ Container do popover oculto não encontrado.");
+            // Fallback: search the whole document if container ID is not present
+            const hiddenButton = Array.from(document.querySelectorAll('button[data-testid="stPopoverButton"]'))
+                .find(button => button.title.includes("Popover Oculto Carrinho"));
+            
+            if (hiddenButton) {
+                hiddenButton.click();
+                console.log("✅ Popover (via fallback) aberto com sucesso.");
+            } else {
+                 console.warn("❌ Botão do popover oculto não encontrado no documento.");
+            }
             return;
         }
 
@@ -1225,7 +1250,7 @@ function openFloatingCart() {
         } else {
             console.warn("⚠️ Botão do popover não encontrado dentro do container.");
         }
-    }, 400); // espera 400 ms
+    }, 100); // espera 100 ms
 }
 </script>
 """
@@ -1258,6 +1283,3 @@ whatsapp_button_html = f"""
 # Injeta o botão flutuante
 st.markdown(whatsapp_button_html, unsafe_allow_html=True)
 # --- FIM DO BLOCO ADICIONADO ---
-
-
-
