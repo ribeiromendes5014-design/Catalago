@@ -102,7 +102,7 @@ import pytz
 # ... (resto do seu código)
 
 
-# === FUNÇÃO DE CUPONS ATUALIZADA COM FUSO HORÁRIO (CORRIGIDA) ===
+# === FUNÇÃO DE CUPONS ATUALIZADA COM CORREÇÃO DE FUSO HORÁRIO ===
 @st.cache_data(ttl=30)
 def carregar_cupons():
     """Carrega os cupons do 'cupons.csv' do GitHub, validando com fuso horário do Brasil."""
@@ -135,17 +135,21 @@ def carregar_cupons():
     df_ativo['USOS_ATUAIS'] = pd.to_numeric(df_ativo['USOS_ATUAIS'], errors='coerce').fillna(0)
     
     # --- Validação da DATA_VALIDADE com FUSO HORÁRIO ---
+    # Converte a coluna para datetime (sem fuso horário inicialmente)
     df_ativo['DATA_VALIDADE'] = pd.to_datetime(df_ativo['DATA_VALIDADE'], errors='coerce')
     df_ativo = df_ativo.dropna(subset=['DATA_VALIDADE'])
     
     # Define o fuso horário de São Paulo
     tz_brasil = pytz.timezone('America/Sao_Paulo')
     
-    # ✅ AQUI ESTÁ A LINHA CORRIGIDA
+    # ✅ AQUI ESTÁ A NOVA LINHA ADICIONADA
+    # "Avisa" para a coluna de datas que ela deve considerar o fuso horário do Brasil
+    df_ativo['DATA_VALIDADE'] = df_ativo['DATA_VALIDADE'].dt.tz_localize(tz_brasil)
+    
     # Pega a data e hora de agora no Brasil usando PANDAS e normaliza (zera a hora)
     hoje_brasil = pd.Timestamp.now(tz=tz_brasil).normalize()
     
-    # Compara a data de validade (já normalizada) com a data de hoje no Brasil
+    # Agora a comparação funciona, pois ambas as datas têm fuso horário
     df_ativo = df_ativo[df_ativo['DATA_VALIDADE'].dt.normalize() >= hoje_brasil]
     # --- Fim da Validação de Data ---
 
@@ -978,6 +982,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
