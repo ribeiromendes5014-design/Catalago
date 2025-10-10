@@ -923,7 +923,8 @@ st.markdown('</div>', unsafe_allow_html=True)
 
 # O popover do carrinho agora é um elemento Streamlit independente,
 # cujo acionamento está ligado ao botão âncora (popover_anchor_button).
-with st.popover(" ", use_container_width=False, key="cart_popover_content"):
+# CORREÇÃO: Removido o argumento 'key' de st.popover
+with st.popover(" ", use_container_width=False):
     st.header("🛒 Detalhes do Pedido")
     if carrinho_vazio:
         st.info("Seu carrinho está vazio.")
