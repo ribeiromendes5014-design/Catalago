@@ -162,39 +162,54 @@ def extract_customer_cashback(json_data):
     data = parse_json_from_string(json_data)
     return data.get("cliente_saldo_cashback", 0.0)
 
+# --- INÍCIO DA CORREÇÃO DE CASHBACK ---
 def calcular_cashback_a_creditar(pedido_json, df_catalogo, desconto):
     data = parse_json_from_string(pedido_json)
     itens = data.get('itens', [])
+    
+    # Usa o subtotal (valor antes do desconto) para calcular a proporção do desconto por item.
     subtotal = sum(float(i.get('preco', 0)) * int(i.get('quantidade', 0)) for i in itens)
     if subtotal == 0: return 0.0
-    cashback = 0.0
+    
+    cashback_total = 0.0
     for item in itens:
-        prod = df_catalogo[df_catalogo['ID'] == int(item.get('id', -1))]
-        if not prod.empty:
-            cash_pct = float(str(prod.iloc[0].get('CASHBACKPERCENT', '0')).replace(',', '.'))
-            if cash_pct > 0:
-                sub_item = float(item.get('preco', 0)) * int(item.get('quantidade', 0))
-                prop = sub_item / subtotal if subtotal > 0 else 0
-                val_final = sub_item - (desconto * prop)
-                cashback += val_final * (cash_pct / 100)
-    return round(cashback, 2)
+        produto_catalogo = df_catalogo[df_catalogo['ID'] == int(item.get('id', -1))]
+        if not produto_catalogo.empty:
+            cashback_percent = float(str(produto_catalogo.iloc[0].get('CASHBACKPERCENT', '0')).replace(',', '.'))
+            
+            if cashback_percent > 0:
+                subtotal_item = float(item.get('preco', 0)) * int(item.get('quantidade', 0))
+                
+                # Calcula a proporção do desconto total que se aplica a este item.
+                proporcao_item = subtotal_item / subtotal if subtotal > 0 else 0
+                desconto_item = desconto * proporcao_item
+                
+                # O valor final é a base para o cálculo do cashback.
+                valor_final_item = subtotal_item - desconto_item
+                
+                cashback_total += valor_final_item * (cashback_percent / 100)
+                
+    return round(cashback_total, 2)
+# --- FIM DA CORREÇÃO DE CASHBACK ---
 
-# --- INÍCIO DA CORREÇÃO ---
 def atualizar_status_pedido(id_pedido, novo_status, df_catalogo):
     df = carregar_dados(SHEET_NAME_PEDIDOS)
-    # Garante que a coluna 'ID_PEDIDO' seja do tipo string para a comparação.
     df['ID_PEDIDO'] = df['ID_PEDIDO'].astype(str)
-    
-    # A comparação agora é mais confiável, comparando string com string.
     idx = df[df['ID_PEDIDO'] == str(id_pedido)].index
     
     if not idx.empty:
         idx = idx[0]
         if novo_status == 'Finalizado' and df.loc[idx, 'STATUS'] != 'Finalizado':
             pedido = df.loc[idx]
-            desconto = pd.to_numeric(pedido.get('VALOR_DESCONTO', 0.0), errors='coerce')
+            
+            json_data = parse_json_from_string(pedido.get('ITENS_JSON'))
+            desconto_val = json_data.get('desconto_cupom', pedido.get('VALOR_DESCONTO', 0.0))
+            desconto = pd.to_numeric(desconto_val, errors='coerce')
+            if pd.isna(desconto): desconto = 0.0
+
             valor_pago = pd.to_numeric(pedido.get('VALOR_TOTAL', 0.0), errors='coerce')
             cashback = calcular_cashback_a_creditar(pedido.get('ITENS_JSON'), df_catalogo, desconto)
+            
             if cashback > 0:
                 lancar_venda_cashback(pedido.get('NOME_CLIENTE'), pedido.get('CONTATO_CLIENTE'), cashback, valor_pago)
             df.loc[idx, 'VALOR_CASHBACK_CREDITADO'] = cashback
@@ -203,7 +218,6 @@ def atualizar_status_pedido(id_pedido, novo_status, df_catalogo):
     else:
         st.error(f"Erro: Pedido com ID {id_pedido} não encontrado para atualização.")
         return False
-# --- FIM DA CORREÇÃO ---
 
 def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
     data = parse_json_from_string(pedido_json)
@@ -268,7 +282,11 @@ with tab_pedidos:
                 with st.expander(f"Pedido de **{pedido.get('NOME_CLIENTE','N/A')}** - {data_hora} - Total: R$ {pd.to_numeric(pedido.get('VALOR_TOTAL', 0.0), errors='coerce'):.2f}"):
                     st.markdown(f"**Contato:** {pedido.get('CONTATO_CLIENTE', 'N/A')} | **ID do Pedido:** {id_pedido}")
                     json_data = parse_json_from_string(pedido.get('ITENS_JSON'))
-                    desconto = pd.to_numeric(json_data.get('desconto_cupom', pedido.get('VALOR_DESCONTO', 0.0)), errors='coerce')
+                    
+                    desconto_val = json_data.get('desconto_cupom', pedido.get('VALOR_DESCONTO', 0.0))
+                    desconto = pd.to_numeric(desconto_val, errors='coerce')
+                    if pd.isna(desconto): desconto = 0.0
+
                     saldo_cashback = extract_customer_cashback(pedido.get('ITENS_JSON'))
                     st.metric(label="Saldo Cashback do Cliente", value=f"R$ {saldo_cashback:.2f}")
                     cashback = calcular_cashback_a_creditar(pedido.get('ITENS_JSON'), df_catalogo, desconto)
@@ -281,7 +299,7 @@ with tab_pedidos:
                     c1, c2 = st.columns(2)
                     if c1.button("✅ Finalizar", key=f"fin_{id_pedido}", disabled=progresso!=100, use_container_width=True):
                         if atualizar_status_pedido(id_pedido, "Finalizado", df_catalogo): st.success("Pedido finalizado!"); st.rerun()
-                    if c2.button("✖️ Cancelar", key=f"can_{id_pedido}", type="secondary", use_container_width=True):
+                    if c2.button("✖️ Cancelar", key=f"can_{id_pedido}", type="secondary, use_container_width=True):
                         if atualizar_status_pedido(id_pedido, "Cancelado", df_catalogo): st.warning("Pedido cancelado!"); st.rerun()
                         
         st.header("✅ Pedidos Finalizados e Cancelados")
@@ -320,10 +338,17 @@ with tab_produtos:
                 c_f = float(str(prod.get('CASHBACKPERCENT','0.0')).replace(',','.'))
                 d = prod.get('DISPONIVEL', False)
                 if isinstance(d, str): d = d.upper() == 'TRUE'
-                nome_e, preco_e = st.text_input("Nome", prod.get('NOME', '')), st.number_input("Preço (R$)", 0.01, p_f, "%.2f")
-                desc_c_e, desc_l_e = st.text_input("Descrição Curta", prod.get('DESCRICAOCURTA', '')), st.text_area("Descrição Longa", prod.get('DESCRICAOLONGA', ''))
-                link_e, cash_e = st.text_input("Link Imagem", prod.get('LINKIMAGEM', '')), st.number_input("Cashback (%)", 0.0, 100.0, c_f, "%.2f")
+                
+                nome_e = st.text_input("Nome", prod.get('NOME', ''))
+                # --- INÍCIO DA CORREÇÃO DO ERRO ---
+                preco_e = st.number_input("Preço (R$)", min_value=0.01, value=p_f, format="%.2f")
+                desc_c_e = st.text_input("Descrição Curta", prod.get('DESCRICAOCURTA', ''))
+                desc_l_e = st.text_area("Descrição Longa", prod.get('DESCRICAOLONGA', ''))
+                link_e = st.text_input("Link Imagem", prod.get('LINKIMAGEM', ''))
+                cash_e = st.number_input("Cashback (%)", min_value=0.0, max_value=100.0, value=c_f, format="%.2f")
+                # --- FIM DA CORREÇÃO DO ERRO ---
                 disp_e = st.checkbox("Disponível", d)
+                
                 c1, c2 = st.columns(2)
                 if c1.form_submit_button("💾 Salvar Alterações", type="primary", use_container_width=True) and atualizar_produto(id_prod, nome_e, preco_e, desc_c_e, desc_l_e, link_e, disp_e, cash_e):
                     st.success("Produto atualizado!"); st.rerun()
