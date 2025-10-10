@@ -663,9 +663,10 @@ div.block-container {{ background-color: rgba(255, 255, 255, 0.95); border-radiu
 div[data-testid="stButton"] > button {{ background-color: #E91E63; color: white; border-radius: 10px; border: 1px solid #C2185B; font-weight: bold; }}
 div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: white; border: 1px solid #E91E63; }}
 
+/* PLACEHOLDER SEM IMAGEM (MANTIDO) */
 .product-image-container {{ height: 220px; display: flex; align-items: center; justify-content: center; margin-bottom: 1rem; border-radius: 8px; }}
 
-/* CORREÇÃO DE ALTURA (A PARTE QUE VOCÊ INSERIU) */
+/* CORREÇÃO DE ALTURA PARA IMAGENS st.image */
 [data-testid="stVerticalBlock"] [data-testid^="stImage"] {{
     min-height: 200px; 
     display: flex;
@@ -673,7 +674,6 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
     justify-content: center;
     margin-bottom: 1rem;
 }}
-
 [data-testid="stVerticalBlock"] [data-testid^="stImage"] img {{
     max-height: 200px; 
     width: auto; 
@@ -684,7 +684,7 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 .esgotado-badge {{ background-color: #757575; color: white; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
 .estoque-baixo-badge {{ background-color: #FFC107; color: black; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
 </style>
-""", unsafe_allow_html=True)
+""", unsafe_allow_html=True
 
 
 def copy_to_clipboard_js(text_to_copy):
@@ -1071,6 +1071,7 @@ else:
         with cols[i % 4]:
             # 3. OTIMIZAÇÃO: Passa o DF indexado para a função de renderização
             render_product_card(product_id, row, key_prefix=unique_key, df_catalogo_indexado=st.session_state.df_catalogo_indexado)
+
 
 
 
