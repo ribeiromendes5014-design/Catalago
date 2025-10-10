@@ -705,24 +705,24 @@ st.markdown(f"""
 <style>
 /* Estilo do container do banner colorido */
 .banner-colored {{
-    background-color: #e91e63; /* <-- AQUI ESTÁ A ALTERAÇÃO */
-    padding: 20px 30px; /* Espaçamento interno */
-    border-radius: 10px; /* Bordas arredondadas */
-    display: flex; /* Para alinhar itens lado a lado */
-    align-items: center; /* Centraliza verticalmente */
-    gap: 25px; /* Espaço entre o logo e o título */
-    margin-bottom: 20px; /* Espaço abaixo do banner */
+    background-color: #e91e63;
+    padding: 10px 25px; /* <-- PADDING VERTICAL REDUZIDO */
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 25px;
+    margin-bottom: 20px;
 }}
 
 .banner-colored img {{
-    max-height: 80px; /* Altura máxima do logo */
+    max-height: 60px; /* <-- ALTURA MÁXIMA DO LOGO REDUZIDA */
     width: auto;
 }}
 
 .banner-colored h1 {{
-    color: white; /* Cor do texto */
-    font-size: 2.3rem; /* Tamanho da fonte */
-    margin: 0; /* Remove margens */
+    color: white;
+    font-size: 2rem; /* <-- FONTE UM POUCO MENOR */
+    margin: 0;
 }}
 </style>
 
@@ -1009,6 +1009,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
