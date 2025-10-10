@@ -855,12 +855,14 @@ with tab_produtos:
             # Converte PRECO e CASHBACKPERCENT (que podem ter sido lidos com vírgula) para float
             try:
                 preco_float = float(str(produto_atual['PRECO']).replace(',', '.'))
-            except:
-                preco_float = 0.0
+            except (ValueError, TypeError):
+                # 💥 CORREÇÃO: O valor padrão deve ser >= min_value (0.01)
+                preco_float = 0.01 
                 
             try:
                 cashback_float = float(str(produto_atual.get('CASHBACKPERCENT', '0.0')).replace(',', '.'))
-            except:
+            except (ValueError, TypeError):
+                # Prevenção: Garante que o cashback também tenha um fallback válido.
                 cashback_float = 0.0
             
             with st.form("form_editar_produto"):
@@ -1022,3 +1024,4 @@ with tab_promocoes:
                         st.rerun()
                     else:
                         st.error("Falha ao excluir promoção.")
+
