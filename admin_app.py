@@ -88,10 +88,10 @@ def write_csv_to_github(df, sheet_name, commit_message):
         st.error(f"Falha no Commit: {put_response.json().get('message', 'Erro')}"); return False
 
 def parse_json_from_string(json_string):
-    """Corrige JSON vindo do CSV com aspas duplicadas e converte em dicionário"""
+    """Versão final: detecta JSON duplamente escapado, corrige e retorna dicionário"""
     if pd.isna(json_string) or not isinstance(json_string, str) or not json_string.strip():
         return {}
-    
+
     s = json_string.strip()
 
     # 🔧 Remove aspas externas e corrige aspas duplas
@@ -99,13 +99,16 @@ def parse_json_from_string(json_string):
         s = s[1:-1]
     s = s.replace('""', '"')
 
-    # Tenta converter o JSON normalmente
+    # 🌀 Tenta decodificar 2 vezes, pois o CSV vem com escape duplo
     try:
-        return json.loads(s)
+        data = json.loads(s)
+        if isinstance(data, str):  # se ainda for string, decodifica de novo
+            data = json.loads(data)
+        return data
     except Exception:
         pass
 
-    # Última tentativa: se vier em formato Python dict
+    # 🧩 Última tentativa: formato Python dict
     try:
         return ast.literal_eval(s)
     except Exception:
@@ -341,6 +344,7 @@ with tab_cupons:
     st.subheader("📝 Cupons Cadastrados")
     df_cupons = carregar_dados(SHEET_NAME_CUPONS)
     if not df_cupons.empty: st.dataframe(df_cupons, use_container_width=True)
+
 
 
 
