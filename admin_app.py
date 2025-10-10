@@ -53,8 +53,14 @@ def fetch_github_data_v2(sheet_name, version_control):
         df.columns = df.columns.str.strip().str.upper().str.replace(' ', '_')
 
         if sheet_name == SHEET_NAME_PEDIDOS:
+            # --- CORREÇÃO DO ERRO 'fillna' ---
             for col in ['VALOR_TOTAL', 'VALOR_DESCONTO']:
-                df[col] = pd.to_numeric(df.get(col), errors='coerce').fillna(0.0)
+                if col in df.columns:
+                    # Se a coluna existe, converte para número e preenche vazios
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+                else:
+                    # Se a coluna não existe, cria ela com o valor 0.0
+                    df[col] = 0.0
         return df
     except Exception as e:
         st.error(f"Erro ao carregar dados de '{csv_filename}': {e}")
@@ -122,7 +128,6 @@ def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
             link_imagem = "https://placehold.co/150x150/e2e8f0/e2e8f0?text=Sem+Imagem"
             produto = df_catalogo[df_catalogo['ID'] == int(item.get('id', -1))]
             
-            # --- CORREÇÃO DO ERRO 'LINKIMAGEM' ---
             if not produto.empty and 'LINKIMAGEM' in produto.columns:
                 link_na_tabela = produto.iloc[0]['LINKIMAGEM']
                 if pd.notna(link_na_tabela) and str(link_na_tabela).strip():
@@ -169,7 +174,6 @@ with tab_pedidos:
         df_pedidos['DATA_HORA'] = pd.to_datetime(df_pedidos['DATA_HORA'], errors='coerce')
         for _, pedido in df_pedidos.sort_values(by="DATA_HORA", ascending=False).iterrows():
             if pedido['STATUS'] != 'Finalizado':
-                # --- CORREÇÃO DO VALOR TOTAL ---
                 valor_total = pedido.get('VALOR_TOTAL', 0.0)
                 if valor_total == 0.0:
                     try:
