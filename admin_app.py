@@ -852,29 +852,39 @@ with tab_produtos:
             id_selecionado = int(produto_selecionado_str.split(' - ')[0])
             produto_atual = df_produtos_catalogo[df_produtos_catalogo['ID'] == id_selecionado].iloc[0]
             
-            # Converte PRECO e CASHBACKPERCENT (que podem ter sido lidos com vírgula) para float
+            # 💥 CORREÇÃO: Usar .get() para acesso seguro, evitando KeyError.
+            # Se a coluna 'PRECO' não existir, usa '0.01' como padrão.
             try:
-                preco_float = float(str(produto_atual['PRECO']).replace(',', '.'))
+                preco_str = str(produto_atual.get('PRECO', '0.01'))
+                preco_float = float(preco_str.replace(',', '.'))
             except (ValueError, TypeError):
-                # 💥 CORREÇÃO: O valor padrão deve ser >= min_value (0.01)
-                preco_float = 0.01 
-                
+                preco_float = 0.01
+            
+            # Faz o mesmo para o cashback.
             try:
-                cashback_float = float(str(produto_atual.get('CASHBACKPERCENT', '0.0')).replace(',', '.'))
+                cashback_str = str(produto_atual.get('CASHBACKPERCENT', '0.0'))
+                cashback_float = float(cashback_str.replace(',', '.'))
             except (ValueError, TypeError):
-                # Prevenção: Garante que o cashback também tenha um fallback válido.
                 cashback_float = 0.0
             
             with st.form("form_editar_produto"):
                 st.info(f"Editando produto ID: {id_selecionado}")
                 
-                edit_nome = st.text_input("Nome do Produto", value=produto_atual['NOME'], key="edit_nome")
+                # 💥 APLICANDO .get() EM TODOS OS CAMPOS PARA MÁXIMA ROBUSTEZ
+                edit_nome = st.text_input("Nome do Produto", value=produto_atual.get('NOME', ''), key="edit_nome")
                 edit_preco = st.number_input("Preço (R$)", min_value=0.01, format="%.2f", value=preco_float, key="edit_preco")
-                edit_desc_curta = st.text_input("Descrição Curta", value=produto_atual['DESCRICAOCURTA'], key="edit_desc_curta")
-                edit_desc_longa = st.text_area("Descrição Longa", value=produto_atual['DESCRICAOLONGA'], key="edit_desc_longa")
-                edit_link_imagem = st.text_input("Link da Imagem", value=produto_atual['LINKIMAGEM'], key="edit_link_imagem")
+                edit_desc_curta = st.text_input("Descrição Curta", value=produto_atual.get('DESCRICAOCURTA', ''), key="edit_desc_curta")
+                edit_desc_longa = st.text_area("Descrição Longa", value=produto_atual.get('DESCRICAOLONGA', ''), key="edit_desc_longa")
+                edit_link_imagem = st.text_input("Link da Imagem", value=produto_atual.get('LINKIMAGEM', ''), key="edit_link_imagem")
                 edit_cashback = st.number_input("Cashback (%)", min_value=0.0, max_value=100.0, format="%.2f", value=cashback_float, key="edit_cashback")
-                edit_disponivel = st.checkbox("Disponível para Venda", value=produto_atual['DISPONIVEL'], key="edit_disponivel")
+                
+                # Para o checkbox, o padrão é False se a coluna não existir.
+                disponivel_default = produto_atual.get('DISPONIVEL', False)
+                # Garante que o valor seja booleano
+                if isinstance(disponivel_default, str):
+                    disponivel_default = disponivel_default.upper() == 'TRUE'
+                
+                edit_disponivel = st.checkbox("Disponível para Venda", value=disponivel_default, key="edit_disponivel")
                 
                 col_update, col_delete = st.columns(2)
                 
@@ -1024,4 +1034,5 @@ with tab_promocoes:
                         st.rerun()
                     else:
                         st.error("Falha ao excluir promoção.")
+
 
