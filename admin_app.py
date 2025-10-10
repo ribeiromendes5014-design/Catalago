@@ -426,7 +426,13 @@ with tab_pedidos:
         if pedidos_pendentes.empty: st.info("Nenhum pedido pendente encontrado.")
         else:
             for _, pedido in pedidos_pendentes.sort_values(by="DATA_HORA", ascending=False).iterrows():
-                with st.expander(f"Pedido de **{pedido['NOME_CLIENTE']}** - {pd.to_datetime(pedido['DATA_HORA']).strftime('%d/%m/%Y %H:%M')} - Total: R$ {pedido['VALOR_TOTAL']}"):
+                # --- CORREÇÃO APLICADA AQUI ---
+                if pd.notna(pedido['DATA_HORA']):
+                    data_hora_str = pd.to_datetime(pedido['DATA_HORA']).strftime('%d/%m/%Y %H:%M')
+                else:
+                    data_hora_str = "Data Indisponível"
+
+                with st.expander(f"Pedido de **{pedido['NOME_CLIENTE']}** - {data_hora_str} - Total: R$ {pedido['VALOR_TOTAL']}"):
                     st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{pedido['ID_PEDIDO']}`")
                     st.markdown(f"**Saldo Cashback do Cliente:** **R$ {pedido['SALDO_CASHBACK_CLIENTE_PEDIDO']:.2f}**")
                     st.markdown("---")
@@ -447,7 +453,13 @@ with tab_pedidos:
         if pedidos_finalizados.empty: st.info("Nenhum pedido finalizado encontrado.")
         else:
             for _, pedido in pedidos_finalizados.sort_values(by="DATA_HORA", ascending=False).iterrows():
-                with st.expander(f"Pedido de **{pedido['NOME_CLIENTE']}** - {pd.to_datetime(pedido['DATA_HORA']).strftime('%d/%m/%Y %H:%M')} - Total: R$ {pedido['VALOR_TOTAL']}"):
+                # --- CORREÇÃO APLICADA AQUI TAMBÉM ---
+                if pd.notna(pedido['DATA_HORA']):
+                    data_hora_str = pd.to_datetime(pedido['DATA_HORA']).strftime('%d/%m/%Y %H:%M')
+                else:
+                    data_hora_str = "Data Indisponível"
+                
+                with st.expander(f"Pedido de **{pedido['NOME_CLIENTE']}** - {data_hora_str} - Total: R$ {pedido['VALOR_TOTAL']}"):
                     st.markdown(f"**Contato:** `{pedido['CONTATO_CLIENTE']}` | **ID:** `{pedido['ID_PEDIDO']}`")
                     st.markdown(f"**Saldo Cashback do Cliente:** **R$ {pedido['SALDO_CASHBACK_CLIENTE_PEDIDO']:.2f}**")
                     st.markdown("---")
@@ -584,7 +596,6 @@ with tab_cupons:
                 novo_tipo = st.selectbox("Tipo de Desconto", ["PERCENTUAL", "FIXO"], key="cupom_tipo")
             
             with col2:
-                # A label muda dinamicamente, então uma key consistente é crucial
                 label_valor = "Valor do Desconto (%)" if novo_tipo == "PERCENTUAL" else "Valor do Desconto (R$)"
                 novo_valor = st.number_input(label_valor, min_value=0.01, format="%.2f", key="cupom_valor")
 
@@ -617,7 +628,6 @@ with tab_cupons:
             submitted = st.form_submit_button("Salvar Novo Cupom", type="primary", use_container_width=True)
             
             if submitted:
-                # A lógica de submissão permanece a mesma
                 if novo_codigo and novo_valor > 0:
                     if criar_cupom(novo_codigo, novo_tipo, novo_valor, None if sem_validade else nova_validade, novo_valor_minimo, limite_final):
                         st.success(f"Cupom '{novo_codigo}' criado com sucesso!")
