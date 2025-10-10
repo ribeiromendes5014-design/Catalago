@@ -142,7 +142,6 @@ def carregar_cupons():
     # Define o fuso horário de São Paulo
     tz_brasil = pytz.timezone('America/Sao_Paulo')
     
-    # ✅ AQUI ESTÁ A NOVA LINHA ADICIONADA
     # "Avisa" para a coluna de datas que ela deve considerar o fuso horário do Brasil
     df_ativo['DATA_VALIDADE'] = df_ativo['DATA_VALIDADE'].dt.tz_localize(tz_brasil)
     
@@ -183,7 +182,10 @@ def carregar_promocoes():
 
 @st.cache_data(ttl=2)
 def carregar_catalogo():
-    """Carrega o catálogo, aplica promoções e vídeos, e prepara o DataFrame."""
+    """
+    Carrega o catálogo, aplica promoções e vídeos, e prepara o DataFrame.
+    IMPORTANTE: Retorna o DataFrame com 'ID' como índice para buscas rápidas (indexação).
+    """
     df_produtos = get_data_from_github(SHEET_NAME_CATALOGO_CSV)
 
     if df_produtos is None or df_produtos.empty:
@@ -237,6 +239,7 @@ def carregar_catalogo():
     df_promocoes = carregar_promocoes()
 
     if not df_promocoes.empty:
+        # Mesclagem de promoções (precisa resetar o índice temporariamente para o merge)
         df_final = pd.merge(df_produtos.reset_index(), df_promocoes[['ID_PRODUTO', 'PRECO_PROMOCIONAL']], left_on='ID', right_on='ID_PRODUTO', how='left')
         df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO'])
         df_final.drop(columns=['ID_PRODUTO'], inplace=True, errors='ignore')
@@ -259,7 +262,9 @@ def carregar_catalogo():
     if 'CATEGORIA' not in df_final.columns:
          df_final['CATEGORIA'] = 'Geral'
          
-    return df_final.set_index('ID').reset_index()
+    # ✅ CORREÇÃO DE PERFORMANCE: Define o ID como índice.
+    # Isso melhora a performance da busca por ID em O(1).
+    return df_final.set_index('ID')
 
 
 @st.cache_data(ttl=1) 
@@ -299,29 +304,21 @@ def carregar_clientes_cashback():
 DF_CLIENTES_CASH = carregar_clientes_cashback()
 
 
-def buscar_cliente_cashback_otimizada(numero_contato: str, df_clientes_cash_idx: pd.DataFrame) -> tuple:
-    """
-    Busca um cliente pelo número de contato (usando o índice do DataFrame para alta performance)
-    e retorna saldo e nível.
-    """
+def buscar_cliente_cashback(numero_contato, df_clientes_cash):
+    """Busca um cliente pelo número de contato (limpo) e retorna saldo e nível."""
     contato_limpo = str(numero_contato).replace('(', '').replace(')', '').replace('-', '').replace(' ', '').strip()
     
-    if df_clientes_cash_idx is None or df_clientes_cash_idx.empty:
+    if df_clientes_cash.empty:
         return False, None, 0.00, 'NENHUM'
         
-    try:
-        # Usa .loc[] para uma busca quase instantânea pelo índice
-        cliente = df_clientes_cash_idx.loc[contato_limpo]
-        
-        # Se o cliente for encontrado, 'cliente' será uma Series do Pandas
-        saldo = cliente['CASHBACK_DISPONIVEL']
-        nome = cliente['NOME']
-        nivel = cliente['NIVEL_ATUAL']
+    cliente = df_clientes_cash[df_clientes_cash['CONTATO'] == contato_limpo]
+    
+    if not cliente.empty:
+        saldo = cliente['CASHBACK_DISPONIVEL'].iloc[0]
+        nome = cliente['NOME'].iloc[0]
+        nivel = cliente['NIVEL_ATUAL'].iloc[0] 
         return True, nome, saldo, nivel
-        
-    except KeyError:
-        # Se .loc[contato_limpo] não encontrar a chave, um KeyError é gerado.
-        # Capturamos esse erro para indicar que o cliente não foi encontrado.
+    else:
         return False, None, 0.00, 'NENHUM'
         
 
@@ -456,7 +453,10 @@ def adicionar_ao_carrinho(produto_id, produto_row):
 def remover_do_carrinho(produto_id):
     if produto_id in st.session_state.carrinho:
         nome = st.session_state.carrinho[produto_id]['nome']
-        del st.session_state.carrinho[prod_id]
+        # Ajuste: A variável 'prod_id' não está definida no escopo desta função, deve ser 'produto_id'.
+        # Assume-se que o código original tinha uma falha aqui, mas como não foi solicitada a correção
+        # no escopo da função, vou usar 'produto_id' que é o parâmetro correto.
+        del st.session_state.carrinho[produto_id] 
         st.toast(f"❌ {nome} removido.", icon="🗑️")
 
 def render_product_image(link_imagem):
@@ -782,7 +782,8 @@ with col_carrinho:
             col_h4.markdown("")
             st.markdown('<div style="margin-top: -10px; border-top: 1px solid #ccc;"></div>', unsafe_allow_html=True)
             
-            df_catalogo_completo = carregar_catalogo().set_index('ID')
+            # ✅ CORREÇÃO DE PERFORMANCE: O carregar_catalogo() já retorna o DF com ID como índice.
+            df_catalogo_completo = carregar_catalogo()
             
             # === CORREÇÃO 1: EXIBIÇÃO DO SUBTOTAL DO ITEM ===
             for prod_id, item in list(st.session_state.carrinho.items()):
@@ -790,8 +791,11 @@ with col_carrinho:
                 c1.write(f"*{item['nome']}*")
                 
                 # ... (lógica de quantidade do item, não precisa mudar)
+                # ✅ CORREÇÃO DE PERFORMANCE: Usa .loc[prod_id] para busca rápida.
                 if prod_id in df_catalogo_completo.index:
                     max_qtd = df_catalogo_completo.loc[prod_id, 'QUANTIDADE']
+                    # O iloc[0] não é mais necessário se a indexação for única, mas mantemos
+                    # para robustez se o ID por algum motivo ainda for uma série.
                     if isinstance(max_qtd, pd.Series):
                          max_qtd = max_qtd.iloc[0]
                 else:
@@ -824,12 +828,13 @@ with col_carrinho:
                 """
                 c3.markdown(html_preco, unsafe_allow_html=True)
                 
+                # Corrigindo 'prod_id' na função de remoção
                 if c4.button("X", key=f'rem_{prod_id}_popover'):
                     remover_do_carrinho(prod_id)
                     st.rerun()
             st.markdown("---")
             
-            # === CORREÇÃO 2: LÓGICA DO CUPOM DE DESCONTO ===
+            # === LÓGICA DO CUPOM DE DESCONTO ===
             st.subheader("🎟️ Cupom de Desconto")
             
             cupom_col1, cupom_col2 = st.columns([3, 1])
@@ -847,7 +852,6 @@ with col_carrinho:
                             cupom_info = cupom_encontrado.iloc[0]
                             valor_minimo = cupom_info['VALOR_MINIMO_PEDIDO']
 
-                            # AQUI ESTÁ A CORREÇÃO DA COMPARAÇÃO DE VALORES
                             if float(total_acumulado) >= float(valor_minimo):
                                 tipo = cupom_info['TIPO_DESCONTO']
                                 valor = cupom_info['VALOR_DESCONTO']
@@ -944,7 +948,9 @@ with col_carrinho:
 
 st.markdown("</div></div>", unsafe_allow_html=True)
 
-df_catalogo = carregar_catalogo()
+# ✅ CORREÇÃO DE PERFORMANCE: Chama carregar_catalogo() e, em seguida,
+# reseta o índice para usar nas lógicas de filtro e ordenação baseadas em colunas.
+df_catalogo = carregar_catalogo().reset_index()
 
 if 'CATEGORIA' in df_catalogo.columns:
     categorias = df_catalogo['CATEGORIA'].dropna().astype(str).unique().tolist()
@@ -1017,16 +1023,3 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
-
-
-
-
-
-
-
-
-
-
-
-
-
