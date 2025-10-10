@@ -102,7 +102,7 @@ import pytz
 # ... (resto do seu código)
 
 
-# === FUNÇÃO DE CUPONS ATUALIZADA COM FUSO HORÁRIO ===
+# === FUNÇÃO DE CUPONS ATUALIZADA COM FUSO HORÁRIO (CORRIGIDA) ===
 @st.cache_data(ttl=30)
 def carregar_cupons():
     """Carrega os cupons do 'cupons.csv' do GitHub, validando com fuso horário do Brasil."""
@@ -140,11 +140,13 @@ def carregar_cupons():
     
     # Define o fuso horário de São Paulo
     tz_brasil = pytz.timezone('America/Sao_Paulo')
-    # Pega a data e hora de agora no Brasil e normaliza (zera a hora)
-    hoje_brasil = datetime.now(tz_brasil).normalize()
+    
+    # ✅ AQUI ESTÁ A LINHA CORRIGIDA
+    # Pega a data e hora de agora no Brasil usando PANDAS e normaliza (zera a hora)
+    hoje_brasil = pd.Timestamp.now(tz=tz_brasil).normalize()
     
     # Compara a data de validade (já normalizada) com a data de hoje no Brasil
-    df_ativo = df_ativo[df_ativo['DATA_VALIDADE'].dt.normalize() >= pd.to_datetime(hoje_brasil)]
+    df_ativo = df_ativo[df_ativo['DATA_VALIDADE'].dt.normalize() >= hoje_brasil]
     # --- Fim da Validação de Data ---
 
     df_ativo = df_ativo[df_ativo['USOS_ATUAIS'] < df_ativo['LIMITE_USOS']]
@@ -976,6 +978,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
