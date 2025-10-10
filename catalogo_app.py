@@ -613,9 +613,10 @@ def render_product_card(prod_id, row, key_prefix, df_catalogo_indexado):
             if pd.notna(cashback_percent) and cashback_percent > 0:
                 # O cashback é baseado no PRECO_FINAL (preço à vista/promocional)
                 cashback_valor_calculado = (cashback_percent / 100) * preco_final
-                # Note: Removi a quebra de linha do HTML, garantindo que a tag seja completa
+                # Agora, garantimos que a string HTML não tenha quebras de linha indesejadas
+                # e colocamos o texto do cashback dentro da tag span corretamente.
                 cashback_html = f"""
-                <span style='color: #2E7D32; font-size: 0.8rem; font-weight: bold;'>
+                <span style='color: #2E7D32; font-size: 0.8rem; font-weight: bold; display: block; margin-top: 5px;'>
                     Cashback: R$ {cashback_valor_calculado:.2f}
                 </span>
                 """
@@ -637,6 +638,7 @@ def render_product_card(prod_id, row, key_prefix, df_catalogo_indexado):
                 </div>
                 """, unsafe_allow_html=True)
             else:
+                # Corrigido para garantir que todo o HTML do preço, condição e cashback seja injetado de uma vez
                 st.markdown(f"""
                 <div style='display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px;'>
                     <h4 style='color: #880E4F; margin:0; line-height:1;'>R$ {preco_final:.2f}</h4>
