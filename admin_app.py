@@ -49,7 +49,16 @@ def fetch_github_data_v2(sheet_name, version_control):
             return pd.DataFrame()
         content = base64.b64decode(response.json()["content"]).decode("utf-8")
         if not content.strip(): return pd.DataFrame()
-        df = pd.read_csv(StringIO(content), sep=",", engine='python', on_bad_lines='warn')
+        df = pd.read_csv(
+            StringIO(content),
+            sep=",",
+            engine="python",
+            on_bad_lines="warn",
+            quotechar='"',
+            escapechar="\\",
+            doublequote=True
+         )
+        
         df.columns = df.columns.str.strip().str.upper().str.replace(' ', '_')
 
         if sheet_name == SHEET_NAME_PEDIDOS:
@@ -354,6 +363,7 @@ with tab_cupons:
     st.subheader("📝 Cupons Cadastrados")
     df_cupons = carregar_dados(SHEET_NAME_CUPONS)
     if not df_cupons.empty: st.dataframe(df_cupons, use_container_width=True)
+
 
 
 
