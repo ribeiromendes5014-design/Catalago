@@ -82,7 +82,6 @@ def write_csv_to_github(df, sheet_name, commit_message):
     sha = response.json().get('sha') if response.status_code == 200 else None
     
     df_to_save = df.copy()
-    # --- CORREÇÃO DE ROBUSTEZ ---
     if 'CONTATO_LIMPO' in df_to_save.columns:
         df_to_save = df_to_save.drop(columns=['CONTATO_LIMPO'], errors='ignore')
 
@@ -95,6 +94,25 @@ def write_csv_to_github(df, sheet_name, commit_message):
         fetch_github_data_v2.clear(); return True
     else:
         st.error(f"Falha no Commit: {put_response.json().get('message', 'Erro')}"); return False
+
+# --- FUNÇÃO DE PARSING DE JSON ROBUSTA (NOVA) ---
+def safe_json_load(json_string):
+    if pd.isna(json_string) or not isinstance(json_string, str) or not json_string.strip():
+        return {}
+    
+    s = json_string.strip()
+    
+    try: return json.loads(s)
+    except json.JSONDecodeError: pass
+
+    try:
+        if s.startswith('"') and s.endswith('"'): s = s[1:-1]
+        s = s.replace('""', '"')
+        return json.loads(s)
+    except (json.JSONDecodeError, TypeError): pass
+
+    try: return ast.literal_eval(s)
+    except: return {}
 
 # --- FUNÇÕES CRUD COMPLETAS ---
 def adicionar_produto(nome, preco, desc_curta, desc_longa, link_imagem, disponivel, cashback_percent_prod):
@@ -154,31 +172,30 @@ def lancar_venda_cashback(nome: str, contato: str, valor_cashback_credito: float
     return False
 
 def extract_customer_cashback(itens_json_string):
-    if pd.isna(itens_json_string) or not itens_json_string: return 0.0
-    s = str(itens_json_string).strip()
-    match = re.search(r'\"cliente_saldo_cashback\"\s*:\s*([\d\.]+)', s)
-    if match:
-        try: return float(match.group(1))
-        except: pass
-    try: return ast.literal_eval(s).get("cliente_saldo_cashback", 0.0)
-    except: return 0.0
+    if pd.notna(itens_json_string):
+        s = str(itens_json_string).strip()
+        match = re.search(r'\"cliente_saldo_cashback\"\s*:\s*([\d\.]+)', s)
+        if match:
+            try: return float(match.group(1))
+            except: pass
+    data = safe_json_load(itens_json_string)
+    return data.get("cliente_saldo_cashback", 0.0)
 
 def calcular_cashback_a_creditar(pedido_json, df_catalogo, valor_desconto_total=0.0):
     valor_cashback_total, subtotal_bruto = 0.0, 0.0
-    try:
-        itens = ast.literal_eval(str(pedido_json)).get('itens', [])
-        for item in itens: subtotal_bruto += float(item.get('preco', 0)) * int(item.get('quantidade', 0))
-        if subtotal_bruto == 0: return 0.0
-        for item in itens:
-            produto = df_catalogo[df_catalogo['ID'] == int(item.get('id', -1))]
-            if not produto.empty:
-                cashback_percent = float(str(produto.iloc[0].get('CASHBACKPERCENT', '0')).replace(',', '.'))
-                if cashback_percent > 0:
-                    subtotal_item = float(item.get('preco', 0)) * int(item.get('quantidade', 0))
-                    proporcao = subtotal_item / subtotal_bruto if subtotal_bruto > 0 else 0
-                    valor_final_item = subtotal_item - (valor_desconto_total * proporcao)
-                    valor_cashback_total += valor_final_item * (cashback_percent / 100)
-    except: return 0.0
+    data = safe_json_load(pedido_json)
+    itens = data.get('itens', [])
+    for item in itens: subtotal_bruto += float(item.get('preco', 0)) * int(item.get('quantidade', 0))
+    if subtotal_bruto == 0: return 0.0
+    for item in itens:
+        produto = df_catalogo[df_catalogo['ID'] == int(item.get('id', -1))]
+        if not produto.empty:
+            cashback_percent = float(str(produto.iloc[0].get('CASHBACKPERCENT', '0')).replace(',', '.'))
+            if cashback_percent > 0:
+                subtotal_item = float(item.get('preco', 0)) * int(item.get('quantidade', 0))
+                proporcao = subtotal_item / subtotal_bruto if subtotal_bruto > 0 else 0
+                valor_final_item = subtotal_item - (valor_desconto_total * proporcao)
+                valor_cashback_total += valor_final_item * (cashback_percent / 100)
     return round(valor_cashback_total, 2)
 
 def atualizar_status_pedido(id_pedido, novo_status, df_catalogo):
@@ -200,26 +217,24 @@ def atualizar_status_pedido(id_pedido, novo_status, df_catalogo):
     return False
 
 def exibir_itens_pedido(id_pedido, pedido_json, df_catalogo):
-    try:
-        itens = ast.literal_eval(str(pedido_json)).get('itens', [])
-        total_itens, itens_separados = len(itens), 0
-        key_progress = f'pedido_{id_pedido}_itens_separados'
-        if key_progress not in st.session_state: st.session_state[key_progress] = [False] * total_itens
-        for i, item in enumerate(itens):
-            link_imagem = "https://placehold.co/150x150/e2e8f0/e2e8f0?text=Sem+Imagem"
-            produto = df_catalogo[df_catalogo['ID'] == int(item.get('id', -1))]
-            if not produto.empty and 'LINKIMAGEM' in produto.columns and pd.notna(produto.iloc[0]['LINKIMAGEM']):
-                link_imagem = str(produto.iloc[0]['LINKIMAGEM'])
-            col1, col2, col3 = st.columns([0.5, 1, 3.5])
-            st.session_state[key_progress][i] = col1.checkbox(" ", st.session_state[key_progress][i], key=f"c_{id_pedido}_{i}", label_visibility="collapsed")
-            col2.image(link_imagem, width=100)
-            subtotal = float(item.get('preco', 0)) * int(item.get('quantidade', 0))
-            col3.markdown(f"**{item.get('nome', 'N/A')}**\n\n**Qtd:** {item.get('quantidade', 0)} | **Subtotal:** R$ {subtotal:.2f}")
-            st.markdown("---")
-            if st.session_state[key_progress][i]: itens_separados += 1
-        return 100 if total_itens == 0 else int((itens_separados / total_itens) * 100)
-    except Exception as e:
-        st.error(f"Erro ao processar itens: {e}"); return 0
+    data = safe_json_load(pedido_json)
+    itens = data.get('itens', [])
+    total_itens, itens_separados = len(itens), 0
+    key_progress = f'pedido_{id_pedido}_itens_separados'
+    if key_progress not in st.session_state: st.session_state[key_progress] = [False] * total_itens
+    for i, item in enumerate(itens):
+        link_imagem = "https://placehold.co/150x150/e2e8f0/e2e8f0?text=Sem+Imagem"
+        produto = df_catalogo[df_catalogo['ID'] == int(item.get('id', -1))]
+        if not produto.empty and 'LINKIMAGEM' in produto.columns and pd.notna(produto.iloc[0]['LINKIMAGEM']):
+            link_imagem = str(produto.iloc[0]['LINKIMAGEM'])
+        col1, col2, col3 = st.columns([0.5, 1, 3.5])
+        st.session_state[key_progress][i] = col1.checkbox(" ", st.session_state[key_progress][i], key=f"c_{id_pedido}_{i}", label_visibility="collapsed")
+        col2.image(link_imagem, width=100)
+        subtotal = float(item.get('preco', 0)) * int(item.get('quantidade', 0))
+        col3.markdown(f"**{item.get('nome', 'N/A')}**\n\n**Qtd:** {item.get('quantidade', 0)} | **Subtotal:** R$ {subtotal:.2f}")
+        st.markdown("---")
+        if st.session_state[key_progress][i]: itens_separados += 1
+    return 100 if total_itens == 0 else int((itens_separados / total_itens) * 100)
 
 # --- LAYOUT DO APP ---
 st.set_page_config(page_title="Admin Doce&Bella", layout="wide")
@@ -240,13 +255,12 @@ with tab_pedidos:
             df_pedidos['SALDO_CASHBACK_CLIENTE_PEDIDO'] = df_pedidos['ITENS_JSON'].apply(extract_customer_cashback)
         else: df_pedidos['SALDO_CASHBACK_CLIENTE_PEDIDO'] = 0.0
         if 'STATUS' not in df_pedidos.columns: df_pedidos['STATUS'] = ''
-        df_pedidos['STATUS'] = df_pedidos['STATUS'].fillna('') # Garante que não haja NaN
+        df_pedidos['STATUS'] = df_pedidos['STATUS'].fillna('')
             
         df_pedidos['DATA_HORA'] = pd.to_datetime(df_pedidos['DATA_HORA'], errors='coerce')
         df_pedidos.sort_values(by="DATA_HORA", ascending=False, inplace=True)
         
         st.header("⏳ Pedidos Pendentes")
-        # --- CORREÇÃO DO FILTRO ---
         pedidos_pendentes = df_pedidos[~df_pedidos['STATUS'].isin(['Finalizado', 'Cancelado'])]
         if pedidos_pendentes.empty:
             st.info("Nenhum pedido pendente.")
@@ -254,7 +268,6 @@ with tab_pedidos:
             for _, pedido in pedidos_pendentes.iterrows():
                 valor_final_a_exibir = pedido.get('VALOR_TOTAL', 0.0)
                 data_hora = pedido['DATA_HORA'].strftime('%d/%m/%Y %H:%M') if pd.notna(pedido['DATA_HORA']) else "Data Indefinida"
-                
                 with st.expander(f"Pedido de **{pedido.get('NOME_CLIENTE','N/A')}** - {data_hora} - Total: R$ {valor_final_a_exibir:.2f}"):
                     col_botoes1, col_botoes2 = st.columns(2)
                     cupom = pedido.get('CUPOM_APLICADO'); desconto = pedido.get('VALOR_DESCONTO', 0.0)
@@ -289,16 +302,16 @@ with tab_produtos:
     df_produtos = carregar_dados(SHEET_NAME_CATALOGO)
     with st.expander("➕ Adicionar Novo Produto"):
         with st.form("form_novo_produto", clear_on_submit=True):
-            nome = st.text_input("Nome do Produto"); preco = st.number_input("Preço (R$)", 0.01, format="%.2f")
+            nome = st.text_input("Nome"); preco = st.number_input("Preço (R$)", 0.01, format="%.2f")
             desc_curta = st.text_input("Descrição Curta"); desc_longa = st.text_area("Descrição Longa")
             link_img = st.text_input("Link da Imagem"); cashback = st.number_input("Cashback (%)", 0.0, 100.0, format="%.2f")
-            disponivel = st.checkbox("Disponível para Venda", True)
-            if st.form_submit_button("Salvar Novo Produto"):
+            disponivel = st.checkbox("Disponível", True)
+            if st.form_submit_button("Salvar"):
                 if nome and preco > 0:
                     if adicionar_produto(nome, preco, desc_curta, desc_longa, link_img, disponivel, cashback): st.success("Produto adicionado!"); st.rerun()
     st.markdown("---")
     st.subheader("📝 Editar/Excluir Produtos")
-    if df_produtos.empty: st.info("Nenhum produto cadastrado.")
+    if df_produtos.empty: st.info("Nenhum produto.")
     else:
         opcoes = df_produtos.apply(lambda r: f"{r.get('ID', 'N/A')} - {r.get('NOME', 'N/A')}", axis=1).tolist()
         selecionado = st.selectbox("Selecione para Editar", opcoes)
@@ -329,8 +342,7 @@ with tab_cupons:
     with st.expander("➕ Criar Novo Cupom"):
         with st.form("form_novo_cupom", clear_on_submit=True):
             c1, c2 = st.columns(2)
-            codigo = c1.text_input("Código").upper()
-            tipo = c1.selectbox("Tipo", ["PERCENTUAL", "FIXO"])
+            codigo = c1.text_input("Código").upper(); tipo = c1.selectbox("Tipo", ["PERCENTUAL", "FIXO"])
             valor = c2.number_input(f"Valor ({'%' if tipo == 'PERCENTUAL' else 'R$'})", 0.01, format="%.2f")
             sem_val = st.checkbox("Sem data de validade")
             validade = st.date_input("Validade", disabled=sem_val, min_value=date.today())
