@@ -917,12 +917,10 @@ with tab_promocoes:
     with st.expander("➕ Criar Nova Promoção"):
         with st.form("form_nova_promocao"):
             
-            # Selectbox para o produto (usa o DF do catálogo)
             if df_produtos_catalogo.empty:
                 st.warning("Nenhum produto cadastrado para criar promoção.")
                 id_produto_promo = None
             else:
-                # Garante que o ID é int para a busca, mas string para o selectbox
                 df_produtos_catalogo['ID_STR'] = df_produtos_catalogo['ID'].astype(str)
                 opcoes_produtos_promo = df_produtos_catalogo.apply(lambda row: f"{row['ID_STR']} - {row['NOME']}", axis=1).tolist()
                 
@@ -931,13 +929,17 @@ with tab_promocoes:
                 if produto_selecionado_promo_str:
                     id_produto_promo = int(produto_selecionado_promo_str.split(' - ')[0])
                     produto_atual_promo = df_produtos_catalogo[df_produtos_catalogo['ID'] == id_produto_promo].iloc[0]
-                    nome_produto_promo = produto_atual_promo['NOME']
+                    nome_produto_promo = produto_atual_promo.get('NOME', 'Produto sem nome')
                     
-                    # Converte o preço original para exibição
+                    # 💥 CORREÇÃO: Usar .get() e fallback seguro para o preço original.
                     try:
-                        preco_original_float = float(str(produto_atual_promo['PRECO']).replace(',', '.'))
-                    except:
-                        preco_original_float = 0.0
+                        preco_original_str = str(produto_atual_promo.get('PRECO', '0.01'))
+                        preco_original_float = float(preco_original_str.replace(',', '.'))
+                        # Garante que o max_value nunca seja menor que o min_value do campo promocional.
+                        if preco_original_float < 0.01:
+                            preco_original_float = 0.01
+                    except (ValueError, TypeError):
+                        preco_original_float = 0.01
                         
                     st.caption(f"Preço Original: R$ {preco_original_float:.2f}")
                     
@@ -1034,5 +1036,6 @@ with tab_promocoes:
                         st.rerun()
                     else:
                         st.error("Falha ao excluir promoção.")
+
 
 
