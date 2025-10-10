@@ -718,9 +718,7 @@ div[data-testid="stButton"] > button:hover {{ background-color: #C2185B; color: 
 .esgotado-badge {{ background-color: #757575; color: white; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
 .estoque-baixo-badge {{ background-color: #FFC107; color: black; font-weight: bold; padding: 3px 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.5rem; display: block; }}
 
-/* --- NOVO CSS para o Botão Flutuante --- */
-st.markdown(f"""
-<style>
+/* --- CSS para o Botão Flutuante (Injetado na chamada única de st.markdown) --- */
 .whatsapp-float {{
     position: fixed;
     bottom: 40px;
@@ -1149,4 +1147,3 @@ whatsapp_button_html = f"""
 # Injeta o botão flutuante
 st.markdown(whatsapp_button_html, unsafe_allow_html=True)
 # --- FIM DO BLOCO ADICIONADO ---
-
