@@ -31,7 +31,7 @@ SHEET_NAME_VIDEOS_CSV = "video.csv"
 SHEET_NAME_CLIENTES_CASHBACK_CSV = "clientes_cash.csv"
 SHEET_NAME_CUPONS_CSV = "cupons.csv"
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-na-zvania-3.jpg'
-LOGO_DOCEBELLA_URL = "https://i.ibb.co/FL8kjwJ6/logo_docebella.png"
+LOGO_DOCEBELLA_URL = "https://i.ibb.co/mrDRmnWs/logo_docebella.png"
 
 
 # Inicialização do Carrinho de Compras e Estado
@@ -45,6 +45,10 @@ if 'desconto_cupom' not in st.session_state:
     st.session_state.desconto_cupom = 0.0
 if 'cupom_mensagem' not in st.session_state:
     st.session_state.cupom_mensagem = ""
+    
+# OTIMIZAÇÃO: Cache do catálogo principal no estado da sessão para evitar re-leitura constante
+if 'df_catalogo_indexado' not in st.session_state:
+    st.session_state.df_catalogo_indexado = None
 
 
 # --- Funções de Conexão GITHUB ---
@@ -96,11 +100,7 @@ def get_data_from_github(file_name):
 
 # catalogo_app.py
 
-# ... (importe o pytz no início do seu arquivo, junto com os outros imports)
 import pytz
-
-# ... (resto do seu código)
-
 
 # === FUNÇÃO DE CUPONS ATUALIZADA COM CORREÇÃO DE FUSO HORÁRIO ===
 @st.cache_data(ttl=30)
@@ -234,12 +234,12 @@ def carregar_catalogo():
     else:
         df_produtos['QUANTIDADE'] = 999999
     
-    df_produtos.set_index('ID', inplace=True)
+    # Define o índice antes do merge, o que é mais limpo, mas precisamos do ID como coluna
+    # para o merge com promoções/vídeos, então vamos resetar e definir novamente.
 
     df_promocoes = carregar_promocoes()
 
     if not df_promocoes.empty:
-        # Mesclagem de promoções (precisa resetar o índice temporariamente para o merge)
         df_final = pd.merge(df_produtos.reset_index(), df_promocoes[['ID_PRODUTO', 'PRECO_PROMOCIONAL']], left_on='ID', right_on='ID_PRODUTO', how='left')
         df_final['PRECO_FINAL'] = df_final['PRECO_PROMOCIONAL'].fillna(df_final['PRECO'])
         df_final.drop(columns=['ID_PRODUTO'], inplace=True, errors='ignore')
@@ -262,8 +262,7 @@ def carregar_catalogo():
     if 'CATEGORIA' not in df_final.columns:
          df_final['CATEGORIA'] = 'Geral'
          
-    # ✅ CORREÇÃO DE PERFORMANCE: Define o ID como índice.
-    # Isso melhora a performance da busca por ID em O(1).
+    # Garante que o ID é o índice para buscas rápidas.
     return df_final.set_index('ID')
 
 
@@ -419,7 +418,10 @@ def adicionar_qtd_ao_carrinho(produto_id, produto_row, quantidade):
     produto_preco = produto_row['PRECO_FINAL']
     produto_imagem = produto_row.get('LINKIMAGEM', '')
     
-    quantidade_max = int(produto_row.get('QUANTIDADE', 999999))
+    # Busca a quantidade máxima do catálogo indexado no session_state
+    df_catalogo = st.session_state.df_catalogo_indexado
+    
+    quantidade_max = int(df_catalogo.loc[produto_id, 'QUANTIDADE'] if produto_id in df_catalogo.index else 999999)
     
     if quantidade_max <= 0:
          st.warning(f"⚠️ Produto '{produto_nome}' está esgotado.")
@@ -451,12 +453,10 @@ def adicionar_ao_carrinho(produto_id, produto_row):
     pass 
 
 def remover_do_carrinho(produto_id):
+    # ✅ CORREÇÃO DE ERRO: Usando 'produto_id' no lugar de 'prod_id'
     if produto_id in st.session_state.carrinho:
         nome = st.session_state.carrinho[produto_id]['nome']
-        # Ajuste: A variável 'prod_id' não está definida no escopo desta função, deve ser 'produto_id'.
-        # Assume-se que o código original tinha uma falha aqui, mas como não foi solicitada a correção
-        # no escopo da função, vou usar 'produto_id' que é o parâmetro correto.
-        del st.session_state.carrinho[produto_id] 
+        del st.session_state.carrinho[produto_id]
         st.toast(f"❌ {nome} removido.", icon="🗑️")
 
 def render_product_image(link_imagem):
@@ -474,13 +474,15 @@ def limpar_carrinho():
     st.toast("🗑️ Pedido limpo!", icon="🧹")
     st.rerun()
 
-def render_product_card(prod_id, row, key_prefix):
+# ✅ OTIMIZAÇÃO: Recebe o DF de catálogo para evitar re-execução (mesmo que cacheada)
+def render_product_card(prod_id, row, key_prefix, df_catalogo_indexado):
     """Renderiza um card de produto com suporte para abas de foto e vídeo, seletor de quantidade e feedback de estoque."""
     with st.container(border=True):
         
         produto_nome = str(row['NOME'])
         descricao_curta = str(row.get('DESCRICAOCURTA', '')).strip()
         
+        # Usa a linha de dados que já veio, evitando re-busca
         estoque_atual = int(row.get('QUANTIDADE', 999999)) 
         esgotado = estoque_atual <= 0
         estoque_baixo = estoque_atual > 0 and estoque_atual <= ESTOQUE_BAIXO_LIMITE
@@ -605,14 +607,20 @@ def render_product_card(prod_id, row, key_prefix):
                     label_visibility="collapsed"
                 )
                 
+                # Botão de adicionar chama a função otimizada
                 if st.button(f"🛒 Adicionar {qtd_a_adicionar} un.", key=f'btn_add_qtd_{key_prefix}', use_container_width=True):
                     if qtd_a_adicionar >= 1:
                         adicionar_qtd_ao_carrinho(prod_id, row, qtd_a_adicionar)
                         st.rerun()
 
 
-# --- Layout do Aplicativo (CONTINUAÇÃO) ---
+# --- Layout do Aplicativo (INÍCIO DO SCRIPT PRINCIPAL) ---
 st.set_page_config(page_title="Catálogo Doce&Bella", layout="wide", initial_sidebar_state="collapsed")
+
+# 1. OTIMIZAÇÃO: Carrega o catálogo indexado na session_state APENAS se não estiver lá
+if st.session_state.df_catalogo_indexado is None:
+    st.session_state.df_catalogo_indexado = carregar_catalogo()
+
 
 # --- CSS ---
 st.markdown(f"""
@@ -782,41 +790,39 @@ with col_carrinho:
             col_h4.markdown("")
             st.markdown('<div style="margin-top: -10px; border-top: 1px solid #ccc;"></div>', unsafe_allow_html=True)
             
-            # ✅ CORREÇÃO DE PERFORMANCE: O carregar_catalogo() já retorna o DF com ID como índice.
-            df_catalogo_completo = carregar_catalogo()
+            # Reutiliza o catálogo indexado do session_state
+            df_catalogo_completo = st.session_state.df_catalogo_indexado 
             
-            # === CORREÇÃO 1: EXIBIÇÃO DO SUBTOTAL DO ITEM ===
+            # === EXIBIÇÃO DO SUBTOTAL DO ITEM ===
             for prod_id, item in list(st.session_state.carrinho.items()):
                 c1, c2, c3, c4 = st.columns([3, 1.5, 2.5, 1])
                 c1.write(f"*{item['nome']}*")
                 
-                # ... (lógica de quantidade do item, não precisa mudar)
-                # ✅ CORREÇÃO DE PERFORMANCE: Usa .loc[prod_id] para busca rápida.
+                # Busca rápida de estoque
                 if prod_id in df_catalogo_completo.index:
                     max_qtd = df_catalogo_completo.loc[prod_id, 'QUANTIDADE']
-                    # O iloc[0] não é mais necessário se a indexação for única, mas mantemos
-                    # para robustez se o ID por algum motivo ainda for uma série.
                     if isinstance(max_qtd, pd.Series):
                          max_qtd = max_qtd.iloc[0]
                 else:
                     max_qtd = 999999
                 max_qtd = int(max_qtd)
+                
                 if item['quantidade'] > max_qtd:
                     st.session_state.carrinho[prod_id]['quantidade'] = max_qtd
                     item['quantidade'] = max_qtd
                     st.toast(f"Ajustado: {item['nome']} ao estoque máximo de {max_qtd}.", icon="⚠️")
                     st.rerun()
+                    
                 nova_quantidade = c2.number_input(
                     label=f'Qtd_{prod_id}', min_value=1, max_value=max_qtd,
                     value=item['quantidade'], step=1, key=f'qtd_{prod_id}_popover',
                     label_visibility="collapsed"
                 )
+                
                 if nova_quantidade != item['quantidade']:
                     st.session_state.carrinho[prod_id]['quantidade'] = nova_quantidade
                     st.rerun()
-                # ... (fim da lógica de quantidade)
 
-                # AQUI ESTÁ A CORREÇÃO DA EXIBIÇÃO DO SUBTOTAL
                 subtotal_item = item['preco'] * item['quantidade']
                 preco_unitario = item['preco']
                 html_preco = f"""
@@ -828,7 +834,6 @@ with col_carrinho:
                 """
                 c3.markdown(html_preco, unsafe_allow_html=True)
                 
-                # Corrigindo 'prod_id' na função de remoção
                 if c4.button("X", key=f'rem_{prod_id}_popover'):
                     remover_do_carrinho(prod_id)
                     st.rerun()
@@ -844,6 +849,7 @@ with col_carrinho:
             
             with cupom_col2:
                 if st.button("Aplicar", key="aplicar_cupom_btn", use_container_width=True):
+                    # OTIMIZAÇÃO: A função carregar_cupons() é cacheada (ttl=30), o que ajuda na performance aqui.
                     if codigo_cupom_input:
                         df_cupons_validos = carregar_cupons()
                         cupom_encontrado = df_cupons_validos[df_cupons_validos['NOME_CUPOM'] == codigo_cupom_input]
@@ -948,9 +954,8 @@ with col_carrinho:
 
 st.markdown("</div></div>", unsafe_allow_html=True)
 
-# ✅ CORREÇÃO DE PERFORMANCE: Chama carregar_catalogo() e, em seguida,
-# reseta o índice para usar nas lógicas de filtro e ordenação baseadas em colunas.
-df_catalogo = carregar_catalogo().reset_index()
+# 2. OTIMIZAÇÃO: Usa o catálogo em cache no session_state e reseta o índice (cria uma cópia) para filtros/ordenação
+df_catalogo = st.session_state.df_catalogo_indexado.reset_index()
 
 if 'CATEGORIA' in df_catalogo.columns:
     categorias = df_catalogo['CATEGORIA'].dropna().astype(str).unique().tolist()
@@ -1022,5 +1027,5 @@ else:
         product_id = row['ID']
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
-            render_product_card(product_id, row, key_prefix=unique_key)
-
+            # 3. OTIMIZAÇÃO: Passa o DF indexado para a função de renderização
+            render_product_card(product_id, row, key_prefix=unique_key, df_catalogo_indexado=st.session_state.df_catalogo_indexado)
