@@ -135,7 +135,7 @@ def carregar_cupons():
     df_ativo['DATA_VALIDADE'] = pd.to_datetime(df_ativo['DATA_VALIDADE'], errors='coerce')
     # Remove cupons com data de validade inválida ou passada (compara apenas a data, ignorando a hora)
     df_ativo = df_ativo.dropna(subset=['DATA_VALIDADE'])
-    df_ativo = df_ativo[df_ativo['DATA_VALIDADE'].dt.normalize() >= datetime.now().normalize()]
+    df_ativo = df_ativo[df_ativo['DATA_VALIDADE'].dt.normalize() >= pd.Timestamp('today').normalize()]
 
     # 4. Validação do LIMITE_USOS
     df_ativo = df_ativo[df_ativo['USOS_ATUAIS'] < df_ativo['LIMITE_USOS']]
@@ -963,4 +963,5 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
