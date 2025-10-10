@@ -535,7 +535,10 @@ def render_product_card(prod_id, row, key_prefix, df_catalogo_indexado):
         # Usa a linha de dados que já veio, evitando re-busca
         estoque_atual = int(row.get('QUANTIDADE', 999999)) 
         esgotado = estoque_atual <= 0
-        estoque_baixo = estoque_atual > 0 and estoque_baixo <= ESTOQUE_BAIXO_LIMITE
+        # CORREÇÃO DO UNBOUNDLOCALERROR
+        # estoque_baixo deve ser definido comparando estoque_atual com o limite, e não usando 'estoque_baixo'
+        # no lado direito.
+        estoque_baixo = estoque_atual > 0 and estoque_atual <= ESTOQUE_BAIXO_LIMITE
         
         if esgotado:
             st.markdown('<span class="esgotado-badge">🚫 ESGOTADO</span>', unsafe_allow_html=True)
