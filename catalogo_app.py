@@ -1201,7 +1201,7 @@ with st.popover(HIDDEN_POPOVER_TITLE, use_container_width=False, help=HIDDEN_POP
 
 
 # Código JavaScript para encontrar o botão de popover oculto e simulá-lo
-popover_click_script = f"""
+popover_click_script = """
 <script>
 function openFloatingCart() {{
     // Encontra o botão do popover oculto dentro do container invisível
@@ -1245,4 +1245,5 @@ whatsapp_button_html = f"""
 # Injeta o botão flutuante
 st.markdown(whatsapp_button_html, unsafe_allow_html=True)
 # --- FIM DO BLOCO ADICIONADO ---
+
 
