@@ -31,7 +31,7 @@ SHEET_NAME_VIDEOS_CSV = "video.csv"
 SHEET_NAME_CLIENTES_CASHBACK_CSV = "clientes_cash.csv"
 SHEET_NAME_CUPONS_CSV = "cupons.csv"
 BACKGROUND_IMAGE_URL = 'https://i.ibb.co/x8HNtgxP/Без-na-zvania-3.jpg'
-LOGO_DOCEBELLA_URL = "https://i.ibb.co/mrDRmnWs/logo_docebella.png"
+LOGO_DOCEBELLA_URL = "https://i.ibb.co/23L9xp08/logo_docebella.png"
 
 
 # Inicialização do Carrinho de Compras e Estado
@@ -1029,3 +1029,4 @@ else:
         with cols[i % 4]:
             # 3. OTIMIZAÇÃO: Passa o DF indexado para a função de renderização
             render_product_card(product_id, row, key_prefix=unique_key, df_catalogo_indexado=st.session_state.df_catalogo_indexado)
+
