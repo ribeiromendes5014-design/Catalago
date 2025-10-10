@@ -94,36 +94,39 @@ def get_data_from_github(file_name):
         st.error(f"Erro ao carregar '{file_name}' via API do GitHub: {e}")
         return None
 
-# === FUNÇÃO DE CUPONS ATUALIZADA ===
+# catalogo_app.py
+
+# ... (importe o pytz no início do seu arquivo, junto com os outros imports)
+import pytz
+
+# ... (resto do seu código)
+
+
+# === FUNÇÃO DE CUPONS ATUALIZADA COM FUSO HORÁRIO ===
 @st.cache_data(ttl=30)
 def carregar_cupons():
-    """Carrega os cupons do 'cupons.csv' do GitHub, validando todas as novas regras."""
+    """Carrega os cupons do 'cupons.csv' do GitHub, validando com fuso horário do Brasil."""
     df = get_data_from_github(SHEET_NAME_CUPONS_CSV)
     
-    # Novas colunas essenciais
     colunas_essenciais = ['CODIGO', 'TIPO_DESCONTO', 'VALOR', 'DATA_VALIDADE', 
                            'VALOR_MINIMO_PEDIDO', 'LIMITE_USOS', 'USOS_ATUAIS', 'STATUS']
                            
     if df is None or df.empty:
         return pd.DataFrame(columns=colunas_essenciais)
 
-    # Renomeia colunas para manter a compatibilidade interna, se necessário, ou usa os nomes novos
     df.rename(columns={'CODIGO': 'NOME_CUPOM', 'VALOR': 'VALOR_DESCONTO'}, inplace=True)
-    # Garante que as colunas renomeadas estejam na lista para verificação
     colunas_essenciais_renomeadas = ['NOME_CUPOM', 'TIPO_DESCONTO', 'VALOR_DESCONTO', 'DATA_VALIDADE', 
                                     'VALOR_MINIMO_PEDIDO', 'LIMITE_USOS', 'USOS_ATUAIS', 'STATUS']
 
     for col in colunas_essenciais_renomeadas:
         if col not in df.columns:
-            st.warning(f"A planilha de cupons existe, mas a coluna essencial '{col}' não foi encontrada. A função de cupons será desativada.")
+            st.warning(f"A planilha de cupons existe, mas a coluna essencial '{col}' não foi encontrada.")
             return pd.DataFrame(columns=colunas_essenciais_renomeadas)
 
-    # 1. Filtra por STATUS 'ATIVO'
     df_ativo = df[df['STATUS'].astype(str).str.strip().str.upper() == 'ATIVO'].copy()
     if df_ativo.empty:
         return pd.DataFrame(columns=colunas_essenciais_renomeadas)
 
-    # 2. Converte tipos de dados e trata erros
     df_ativo['NOME_CUPOM'] = df_ativo['NOME_CUPOM'].astype(str).str.strip().str.upper()
     df_ativo['TIPO_DESCONTO'] = df_ativo['TIPO_DESCONTO'].astype(str).str.strip().str.upper()
     df_ativo['VALOR_DESCONTO'] = pd.to_numeric(df_ativo['VALOR_DESCONTO'].astype(str).str.replace(',', '.'), errors='coerce')
@@ -131,17 +134,21 @@ def carregar_cupons():
     df_ativo['LIMITE_USOS'] = pd.to_numeric(df_ativo['LIMITE_USOS'], errors='coerce').fillna(999999)
     df_ativo['USOS_ATUAIS'] = pd.to_numeric(df_ativo['USOS_ATUAIS'], errors='coerce').fillna(0)
     
-    # 3. Validação da DATA_VALIDADE
-    # Converte para datetime, tratando erros. 'coerce' transforma inválidos em NaT (Not a Time)
+    # --- Validação da DATA_VALIDADE com FUSO HORÁRIO ---
     df_ativo['DATA_VALIDADE'] = pd.to_datetime(df_ativo['DATA_VALIDADE'], errors='coerce')
-    # Remove cupons com data de validade inválida ou passada (compara apenas a data, ignorando a hora)
     df_ativo = df_ativo.dropna(subset=['DATA_VALIDADE'])
-    df_ativo = df_ativo[df_ativo['DATA_VALIDADE'].dt.normalize() >= pd.Timestamp('today').normalize()]
+    
+    # Define o fuso horário de São Paulo
+    tz_brasil = pytz.timezone('America/Sao_Paulo')
+    # Pega a data e hora de agora no Brasil e normaliza (zera a hora)
+    hoje_brasil = datetime.now(tz_brasil).normalize()
+    
+    # Compara a data de validade (já normalizada) com a data de hoje no Brasil
+    df_ativo = df_ativo[df_ativo['DATA_VALIDADE'].dt.normalize() >= pd.to_datetime(hoje_brasil)]
+    # --- Fim da Validação de Data ---
 
-    # 4. Validação do LIMITE_USOS
     df_ativo = df_ativo[df_ativo['USOS_ATUAIS'] < df_ativo['LIMITE_USOS']]
 
-    # Remove linhas onde conversões essenciais falharam (ex: VALOR_DESCONTO)
     return df_ativo.dropna(subset=['NOME_CUPOM', 'VALOR_DESCONTO']).reset_index(drop=True)
 # =======================================
 
@@ -969,6 +976,7 @@ else:
         unique_key = f'prod_{product_id}_{i}'
         with cols[i % 4]:
             render_product_card(product_id, row, key_prefix=unique_key)
+
 
 
 
