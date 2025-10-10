@@ -49,6 +49,14 @@ def fetch_github_data_v2(sheet_name, version_control):
             return pd.DataFrame()
         content = base64.b64decode(response.json()["content"]).decode("utf-8")
         if not content.strip(): return pd.DataFrame()
+        
+        # --- INÍCIO DA CORREÇÃO ---
+        # Corrige um erro comum de formatação no CSV de pedidos, onde um status pendente
+        # é salvo incorretamente como ',"",PENDENTE,', causando um deslocamento de colunas.
+        if sheet_name == SHEET_NAME_PEDIDOS:
+            content = content.replace(',"",PENDENTE,', ',PENDENTE,')
+        # --- FIM DA CORREÇÃO ---
+
         df = pd.read_csv(
             StringIO(content),
             sep=",",
@@ -383,3 +391,4 @@ with tab_cupons:
     st.subheader("📝 Cupons Cadastrados")
     df_cupons = carregar_dados(SHEET_NAME_CUPONS)
     if not df_cupons.empty: st.dataframe(df_cupons, use_container_width=True)
+
